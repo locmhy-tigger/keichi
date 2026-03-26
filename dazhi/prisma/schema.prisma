@@ -1,0 +1,284 @@
+// ============================================================
+// AI 大智若愚 — Prisma Schema
+// DB: PostgreSQL (Zeabur)
+// ORM: Prisma 5.x
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum MissionType {
+  VIDEO      // YouTube 互動影片
+  FORM       // Google Forms 連結
+  AI_QUIZ    // Claude 生成多選題
+  PROMPT     // Prompt Engineering 挑戰
+}
+
+enum Difficulty {
+  BASIC
+  ADVANCED
+  CHALLENGE
+}
+
+enum MissionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  PENDING   // 待老師審批
+  APPROVED  // 已批核，積點已派
+  REJECTED  // 已拒絕，附反饋
+}
+
+enum PointReason {
+  ATTENDANCE    // 出勤
+  MISSION       // 完成衝關任務
+  FLASHCARD     // 完成閃卡複習
+  TEACHER       // 老師手動發點
+  REDEEM        // 兌換獎品（負數）
+}
+
+// ─────────────────────────────────────────
+// AUTH — NextAuth.js v5 required tables
+// ─────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────
+// CORE USER
+// ─────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  role          Role      @default(STUDENT)
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  taughtClasses  Class[]            @relation("TeacherClasses")
+  enrollments    ClassEnrollment[]
+  submissions    MissionSubmission[]
+  pointsReceived PointTransaction[] @relation("ReceivedPoints")
+  pointsAwarded  PointTransaction[] @relation("AwardedPoints")
+  flashcardDecks FlashcardDeck[]
+  cardReviews    FlashcardReview[]
+}
+
+// ─────────────────────────────────────────
+// CLASS MANAGEMENT
+// ─────────────────────────────────────────
+
+model Class {
+  id        String   @id @default(cuid())
+  teacherId String
+  name      String
+  classCode String   @unique // 6-char alphanumeric
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id])
+  enrollments ClassEnrollment[]
+  missions    Mission[]
+  points      PointTransaction[]
+
+  @@index([teacherId])
+}
+
+model ClassEnrollment {
+  id         String   @id @default(cuid())
+  classId    String
+  studentId  String
+  enrolledAt DateTime @default(now())
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, studentId])
+  @@index([studentId])
+}
+
+// ─────────────────────────────────────────
+// MISSION SYSTEM (衝關任務)
+// ─────────────────────────────────────────
+
+model Mission {
+  id           String        @id @default(cuid())
+  classId      String
+  title        String
+  description  String?       @db.Text
+  type         MissionType
+  content      Json          // See MissionContent types in types/mission.ts
+  difficulty   Difficulty    @default(BASIC)
+  prereqId     String?       // Self-relation: prerequisite mission
+  pointsReward Int           @default(100)
+  status       MissionStatus @default(DRAFT)
+  order        Int           @default(0) // Display order on map
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  class       Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  prereq      Mission?           @relation("MissionPrereq", fields: [prereqId], references: [id])
+  dependents  Mission[]          @relation("MissionPrereq")
+  submissions MissionSubmission[]
+
+  @@index([classId])
+  @@index([prereqId])
+}
+
+model MissionSubmission {
+  id          String           @id @default(cuid())
+  missionId   String
+  studentId   String
+  content     Json             // Student's answer / prompt
+  status      SubmissionStatus @default(PENDING)
+  aiScore     Int?             // 0-100, from Claude Haiku pre-evaluation
+  aiFeedback  String?          @db.Text // Raw AI feedback
+  feedback    String?          @db.Text // Teacher's override feedback
+  submittedAt DateTime         @default(now())
+  reviewedAt  DateTime?
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, studentId]) // One submission per student per mission
+  @@index([missionId])
+  @@index([studentId])
+  @@index([status]) // Fast query for PENDING submissions
+}
+
+// ─────────────────────────────────────────
+// FLASHCARD SYSTEM (SM-2 Spaced Repetition)
+// ─────────────────────────────────────────
+
+model FlashcardDeck {
+  id        String   @id @default(cuid())
+  ownerId   String
+  classId   String?  // Optional: class-wide shared deck
+  title     String
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cards Flashcard[]
+
+  @@index([ownerId])
+  @@index([classId])
+}
+
+model Flashcard {
+  id        String   @id @default(cuid())
+  deckId    String
+  front     String   @db.Text
+  back      String   @db.Text
+  createdAt DateTime @default(now())
+
+  deck    FlashcardDeck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  reviews FlashcardReview[]
+
+  @@index([deckId])
+}
+
+// SM-2 algorithm state per user per card
+model FlashcardReview {
+  id           String   @id @default(cuid())
+  cardId       String
+  userId       String
+  // SM-2 fields
+  easeFactor   Float    @default(2.5)   // Multiplier, min 1.3
+  interval     Int      @default(1)     // Days until next review
+  repetitions  Int      @default(0)     // Consecutive correct answers
+  nextReviewAt DateTime @default(now()) // Scheduled review date
+  lastReviewAt DateTime?
+  updatedAt    DateTime @updatedAt
+
+  card Flashcard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, userId])
+  @@index([userId, nextReviewAt]) // Critical: query today's due cards
+}
+
+// ─────────────────────────────────────────
+// POINTS SYSTEM (積點)
+// ─────────────────────────────────────────
+
+model PointTransaction {
+  id         String      @id @default(cuid())
+  userId     String
+  classId    String
+  amount     Int         // Positive = earned, negative = redeemed
+  reason     PointReason
+  awardedBy  String?     // FK to User (teacher), null for system events
+  note       String?     // Optional message from teacher
+  createdAt  DateTime    @default(now())
+
+  user      User  @relation("ReceivedPoints", fields: [userId], references: [id], onDelete: Cascade)
+  class     Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  awardedByUser User? @relation("AwardedPoints", fields: [awardedBy], references: [id])
+
+  @@index([userId, classId])
+  @@index([classId, createdAt]) // Leaderboard queries
+}
