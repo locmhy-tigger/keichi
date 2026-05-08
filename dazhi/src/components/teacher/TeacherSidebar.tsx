@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { signOut } from "next-auth/react"
+import Image from "next/image"
 
 type User = {
   name?: string | null
@@ -49,14 +50,23 @@ export function TeacherSidebar({ user }: { user: User }) {
       className="flex flex-col h-full"
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
-      {/* Logo */}
-      <div className="px-5 pt-6 pb-4 flex items-end gap-2">
-        <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
-          基智若愚
-        </span>
-        <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-          ICHI
-        </span>
+      {/* Logo — replace /logo-placeholder.svg with your actual logo */}
+      <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
+        <Image
+          src="/logo-placeholder.svg"
+          alt="ICHI Logo"
+          width={32}
+          height={32}
+          priority
+        />
+        <div className="flex items-end gap-1.5">
+          <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
+            基智若愚
+          </span>
+          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
+            ICHI
+          </span>
+        </div>
       </div>
 
       {/* Main nav */}
@@ -178,6 +188,12 @@ export function TeacherSidebar({ user }: { user: User }) {
         >
           <MenuIcon />
         </button>
+        <Image
+          src="/logo-placeholder.svg"
+          alt="ICHI Logo"
+          width={24}
+          height={24}
+        />
         <span className="font-semibold text-base" style={{ color: "var(--color-ink-900)" }}>
           基智若愚
         </span>
