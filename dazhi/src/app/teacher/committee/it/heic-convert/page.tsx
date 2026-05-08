@@ -2,8 +2,6 @@
 
 import { useRef, useState } from "react"
 import Link from "next/link"
-// heic2any is a CommonJS module without proper TS types
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import heic2any from "heic2any"
 
 type ConvertedFile = {
@@ -135,7 +133,6 @@ export default function HeicConvertPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {results.map((item) => (
               <div key={item.url} className="card overflow-hidden">
-                {/* Thumbnail */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.thumbUrl}
