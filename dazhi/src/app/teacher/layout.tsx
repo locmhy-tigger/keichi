@@ -1,38 +1,26 @@
-"use client"
+import { auth } from "@/lib/auth"
+import { redirect } from "next/navigation"
+import { TeacherSidebar } from "@/components/teacher/TeacherSidebar"
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-export default function TeacherLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-
-  const navItems = [
-    { href: "/teacher", label: "總覽", icon: "📊" },
-    { href: "/teacher/missions", label: "任務", icon: "📋" },
-    { href: "/teacher/points", label: "積點", icon: "⭐" },
-  ]
+export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth()
+  if (!session?.user || session.user.role !== "TEACHER") {
+    redirect("/login")
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <h1 className="font-bold text-lg">AI 大智若愚</h1>
-        <span className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded-full font-medium">老師</span>
-      </header>
-      <main className="flex-1 pb-20">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t flex">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex-1 flex flex-col items-center py-3 text-xs gap-1 transition-colors ${
-              pathname === item.href ? "text-green-600 font-medium" : "text-gray-500"
-            }`}
-          >
-            <span className="text-xl">{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+    <div className="flex min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
+      <TeacherSidebar
+        user={{
+          name:  session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+        }}
+      />
+      {/* Desktop: offset by sidebar width; Mobile: offset by top bar height */}
+      <main className="flex-1 min-w-0 md:ml-[220px] pt-14 md:pt-0">
+        {children}
+      </main>
     </div>
   )
 }
