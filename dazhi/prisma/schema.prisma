@@ -150,10 +150,12 @@ model User {
   cardReviews    FlashcardReview[]
 
   // EduPortal admin features
-  todosCreated   Todo[]         @relation("TodosCreated")
-  todosAssigned  Todo[]         @relation("TodosAssigned")
-  announcements  Announcement[] @relation("AnnouncementsAuthored")
-  committeeRoles CommitteeRole[]
+  todosCreated    Todo[]          @relation("TodosCreated")
+  todosAssigned   Todo[]          @relation("TodosAssigned")
+  announcements   Announcement[]  @relation("AnnouncementsAuthored")
+  committeeRoles  CommitteeRole[]
+  behaviorRecords BehaviorRecord[] @relation("BehaviorRecords")
+  calendarEvents  CalendarEvent[]  @relation("CalendarEvents")
 }
 
 // ─────────────────────────────────────────
@@ -364,5 +366,46 @@ model CommitteeRole {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, committee])
+  @@index([committee])
+}
+
+model BehaviorRecord {
+  id          String       @id @default(cuid())
+  date        DateTime
+  className   String
+  studentName String
+  type        BehaviorType
+  description String       @db.Text
+  action      String?      @db.Text
+  resolved    Boolean      @default(false)
+  authorId    String
+  createdAt   DateTime     @default(now())
+
+  author      User         @relation("BehaviorRecords", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([resolved, date])
+}
+
+enum BehaviorType {
+  MISCONDUCT
+  MERIT
+}
+
+model CalendarEvent {
+  id          String         @id @default(cuid())
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  allDay      Boolean        @default(true)
+  description String?        @db.Text
+  committee   CommitteeType?
+  authorId    String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  author      User           @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([startDate])
   @@index([committee])
 }

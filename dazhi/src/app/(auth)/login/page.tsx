@@ -1,5 +1,6 @@
 import { signIn } from "@/lib/auth"
 import { LoginForm } from "./LoginForm"
+import Image from "next/image"
 
 export default function LoginPage() {
   return (
@@ -13,6 +14,16 @@ export default function LoginPage() {
       >
         {/* Header */}
         <div className="text-center mb-8">
+          {/* Logo — replace /logo-placeholder.svg with your actual logo */}
+          <div className="flex justify-center mb-4">
+            <Image
+              src="/logo-placeholder.svg"
+              alt="基智若愚 ICHI Logo"
+              width={64}
+              height={64}
+              priority
+            />
+          </div>
           <h1 className="font-semibold text-2xl" style={{ color: "var(--color-ink-900)" }}>
             基智若愚
             <span className="ml-2 text-sm font-normal" style={{ color: "var(--color-accent)" }}>

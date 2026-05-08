@@ -38,6 +38,18 @@ export default async function TeacherDashboard() {
     description: t.description,
   }))
 
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const calEvents  = await prisma.calendarEvent.findMany({
+    where: { startDate: { gte: monthStart, lt: monthEnd } },
+    orderBy: { startDate: "asc" },
+    select: { startDate: true, committee: true },
+  })
+  const serializedEvents = calEvents.map((ev) => ({
+    startDate: ev.startDate.toISOString(),
+    committee: ev.committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | null,
+  }))
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <DashboardGreeting
@@ -48,7 +60,7 @@ export default async function TeacherDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
         <TodoPreview initialTodos={serializedTodos} />
-        <MiniCalendar todos={serializedTodos} />
+        <MiniCalendar todos={serializedTodos} calendarEvents={serializedEvents} />
       </div>
 
       <CommitteeToolsGrid />

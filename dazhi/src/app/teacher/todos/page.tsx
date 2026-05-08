@@ -5,6 +5,14 @@ import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
 type TodoStatus    = "OPEN" | "IN_PROGRESS" | "DONE"
+type ViewMode      = "all" | "mine" | "assigned"
+
+type Colleague = {
+  id:    string
+  name:  string | null
+  email: string | null
+  image: string | null
+}
 
 type Todo = {
   id:          string
@@ -13,6 +21,9 @@ type Todo = {
   committee:   CommitteeType
   status:      TodoStatus
   dueDate:     string | null
+  assignee:    Colleague | null
+  createdBy:   { id: string; name: string | null }
+  createdById: string
 }
 
 const COMMITTEE_FILTER: { label: string; value: CommitteeType | "ALL" }[] = [
@@ -28,6 +39,12 @@ const STATUS_FILTER: { label: string; value: TodoStatus | "ALL" }[] = [
   { label: "待處理", value: "OPEN"        },
   { label: "進行中", value: "IN_PROGRESS" },
   { label: "完成",   value: "DONE"        },
+]
+
+const VIEW_TABS: { label: string; value: ViewMode }[] = [
+  { label: "全部",     value: "all"      },
+  { label: "我建立",   value: "mine"     },
+  { label: "分配給我", value: "assigned" },
 ]
 
 const BORDER: Record<CommitteeType, string> = {
@@ -60,31 +77,82 @@ function isOverdue(d: string | null, status: TodoStatus): boolean {
   return new Date(d) < new Date()
 }
 
+function Avatar({ user, size = 20 }: { user: Colleague | null | undefined; size?: number }) {
+  if (!user) return null
+  const initials = user.name ? user.name.slice(0, 1) : "?"
+  if (user.image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={user.image} alt={user.name ?? ""} width={size} height={size}
+        className="rounded-full object-cover shrink-0"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+  return (
+    <div
+      className="rounded-full shrink-0 flex items-center justify-center text-white font-medium"
+      style={{ width: size, height: size, background: "var(--color-accent)", fontSize: size * 0.5 }}
+    >
+      {initials}
+    </div>
+  )
+}
+
 export default function TodosPage() {
-  const [todos,       setTodos]       = useState<Todo[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [committee,   setCommittee]   = useState<CommitteeType | "ALL">("ALL")
-  const [status,      setStatus]      = useState<TodoStatus | "ALL">("ALL")
-  const [showForm,    setShowForm]    = useState(false)
+  const [todos,        setTodos]        = useState<Todo[]>([])
+  const [colleagues,   setColleagues]   = useState<Colleague[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [committee,    setCommittee]    = useState<CommitteeType | "ALL">("ALL")
+  const [status,       setStatus]       = useState<TodoStatus | "ALL">("ALL")
+  const [view,         setView]         = useState<ViewMode>("all")
+  const [showForm,     setShowForm]     = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // New todo form state
-  const [title,       setTitle]       = useState("")
-  const [desc,        setDesc]        = useState("")
-  const [newCommittee,setNewCommittee]= useState<CommitteeType>("ADMIN")
-  const [dueDate,     setDueDate]     = useState("")
-  const [saving,      setSaving]      = useState(false)
+  const [title,        setTitle]        = useState("")
+  const [desc,         setDesc]         = useState("")
+  const [newCommittee, setNewCommittee] = useState<CommitteeType>("ADMIN")
+  const [dueDate,      setDueDate]      = useState("")
+  const [assigneeId,   setAssigneeId]   = useState("")
+  const [saving,       setSaving]       = useState(false)
+
+  async function loadColleagues() {
+    const res = await fetch("/api/users")
+    if (res.ok) {
+      const data: Colleague[] = await res.json()
+      setColleagues(data)
+    }
+  }
 
   async function load() {
     setLoading(true)
     const params = new URLSearchParams()
     if (committee !== "ALL") params.set("committee", committee)
     if (status    !== "ALL") params.set("status",    status)
+    if (view !== "all")      params.set("view",      view)
     const res = await fetch(`/api/todos?${params}`)
-    if (res.ok) setTodos(await res.json())
+    if (res.ok) {
+      const data: Todo[] = await res.json()
+      setTodos(data)
+      // Detect current user id from a "mine" view todo, or from createdBy
+      if (!currentUserId && data.length > 0) {
+        const myTodo = data.find((t) => view === "mine")
+        if (myTodo) setCurrentUserId(myTodo.createdBy.id)
+      }
+    }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [committee, status]) // eslint-disable-line
+  // Fetch current user id on mount
+  useEffect(() => {
+    loadColleagues()
+    fetch("/api/todos?view=mine").then((r) => r.json()).then((d: Todo[]) => {
+      if (d.length > 0) setCurrentUserId(d[0].createdBy.id)
+    })
+  }, []) // eslint-disable-line
+
+  useEffect(() => { load() }, [committee, status, view]) // eslint-disable-line
 
   async function advance(todo: Todo) {
     const next = NEXT_STATUS[todo.status]
@@ -110,17 +178,21 @@ export default function TodosPage() {
       body: JSON.stringify({
         title,
         description: desc || undefined,
-        committee: newCommittee,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+        committee:   newCommittee,
+        dueDate:     dueDate ? new Date(dueDate).toISOString() : undefined,
+        assigneeId:  assigneeId || undefined,
       }),
     })
     if (res.ok) {
-      const created = await res.json()
+      const created: Todo = await res.json()
       setTodos((prev) => [created, ...prev])
-      setTitle(""); setDesc(""); setDueDate(""); setShowForm(false)
+      setTitle(""); setDesc(""); setDueDate(""); setAssigneeId(""); setShowForm(false)
     }
     setSaving(false)
   }
+
+  const inputCls = "w-full px-3 py-2 text-body rounded-input border outline-none"
+  const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -128,13 +200,11 @@ export default function TodosPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-h1">待辦事項</h1>
-          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-            個人任務管理
-          </p>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>個人及分組任務管理</p>
         </div>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="px-4 py-2 rounded-input text-body font-medium text-white transition-colors"
+          className="px-4 py-2 rounded-input text-body font-medium text-white"
           style={{ background: "var(--color-accent)" }}
         >
           + 新增待辦
@@ -145,34 +215,18 @@ export default function TodosPage() {
       {showForm && (
         <form onSubmit={createTodo} className="card p-5 mb-6 space-y-4">
           <h3 className="text-h3">新增待辦事項</h3>
+
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>標題 *</label>
-            <input
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="待辦事項標題"
-              className="w-full px-3 py-2 text-body rounded-input border outline-none focus:ring-2"
-              style={{
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-                color: "var(--color-ink-900)",
-              }}
-            />
+            <input required value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="待辦事項標題" className={inputCls} style={inputStyle} />
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>委員會</label>
-              <select
-                value={newCommittee}
-                onChange={(e) => setNewCommittee(e.target.value as CommitteeType)}
-                className="w-full px-3 py-2 text-body rounded-input border"
-                style={{
-                  border: "1px solid var(--color-border)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-ink-900)",
-                }}
-              >
+              <select value={newCommittee} onChange={(e) => setNewCommittee(e.target.value as CommitteeType)}
+                className={inputCls} style={inputStyle}>
                 <option value="ADMIN">行政</option>
                 <option value="DISCIPLINE">訓育</option>
                 <option value="IT">資訊科技</option>
@@ -181,90 +235,87 @@ export default function TodosPage() {
             </div>
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>截止日期</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 text-body rounded-input border"
-                style={{
-                  border: "1px solid var(--color-border)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-ink-900)",
-                }}
-              />
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                className={inputCls} style={inputStyle} />
             </div>
           </div>
+
+          {/* Assignee picker */}
+          <div>
+            <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>
+              分配同事（選填）
+            </label>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+              className={inputCls} style={inputStyle}>
+              <option value="">— 不分配 —</option>
+              {colleagues.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ?? c.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>備注</label>
-            <textarea
-              rows={2}
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              placeholder="（選填）"
-              className="w-full px-3 py-2 text-body rounded-input border resize-none"
-              style={{
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-                color: "var(--color-ink-900)",
-              }}
-            />
+            <textarea rows={2} value={desc} onChange={(e) => setDesc(e.target.value)}
+              placeholder="（選填）" className={`${inputCls} resize-none`} style={inputStyle} />
           </div>
+
           <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
+            <button type="button" onClick={() => setShowForm(false)}
               className="px-4 py-2 text-body rounded-input border"
-              style={{
-                border: "1px solid var(--color-border)",
-                color: "var(--color-ink-700)",
-              }}
-            >
+              style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
               取消
             </button>
-            <button
-              type="submit"
-              disabled={saving}
+            <button type="submit" disabled={saving}
               className="px-4 py-2 text-body font-medium rounded-input text-white"
-              style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}
-            >
+              style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}>
               {saving ? "儲存中…" : "儲存"}
             </button>
           </div>
         </form>
       )}
 
+      {/* View tabs */}
+      <div className="flex gap-1 mb-4 p-1 rounded-input w-fit" style={{ background: "var(--color-surface-2)" }}>
+        {VIEW_TABS.map(({ label, value }) => (
+          <button key={value} onClick={() => setView(value)}
+            className="px-3 py-1.5 rounded text-caption font-medium transition-colors"
+            style={{
+              background: view === value ? "var(--color-surface)" : "transparent",
+              color:      view === value ? "var(--color-ink-900)" : "var(--color-ink-500)",
+              boxShadow:  view === value ? "0 1px 3px oklch(0% 0 0 / 8%)" : "none",
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="space-y-3 mb-4">
-        {/* Committee filter */}
         <div className="flex gap-2 flex-wrap">
           {COMMITTEE_FILTER.map(({ label, value }) => (
-            <button
-              key={value}
-              onClick={() => setCommittee(value)}
+            <button key={value} onClick={() => setCommittee(value)}
               className="px-3 py-1.5 rounded-pill text-caption font-medium transition-colors"
               style={{
                 background: committee === value ? "var(--color-accent)" : "var(--color-surface)",
                 color:      committee === value ? "white"               : "var(--color-ink-700)",
                 border:     "1px solid var(--color-border)",
-              }}
-            >
+              }}>
               {label}
             </button>
           ))}
         </div>
-        {/* Status filter */}
         <div className="flex gap-2 flex-wrap">
           {STATUS_FILTER.map(({ label, value }) => (
-            <button
-              key={value}
-              onClick={() => setStatus(value)}
+            <button key={value} onClick={() => setStatus(value)}
               className="px-3 py-1.5 rounded-pill text-caption font-medium transition-colors"
               style={{
                 background: status === value ? "var(--color-ink-900)" : "var(--color-surface)",
                 color:      status === value ? "white"                : "var(--color-ink-700)",
                 border:     "1px solid var(--color-border)",
-              }}
-            >
+              }}>
               {label}
             </button>
           ))}
@@ -279,7 +330,9 @@ export default function TodosPage() {
       ) : (
         <ul className="space-y-2">
           {todos.map((todo) => {
-            const overdue = isOverdue(todo.dueDate, todo.status)
+            const overdue    = isOverdue(todo.dueDate, todo.status)
+            const isAssigned = currentUserId ? todo.createdById !== currentUserId : false
+
             return (
               <li
                 key={todo.id}
@@ -291,41 +344,57 @@ export default function TodosPage() {
                       {todo.title}
                     </span>
                     <CommitteeBadge committee={todo.committee} />
+                    {/* Assigned-from badge */}
+                    {isAssigned && todo.createdBy.name && (
+                      <span
+                        className="text-caption px-1.5 py-0.5 rounded-pill"
+                        style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                      >
+                        由 {todo.createdBy.name} 分配
+                      </span>
+                    )}
                   </div>
+
                   {todo.description && (
                     <p className="text-caption mt-0.5 truncate" style={{ color: "var(--color-ink-500)" }}>
                       {todo.description}
                     </p>
                   )}
-                  {todo.dueDate && (
-                    <p
-                      className="text-caption mt-0.5"
-                      style={{ color: overdue ? "var(--color-discipline)" : "var(--color-ink-500)" }}
-                    >
-                      {overdue ? "⚠ 逾期 · " : ""}{formatDue(todo.dueDate)}
-                    </p>
-                  )}
+
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    {todo.dueDate && (
+                      <p className="text-caption"
+                        style={{ color: overdue ? "var(--color-discipline)" : "var(--color-ink-500)" }}>
+                        {overdue ? "⚠ 逾期 · " : ""}{formatDue(todo.dueDate)}
+                      </p>
+                    )}
+                    {/* Assignee chip */}
+                    {todo.assignee && !isAssigned && (
+                      <div className="flex items-center gap-1">
+                        <Avatar user={todo.assignee} size={16} />
+                        <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>
+                          {todo.assignee.name ?? todo.assignee.email}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => advance(todo)}
+                  <button onClick={() => advance(todo)}
                     className="text-caption font-medium px-2.5 py-1 rounded-input border transition-colors"
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      color: "var(--color-ink-700)",
-                      background: "var(--color-surface-2)",
-                    }}
-                  >
+                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface-2)" }}>
                     {BTN_LABEL[todo.status]}
                   </button>
-                  <button
-                    onClick={() => deleteTodo(todo.id)}
-                    className="text-caption px-2 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
-                    style={{ color: "var(--color-ink-300)" }}
-                    title="刪除"
-                  >
-                    ×
-                  </button>
+                  {/* Only creator can delete */}
+                  {!isAssigned && (
+                    <button onClick={() => deleteTodo(todo.id)}
+                      className="text-caption px-2 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
+                      style={{ color: "var(--color-ink-300)" }}
+                      title="刪除">
+                      ×
+                    </button>
+                  )}
                 </div>
               </li>
             )
