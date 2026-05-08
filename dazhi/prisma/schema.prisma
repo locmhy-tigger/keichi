@@ -55,6 +55,27 @@ enum PointReason {
   REDEEM        // 兌換獎品（負數）
 }
 
+enum CommitteeType {
+  ADMIN
+  DISCIPLINE
+  IT
+  CURRICULUM
+}
+
+enum TodoStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+enum AnnouncementTarget {
+  ALL
+  ADMIN
+  DISCIPLINE
+  IT
+  CURRICULUM
+}
+
 // ─────────────────────────────────────────
 // AUTH — NextAuth.js v5 required tables
 // ─────────────────────────────────────────
@@ -124,6 +145,12 @@ model User {
   pointsAwarded  PointTransaction[] @relation("AwardedPoints")
   flashcardDecks FlashcardDeck[]
   cardReviews    FlashcardReview[]
+
+  // EduPortal admin features
+  todosCreated   Todo[]         @relation("TodosCreated")
+  todosAssigned  Todo[]         @relation("TodosAssigned")
+  announcements  Announcement[] @relation("AnnouncementsAuthored")
+  committeeRoles CommitteeRole[]
 }
 
 // ─────────────────────────────────────────
@@ -281,4 +308,58 @@ model PointTransaction {
 
   @@index([userId, classId])
   @@index([classId, createdAt]) // Leaderboard queries
+}
+
+// ─────────────────────────────────────────
+// EDUPORTAL — TEACHER ADMIN FEATURES
+// ─────────────────────────────────────────
+
+model Todo {
+  id          String        @id @default(cuid())
+  title       String
+  description String?       @db.Text
+  committee   CommitteeType
+  status      TodoStatus    @default(OPEN)
+  dueDate     DateTime?
+  createdById String
+  assigneeId  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  createdBy   User          @relation("TodosCreated",  fields: [createdById], references: [id], onDelete: Cascade)
+  assignee    User?         @relation("TodosAssigned", fields: [assigneeId],  references: [id])
+
+  @@index([committee])
+  @@index([createdById])
+  @@index([status, dueDate])
+}
+
+model Announcement {
+  id        String             @id @default(cuid())
+  title     String
+  body      String             @db.Text
+  committee CommitteeType?
+  target    AnnouncementTarget @default(ALL)
+  authorId  String
+  pinned    Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  author    User               @relation("AnnouncementsAuthored", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([target, createdAt])
+  @@index([pinned, createdAt])
+}
+
+model CommitteeRole {
+  id        String        @id @default(cuid())
+  userId    String
+  committee CommitteeType
+  isChair   Boolean       @default(false)
+  joinedAt  DateTime      @default(now())
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, committee])
+  @@index([committee])
 }

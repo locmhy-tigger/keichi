@@ -1,0 +1,248 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
+
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+
+type Announcement = {
+  id:        string
+  title:     string
+  body:      string
+  committee: CommitteeType | null
+  target:    Target
+  pinned:    boolean
+  createdAt: string
+  author:    { id: string; name: string | null; image: string | null }
+}
+
+const TARGET_OPTIONS: { label: string; value: Target }[] = [
+  { label: "全校",     value: "ALL"        },
+  { label: "行政",     value: "ADMIN"      },
+  { label: "訓育",     value: "DISCIPLINE" },
+  { label: "資訊科技", value: "IT"         },
+  { label: "課程發展", value: "CURRICULUM" },
+]
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`
+}
+
+export default function AnnouncementsPage() {
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [showForm,      setShowForm]      = useState(false)
+
+  // Form state
+  const [title,   setTitle]   = useState("")
+  const [body,    setBody]    = useState("")
+  const [target,  setTarget]  = useState<Target>("ALL")
+  const [pinned,  setPinned]  = useState(false)
+  const [saving,  setSaving]  = useState(false)
+
+  async function load() {
+    setLoading(true)
+    const res = await fetch("/api/announcements")
+    if (res.ok) setAnnouncements(await res.json())
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function publish(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const res = await fetch("/api/announcements", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body, target, pinned }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      setAnnouncements((prev) => [created, ...prev])
+      setTitle(""); setBody(""); setTarget("ALL"); setPinned(false); setShowForm(false)
+    }
+    setSaving(false)
+  }
+
+  async function deleteAnn(id: string) {
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id))
+    await fetch(`/api/announcements/${id}`, { method: "DELETE" })
+  }
+
+  async function togglePin(ann: Announcement) {
+    setAnnouncements((prev) => prev.map((a) => a.id === ann.id ? { ...a, pinned: !a.pinned } : a))
+    await fetch(`/api/announcements/${ann.id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !ann.pinned }),
+    })
+  }
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-h1">公告</h1>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
+            校內通告發布
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="px-4 py-2 rounded-input text-body font-medium text-white transition-colors"
+          style={{ background: "var(--color-accent)" }}
+        >
+          + 發佈公告
+        </button>
+      </div>
+
+      {/* Compose form */}
+      {showForm && (
+        <form onSubmit={publish} className="card p-5 mb-6 space-y-4">
+          <h3 className="text-h3">發佈新公告</h3>
+          <div>
+            <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>標題 *</label>
+            <input
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="公告標題"
+              className="w-full px-3 py-2 text-body rounded-input border"
+              style={{
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-ink-900)",
+              }}
+            />
+          </div>
+          <div>
+            <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>內容 *</label>
+            <textarea
+              required
+              rows={5}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="公告內容"
+              className="w-full px-3 py-2 text-body rounded-input border resize-none"
+              style={{
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-ink-900)",
+              }}
+            />
+          </div>
+          <div className="flex gap-4 items-center flex-wrap">
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>目標受眾</label>
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value as Target)}
+                className="px-3 py-2 text-body rounded-input border"
+                style={{
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-surface)",
+                  color: "var(--color-ink-900)",
+                }}
+              >
+                {TARGET_OPTIONS.map(({ label, value }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer mt-4">
+              <input
+                type="checkbox"
+                checked={pinned}
+                onChange={(e) => setPinned(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-body" style={{ color: "var(--color-ink-700)" }}>置頂公告</span>
+            </label>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-4 py-2 text-body rounded-input border"
+              style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-body font-medium rounded-input text-white"
+              style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}
+            >
+              {saving ? "發佈中…" : "發佈"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Announcement list */}
+      {loading ? (
+        <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
+      ) : announcements.length === 0 ? (
+        <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>暫無公告</div>
+      ) : (
+        <ul className="space-y-3">
+          {announcements.map((ann) => (
+            <li key={ann.id} className="card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    {ann.pinned && (
+                      <span
+                        className="text-caption font-medium px-2 py-0.5 rounded-pill"
+                        style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                      >
+                        📌 置頂
+                      </span>
+                    )}
+                    <h3 className="text-h3">{ann.title}</h3>
+                    {ann.committee && <CommitteeBadge committee={ann.committee} />}
+                    {ann.target !== "ALL" && !ann.committee && (
+                      <CommitteeBadge committee={ann.target as CommitteeType} />
+                    )}
+                  </div>
+                  <p className="text-body whitespace-pre-wrap mb-2" style={{ color: "var(--color-ink-700)" }}>
+                    {ann.body}
+                  </p>
+                  <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>
+                    {ann.author.name ?? "老師"} · {formatDate(ann.createdAt)}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    onClick={() => togglePin(ann)}
+                    className="text-caption px-2.5 py-1 rounded-input border transition-colors"
+                    style={{
+                      border: "1px solid var(--color-border)",
+                      color: ann.pinned ? "var(--color-accent)" : "var(--color-ink-500)",
+                    }}
+                    title={ann.pinned ? "取消置頂" : "置頂"}
+                  >
+                    📌
+                  </button>
+                  <button
+                    onClick={() => deleteAnn(ann.id)}
+                    className="text-caption px-2.5 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
+                    style={{ color: "var(--color-ink-300)" }}
+                    title="刪除"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
