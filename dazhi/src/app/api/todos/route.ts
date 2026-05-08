@@ -20,19 +20,35 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status    = searchParams.get("status") as "OPEN" | "IN_PROGRESS" | "DONE" | null
   const committee = searchParams.get("committee") as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | null
+  const view      = searchParams.get("view") // "mine" | "assigned" | null (all)
+
+  const statusFilter    = status    ? { status }    : {}
+  const committeeFilter = committee ? { committee } : {}
+
+  let whereClause
+  if (view === "mine") {
+    whereClause = { createdById: session.user.id, ...statusFilter, ...committeeFilter }
+  } else if (view === "assigned") {
+    whereClause = { assigneeId: session.user.id, ...statusFilter, ...committeeFilter }
+  } else {
+    // Default: all todos where I'm creator OR assignee
+    whereClause = {
+      OR: [
+        { createdById: session.user.id },
+        { assigneeId:  session.user.id },
+      ],
+      ...statusFilter,
+      ...committeeFilter,
+    }
+  }
 
   const todos = await prisma.todo.findMany({
-    where: {
-      createdById: session.user.id,
-      ...(status    ? { status }    : {}),
-      ...(committee ? { committee } : {}),
-    },
+    where: whereClause,
     include: {
-      assignee: { select: { id: true, name: true, image: true } },
+      assignee:  { select: { id: true, name: true, image: true } },
+      createdBy: { select: { id: true, name: true } },
     },
-    orderBy: [
-      { dueDate: "asc" },
-    ],
+    orderBy: [{ dueDate: "asc" }],
   })
 
   return NextResponse.json(todos)
@@ -53,7 +69,8 @@ export async function POST(req: NextRequest) {
       createdById: session.user.id,
     },
     include: {
-      assignee: { select: { id: true, name: true, image: true } },
+      assignee:  { select: { id: true, name: true, image: true } },
+      createdBy: { select: { id: true, name: true } },
     },
   })
 

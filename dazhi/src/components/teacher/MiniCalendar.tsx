@@ -4,6 +4,18 @@ import { useState } from "react"
 
 type Todo = { dueDate: string | null; status: string }
 
+type CalendarEventMin = {
+  startDate: string
+  committee: "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | null
+}
+
+const COMMITTEE_COLORS: Record<string, string> = {
+  ADMIN:      "var(--color-admin)",
+  DISCIPLINE: "var(--color-discipline)",
+  IT:         "var(--color-it)",
+  CURRICULUM: "var(--color-curriculum)",
+}
+
 const WEEK_DAYS = ["日", "一", "二", "三", "四", "五", "六"]
 const MONTHS = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"]
 
@@ -23,12 +35,12 @@ function buildCalendarDays(year: number, month: number) {
   }
   const remaining = 42 - days.length
   for (let d = 1; d <= remaining; d++) {
-    days.push({ date: d, currentMonth: false, iso: `${year}-${(month+2).toString().padStart(2,"0")}-${d.toString().padStart(2,"0")}` })
+    days.push({ date: d, currentMonth: false, iso: `${year}-${(month+2).toString().padStart(2,"0")}-${d.toString().padStart(2,"00")}` })
   }
   return days
 }
 
-export function MiniCalendar({ todos }: { todos: Todo[] }) {
+export function MiniCalendar({ todos, calendarEvents = [] }: { todos: Todo[]; calendarEvents?: CalendarEventMin[] }) {
   const now = new Date()
   const [year,  setYear]  = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
@@ -38,6 +50,13 @@ export function MiniCalendar({ todos }: { todos: Todo[] }) {
       .filter((t) => t.dueDate && t.status !== "DONE")
       .map((t) => t.dueDate!.slice(0, 10))
   )
+
+  const eventsByDate = calendarEvents.reduce<Record<string, CalendarEventMin[]>>((acc, ev) => {
+    const iso = ev.startDate.slice(0, 10)
+    if (!acc[iso]) acc[iso] = []
+    acc[iso].push(ev)
+    return acc
+  }, {})
 
   const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`
 
@@ -91,8 +110,12 @@ export function MiniCalendar({ todos }: { todos: Todo[] }) {
       {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-y-0.5">
         {days.map((day, i) => {
-          const isToday = day.iso === todayStr && day.currentMonth
-          const hasTodo = todoDates.has(day.iso)
+          const isToday     = day.iso === todayStr && day.currentMonth
+          const hasTodo     = todoDates.has(day.iso)
+          const dayEvents   = eventsByDate[day.iso] ?? []
+          const eventColor  = dayEvents[0]?.committee
+            ? COMMITTEE_COLORS[dayEvents[0].committee]
+            : dayEvents.length > 0 ? "var(--color-accent)" : null
           return (
             <div key={i} className="flex flex-col items-center">
               <div
@@ -110,12 +133,14 @@ export function MiniCalendar({ todos }: { todos: Todo[] }) {
               >
                 {day.date}
               </div>
-              {hasTodo && day.currentMonth && (
-                <div
-                  className="w-1 h-1 rounded-full mt-0.5"
-                  style={{ background: "var(--color-accent)" }}
-                />
-              )}
+              <div className="flex gap-0.5 mt-0.5 h-1">
+                {hasTodo && day.currentMonth && (
+                  <div className="w-1 h-1 rounded-full" style={{ background: "var(--color-accent)" }} />
+                )}
+                {eventColor && day.currentMonth && (
+                  <div className="w-1 h-1 rounded-full" style={{ background: eventColor }} />
+                )}
+              </div>
             </div>
           )
         })}

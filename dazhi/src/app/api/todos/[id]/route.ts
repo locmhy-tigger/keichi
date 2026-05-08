@@ -12,19 +12,16 @@ const patchSchema = z.object({
   status:      z.enum(["OPEN", "IN_PROGRESS", "DONE"]).optional(),
 })
 
-async function getOwned(id: string, userId: string) {
-  const todo = await prisma.todo.findUnique({ where: { id } })
-  if (!todo) return null
-  if (todo.createdById !== userId) return null
-  return todo
-}
-
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const todo = await getOwned(params.id, session.user.id)
+  const todo = await prisma.todo.findUnique({ where: { id: params.id } })
   if (!todo) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  const isOwner    = todo.createdById === session.user.id
+  const isAssignee = todo.assigneeId  === session.user.id
+  if (!isOwner && !isAssignee) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   return NextResponse.json(todo)
 }
@@ -33,10 +30,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const owned = await getOwned(params.id, session.user.id)
-  if (!owned) return NextResponse.json({ error: "Not found or forbidden" }, { status: 403 })
+  const todo = await prisma.todo.findUnique({ where: { id: params.id } })
+  if (!todo) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  const isOwner    = todo.createdById === session.user.id
+  const isAssignee = todo.assigneeId  === session.user.id
+  if (!isOwner && !isAssignee) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const data = patchSchema.parse(await req.json())
+
+  // Assignees can only update status, not reassign or change committee/title
+  if (!isOwner && isAssignee) {
+    const { status } = data
+    if (!status) return NextResponse.json({ error: "Assignees may only update status" }, { status: 400 })
+    const updated = await prisma.todo.update({
+      where: { id: params.id },
+      data:  { status },
+      include: {
+        assignee:  { select: { id: true, name: true, image: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+    })
+    return NextResponse.json(updated)
+  }
 
   const updated = await prisma.todo.update({
     where: { id: params.id },
@@ -47,7 +63,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         : undefined,
     },
     include: {
-      assignee: { select: { id: true, name: true, image: true } },
+      assignee:  { select: { id: true, name: true, image: true } },
+      createdBy: { select: { id: true, name: true } },
     },
   })
 
@@ -58,8 +75,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const owned = await getOwned(params.id, session.user.id)
-  if (!owned) return NextResponse.json({ error: "Not found or forbidden" }, { status: 403 })
+  const todo = await prisma.todo.findUnique({ where: { id: params.id } })
+  if (!todo) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (todo.createdById !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   await prisma.todo.delete({ where: { id: params.id } })
 

@@ -53,7 +53,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "記錄及跟進學生行為事項，維持校內紀律。",
     colorVar:    "discipline",
     tools: [
-      { label: "行為記錄",   description: "記錄學生違規及跟進情況" },
+      { label: "行為記錄",   description: "記錄學生違規及跟進情況", href: "/teacher/committee/discipline/behavior" },
       { label: "警告記錄",   description: "發出及管理學生警告"     },
       { label: "欠交功課",   description: "追蹤欠交功課記錄"       },
     ],
@@ -68,9 +68,10 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "提供資訊科技工具支援，協助課堂互動活動。",
     colorVar:    "it",
     tools: [
-      { label: "QR Code 生成器", description: "快速生成 QR Code 供課堂使用" },
-      { label: "課堂計時器",     description: "計時器助你掌握課堂節奏"      },
-      { label: "電腦室管理",     description: "記錄電腦室使用及鑰匙歸還"    },
+      { label: "QR Code 生成器", description: "快速生成 QR Code 供課堂使用", href: "/teacher/committee/it/qr-code"       },
+      { label: "課堂計時器",     description: "計時器助你掌握課堂節奏",      href: "/teacher/committee/it/timer"          },
+      { label: "隨機點名器",     description: "隨機抽選學生，支援記錄名單",   href: "/teacher/committee/it/random-picker"  },
+      { label: "HEIC 轉 JPG",   description: "本地轉換 iPhone 相片格式",     href: "/teacher/committee/it/heic-convert"   },
     ],
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-it)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -145,21 +146,39 @@ export default async function CommitteePage({ params }: { params: { type: string
       {/* Tools grid */}
       <div>
         <h2 className="text-h2 mb-4">工具</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {config.tools.map((tool) => (
-            <div key={tool.label} className="card p-5 cursor-pointer hover:shadow-card-md transition-shadow">
-              <h3 className="text-h3 mb-1">{tool.label}</h3>
-              <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
-                {tool.description}
-              </p>
-              <p
-                className="text-caption mt-3 font-medium"
-                style={{ color: `var(--color-${config.colorVar})` }}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {config.tools.map((tool) => {
+            const inner = (
+              <>
+                <h3 className="text-h3 mb-1">{tool.label}</h3>
+                <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
+                  {tool.description}
+                </p>
+                <p
+                  className="text-caption mt-3 font-medium"
+                  style={{ color: tool.href ? `var(--color-${config.colorVar})` : "var(--color-ink-300)" }}
+                >
+                  {tool.href ? "開啟 →" : "即將推出"}
+                </p>
+              </>
+            )
+            return tool.href ? (
+              <Link
+                key={tool.label}
+                href={tool.href}
+                className="card p-5 hover:shadow-card-md transition-shadow block"
               >
-                開啟 →
-              </p>
-            </div>
-          ))}
+                {inner}
+              </Link>
+            ) : (
+              <div
+                key={tool.label}
+                className="card p-5 opacity-60 cursor-not-allowed"
+              >
+                {inner}
+              </div>
+            )
+          })}
         </div>
       </div>
 

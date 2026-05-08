@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { signOut } from "next-auth/react"
+import Image from "next/image"
 
 type User = {
   name?: string | null
@@ -15,6 +16,7 @@ const MAIN_NAV = [
   { href: "/teacher",               label: "主頁",     icon: HomeIcon     },
   { href: "/teacher/todos",         label: "待辦事項", icon: CheckIcon    },
   { href: "/teacher/announcements", label: "公告",     icon: MegaphoneIcon},
+  { href: "/teacher/calendar",      label: "行事曆",   icon: CalendarIcon },
   { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon},
   { href: "/teacher/points",        label: "積點",     icon: StarIcon     },
 ]
@@ -24,6 +26,10 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/discipline", label: "訓育",     icon: ShieldIcon,    color: "var(--color-discipline)" },
   { href: "/teacher/committee/it",         label: "資訊科技", icon: MonitorIcon,   color: "var(--color-it)"         },
   { href: "/teacher/committee/curriculum", label: "課程發展", icon: BookIcon,      color: "var(--color-curriculum)" },
+]
+
+const ADMIN_NAV = [
+  { href: "/teacher/admin/users", label: "用戶管理", icon: UsersIcon },
 ]
 
 export function TeacherSidebar({ user }: { user: User }) {
@@ -44,14 +50,23 @@ export function TeacherSidebar({ user }: { user: User }) {
       className="flex flex-col h-full"
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
-      {/* Logo */}
-      <div className="px-5 pt-6 pb-4 flex items-end gap-2">
-        <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
-          基智若愚
-        </span>
-        <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-          ICHI
-        </span>
+      {/* Logo — replace /logo-placeholder.svg with your actual logo */}
+      <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
+        <Image
+          src="/logo-placeholder.svg"
+          alt="ICHI Logo"
+          width={32}
+          height={32}
+          priority
+        />
+        <div className="flex items-end gap-1.5">
+          <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
+            基智若愚
+          </span>
+          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
+            ICHI
+          </span>
+        </div>
       </div>
 
       {/* Main nav */}
@@ -87,6 +102,25 @@ export function TeacherSidebar({ user }: { user: User }) {
                 className={`nav-item ${isActive(href) ? "active" : ""}`}
               >
                 <Icon color={isActive(href) ? "var(--color-accent)" : color} />
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        {/* Admin */}
+        <p className="px-3 mt-5 mb-1 text-caption" style={{ color: "var(--color-ink-300)" }}>
+          管理 · ADMIN
+        </p>
+        <ul className="space-y-0.5">
+          {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`nav-item ${isActive(href) ? "active" : ""}`}
+              >
+                <Icon />
                 {label}
               </Link>
             </li>
@@ -154,6 +188,12 @@ export function TeacherSidebar({ user }: { user: User }) {
         >
           <MenuIcon />
         </button>
+        <Image
+          src="/logo-placeholder.svg"
+          alt="ICHI Logo"
+          width={24}
+          height={24}
+        />
         <span className="font-semibold text-base" style={{ color: "var(--color-ink-900)" }}>
           基智若愚
         </span>
@@ -288,12 +328,34 @@ function CloseIcon() {
   )
 }
 
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  )
+}
+
 function LogOutIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
+function UsersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   )
 }

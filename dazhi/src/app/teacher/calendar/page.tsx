@@ -1,0 +1,372 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import Link from "next/link"
+
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+
+type CalendarEvent = {
+  id:          string
+  title:       string
+  startDate:   string
+  endDate:     string | null
+  allDay:      boolean
+  description: string | null
+  committee:   CommitteeType | null
+  authorId:    string
+  author:      { id: string; name: string | null }
+}
+
+const COMMITTEE_COLORS: Record<CommitteeType, string> = {
+  ADMIN:      "var(--color-admin)",
+  DISCIPLINE: "var(--color-discipline)",
+  IT:         "var(--color-it)",
+  CURRICULUM: "var(--color-curriculum)",
+}
+
+const COMMITTEE_LABELS: Record<CommitteeType, string> = {
+  ADMIN:      "行政",
+  DISCIPLINE: "訓育",
+  IT:         "資訊科技",
+  CURRICULUM: "課程發展",
+}
+
+const DAYS = ["日", "一", "二", "三", "四", "五", "六"]
+const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"]
+
+function buildDays(year: number, month: number) {
+  const firstDay     = new Date(year, month, 1).getDay()
+  const daysInMonth  = new Date(year, month + 1, 0).getDate()
+  const daysInPrev   = new Date(year, month, 0).getDate()
+  const cells: { date: number; current: boolean; iso: string }[] = []
+  for (let i = firstDay - 1; i >= 0; i--) {
+    const d = daysInPrev - i
+    cells.push({ date: d, current: false, iso: "" })
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    cells.push({ date: d, current: true, iso })
+  }
+  while (cells.length % 7 !== 0) cells.push({ date: 0, current: false, iso: "" })
+  return cells
+}
+
+export default function CalendarPage() {
+  const now = new Date()
+  const [year,    setYear]    = useState(now.getFullYear())
+  const [month,   setMonth]   = useState(now.getMonth())
+  const [events,  setEvents]  = useState<CalendarEvent[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Modal state
+  const [showCreate, setShowCreate]   = useState(false)
+  const [selectedDay, setSelectedDay] = useState("")
+  const [editEvent,   setEditEvent]   = useState<CalendarEvent | null>(null)
+
+  // Form state
+  const [formTitle,     setFormTitle]     = useState("")
+  const [formStartDate, setFormStartDate] = useState("")
+  const [formEndDate,   setFormEndDate]   = useState("")
+  const [formCommittee, setFormCommittee] = useState<CommitteeType | "">("")
+  const [formDesc,      setFormDesc]      = useState("")
+  const [saving,        setSaving]        = useState(false)
+
+  async function load() {
+    setLoading(true)
+    const m   = `${year}-${String(month + 1).padStart(2, "0")}`
+    const res = await fetch(`/api/calendar-events?month=${m}`)
+    if (res.ok) setEvents(await res.json())
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [year, month]) // eslint-disable-line
+
+  function openCreate(iso?: string) {
+    setFormTitle("")
+    setFormStartDate(iso ?? "")
+    setFormEndDate("")
+    setFormCommittee("")
+    setFormDesc("")
+    setSelectedDay(iso ?? "")
+    setEditEvent(null)
+    setShowCreate(true)
+  }
+
+  function openEdit(event: CalendarEvent) {
+    setFormTitle(event.title)
+    setFormStartDate(event.startDate.slice(0, 10))
+    setFormEndDate(event.endDate ? event.endDate.slice(0, 10) : "")
+    setFormCommittee(event.committee ?? "")
+    setFormDesc(event.description ?? "")
+    setEditEvent(event)
+    setShowCreate(true)
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const body = {
+      title:       formTitle,
+      startDate:   formStartDate,
+      endDate:     formEndDate || undefined,
+      committee:   formCommittee || undefined,
+      description: formDesc || undefined,
+    }
+    if (editEvent) {
+      const res = await fetch(`/api/calendar-events/${editEvent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const updated: CalendarEvent = await res.json()
+        setEvents((prev) => prev.map((ev) => ev.id === updated.id ? updated : ev))
+      }
+    } else {
+      const res = await fetch("/api/calendar-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const created: CalendarEvent = await res.json()
+        setEvents((prev) => [...prev, created])
+      }
+    }
+    setSaving(false)
+    setShowCreate(false)
+  }
+
+  async function deleteEvent(id: string) {
+    setEvents((prev) => prev.filter((ev) => ev.id !== id))
+    await fetch(`/api/calendar-events/${id}`, { method: "DELETE" })
+    setShowCreate(false)
+  }
+
+  function exportIcs() {
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//ICHI EduPortal//HK",
+    ]
+    events.forEach((ev) => {
+      const dtStart = ev.startDate.slice(0, 10).replace(/-/g, "")
+      const dtEnd   = ev.endDate ? ev.endDate.slice(0, 10).replace(/-/g, "") : dtStart
+      lines.push("BEGIN:VEVENT")
+      lines.push(`UID:${ev.id}@ichi`)
+      lines.push(`DTSTART;VALUE=DATE:${dtStart}`)
+      lines.push(`DTEND;VALUE=DATE:${dtEnd}`)
+      lines.push(`SUMMARY:${ev.title}`)
+      if (ev.description) lines.push(`DESCRIPTION:${ev.description.replace(/\n/g, "\\n")}`)
+      lines.push("END:VEVENT")
+    })
+    lines.push("END:VCALENDAR")
+    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" })
+    const a    = document.createElement("a")
+    a.href     = URL.createObjectURL(blob)
+    a.download = "ichi-calendar.ics"
+    a.click()
+  }
+
+  function prevMonth() { if (month === 0) { setYear((y) => y - 1); setMonth(11) } else setMonth((m) => m - 1) }
+  function nextMonth() { if (month === 11) { setYear((y) => y + 1); setMonth(0) } else setMonth((m) => m + 1) }
+
+  const cells       = buildDays(year, month)
+  const todayIso    = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"00")}`
+  const eventsOnDay = (iso: string) => events.filter((ev) => ev.startDate.slice(0, 10) === iso)
+
+  const inputCls   = "w-full px-3 py-2 text-body rounded-input border outline-none"
+  const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-h1">全校行事曆</h1>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>共 {events.length} 個活動</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={exportIcs}
+            className="px-4 py-2 rounded-input text-body border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+          >
+            匙出 .ics
+          </button>
+          <button
+            onClick={() => openCreate()}
+            className="px-4 py-2 rounded-input text-body font-medium text-white"
+            style={{ background: "var(--color-accent)" }}
+          >
+            + 新增活動
+          </button>
+        </div>
+      </div>
+
+      {/* Month navigation */}
+      <div className="flex items-center gap-4 mb-4">
+        <button onClick={prevMonth} className="p-1.5 rounded-input border"
+          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>‹</button>
+        <h2 className="text-h2 min-w-[120px] text-center">{year}年 {MONTHS[month]}</h2>
+        <button onClick={nextMonth} className="p-1.5 rounded-input border"
+          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>›</button>
+        <button onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth()) }}
+          className="text-caption px-3 py-1.5 rounded-input border ml-2"
+          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
+          今天
+        </button>
+      </div>
+
+      {/* Calendar grid */}
+      <div className="card overflow-hidden">
+        {/* Day headers */}
+        <div className="grid grid-cols-7" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          {DAYS.map((d) => (
+            <div key={d} className="text-center py-2 text-caption font-medium"
+              style={{ color: "var(--color-ink-400)" }}>{d}</div>
+          ))}
+        </div>
+
+        {/* Day cells */}
+        {loading ? (
+          <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
+        ) : (
+          <div className="grid grid-cols-7">
+            {cells.map((cell, i) => {
+              const dayEvents = cell.iso ? eventsOnDay(cell.iso) : []
+              const isToday   = cell.iso === todayIso
+              return (
+                <div
+                  key={i}
+                  onClick={() => cell.iso && openCreate(cell.iso)}
+                  className="min-h-[80px] p-1.5 cursor-pointer transition-colors hover:bg-[var(--color-surface-2)]"
+                  style={{
+                    borderRight:  (i + 1) % 7 === 0 ? "none" : `1px solid var(--color-border)`,
+                    borderBottom: i < cells.length - 7 ? `1px solid var(--color-border)` : "none",
+                    background:   cell.current ? "var(--color-surface)" : "var(--color-surface-2)",
+                    opacity:      cell.current ? 1 : 0.4,
+                  }}
+                >
+                  <div
+                    className={`w-6 h-6 flex items-center justify-center rounded-full text-caption font-medium mb-1 ${isToday ? "text-white" : ""}`}
+                    style={{
+                      background: isToday ? "var(--color-accent)" : "transparent",
+                      color:      isToday ? "white" : cell.current ? "var(--color-ink-900)" : "var(--color-ink-300)",
+                    }}
+                  >
+                    {cell.date || ""}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dayEvents.slice(0, 3).map((ev) => (
+                      <div
+                        key={ev.id}
+                        onClick={(e) => { e.stopPropagation(); openEdit(ev) }}
+                        className="text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer text-white"
+                        style={{ background: ev.committee ? COMMITTEE_COLORS[ev.committee] : "var(--color-accent)" }}
+                        title={ev.title}
+                      >
+                        {ev.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <div className="text-[10px]" style={{ color: "var(--color-ink-400)" }}>
+                        +{dayEvents.length - 3}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowCreate(false)} />
+          <form
+            onSubmit={save}
+            className="relative card p-6 w-full max-w-md space-y-4 z-10"
+          >
+            <h3 className="text-h3">{editEvent ? "編輯活動" : "新增活動"}</h3>
+
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>標題 *</label>
+              <input required value={formTitle} onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="活動名稱" className={inputCls} style={inputStyle} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>開始日期 *</label>
+                <input type="date" required value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)}
+                  className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>結束日期（選填）</label>
+                <input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)}
+                  className={inputCls} style={inputStyle} />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>所屬組別（選填）</label>
+              <select value={formCommittee} onChange={(e) => setFormCommittee(e.target.value as CommitteeType | "")}
+                className={inputCls} style={inputStyle}>
+                <option value="">— 全校 —</option>
+                <option value="ADMIN">行政</option>
+                <option value="DISCIPLINE">訓育</option>
+                <option value="IT">資訊科技</option>
+                <option value="CURRICULUM">課程發展</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>備注（選填）</label>
+              <textarea rows={2} value={formDesc} onChange={(e) => setFormDesc(e.target.value)}
+                className={`${inputCls} resize-none`} style={inputStyle} />
+            </div>
+
+            <div className="flex gap-3 justify-between">
+              {editEvent && (
+                <button type="button" onClick={() => deleteEvent(editEvent.id)}
+                  className="text-caption px-3 py-1.5 rounded-input"
+                  style={{ color: "var(--color-discipline)" }}>
+                  刪除
+                </button>
+              )}
+              <div className="flex gap-3 ml-auto">
+                <button type="button" onClick={() => setShowCreate(false)}
+                  className="px-4 py-2 text-body rounded-input border"
+                  style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
+                  取消
+                </button>
+                <button type="submit" disabled={saving}
+                  className="px-4 py-2 text-body font-medium rounded-input text-white"
+                  style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}>
+                  {saving ? "儲存中…" : "儲存"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="flex gap-4 flex-wrap mt-4">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm" style={{ background: "var(--color-accent)" }} />
+          <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>全校</span>
+        </div>
+        {(Object.keys(COMMITTEE_COLORS) as CommitteeType[]).map((c) => (
+          <div key={c} className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm" style={{ background: COMMITTEE_COLORS[c] }} />
+            <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>{COMMITTEE_LABELS[c]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
