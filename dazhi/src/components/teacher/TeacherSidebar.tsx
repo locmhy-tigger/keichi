@@ -26,6 +26,10 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/curriculum", label: "課程發展", icon: BookIcon,      color: "var(--color-curriculum)" },
 ]
 
+const ADMIN_NAV = [
+  { href: "/teacher/admin/users", label: "用戶管理", icon: UsersIcon },
+]
+
 export function TeacherSidebar({ user }: { user: User }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -87,6 +91,25 @@ export function TeacherSidebar({ user }: { user: User }) {
                 className={`nav-item ${isActive(href) ? "active" : ""}`}
               >
                 <Icon color={isActive(href) ? "var(--color-accent)" : color} />
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        {/* Admin */}
+        <p className="px-3 mt-5 mb-1 text-caption" style={{ color: "var(--color-ink-300)" }}>
+          管理 · ADMIN
+        </p>
+        <ul className="space-y-0.5">
+          {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`nav-item ${isActive(href) ? "active" : ""}`}
+              >
+                <Icon />
                 {label}
               </Link>
             </li>
@@ -294,6 +317,17 @@ function LogOutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
+function UsersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   )
 }
