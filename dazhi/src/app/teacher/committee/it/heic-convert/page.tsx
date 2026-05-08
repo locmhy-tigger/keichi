@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react"
 import Link from "next/link"
-import heic2any from "heic2any"
 
 type ConvertedFile = {
   name:     string
@@ -27,6 +26,7 @@ export default function HeicConvertPage() {
       const file = files[i]
       setProgress(`轉換中 ${i + 1} / ${files.length}：${file.name}`)
       try {
+        const { default: heic2any } = await import("heic2any")
         const blob    = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 }) as Blob
         const url     = URL.createObjectURL(blob)
         const sizeMB  = (blob.size / 1024 / 1024).toFixed(2)
