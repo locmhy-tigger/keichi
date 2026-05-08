@@ -33,7 +33,7 @@ export default function HeicConvertPage() {
         const url     = URL.createObjectURL(blob)
         const sizeMB  = (blob.size / 1024 / 1024).toFixed(2)
         newResults.push({ name: file.name, url, sizeMB, thumbUrl: url })
-      } catch {
+      } catch (_err) {
         setProgress(`⚠ 跳過 ${file.name}（不是有效的 HEIC 檔案）`)
         await new Promise((r) => setTimeout(r, 1000))
       }
@@ -133,8 +133,8 @@ export default function HeicConvertPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {results.map((item, i) => (
-              <div key={i} className="card overflow-hidden">
+            {results.map((item) => (
+              <div key={item.url} className="card overflow-hidden">
                 {/* Thumbnail */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
