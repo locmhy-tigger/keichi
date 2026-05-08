@@ -1,9 +1,24 @@
 import type { Metadata } from "next"
+import { Inter, Noto_Sans_TC } from "next/font/google"
 import "./globals.css"
 
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-inter",
+  display: "swap",
+})
+
+const notoSansTC = Noto_Sans_TC({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-noto-sans-tc",
+  display: "swap",
+})
+
 export const metadata: Metadata = {
-  title: "AI 大智若愚",
-  description: "智能課堂學習平台",
+  title: "基智若愚 ICHI",
+  description: "教師行政管理平台",
 }
 
 export default function RootLayout({
@@ -12,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-HK">
-      <body className="font-sans">{children}</body>
+    <html lang="zh-HK" className={`${inter.variable} ${notoSansTC.variable}`}>
+      <body className="font-sans antialiased">{children}</body>
     </html>
   )
 }
