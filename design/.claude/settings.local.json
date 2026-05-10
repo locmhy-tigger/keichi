@@ -5,7 +5,9 @@
       "Bash(head:*)",
       "Bash(test:*)",
       "Bash(mount:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "mcp__team__reply_to_team",
+      "Bash(cd:*)"
     ]
   }
 }

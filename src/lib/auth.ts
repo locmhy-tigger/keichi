@@ -66,10 +66,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user, account }) {
       if (user) {
         token.id   = user.id
         token.role = (user as { role: Role }).role
+      }
+      if (account?.provider === "google") {
+        token.accessToken = account.access_token
       }
       return token
     },
@@ -77,6 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token) {
         session.user.id   = token.id as string
         session.user.role = token.role as Role
+        session.accessToken = token.accessToken as string
       }
       return session
     },

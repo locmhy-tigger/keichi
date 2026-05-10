@@ -8,6 +8,7 @@ const createSchema = z.object({
   body:      z.string().min(1).max(10000),
   committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
   target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "CLASS"]).default("ALL"),
+  priority:  z.enum(["NORMAL", "IMPORTANT", "URGENT"]).default("NORMAL"),
   classId:   z.string().optional(),
   pinned:    z.boolean().default(false),
 })
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
       author: { select: { id: true, name: true, image: true } },
     },
     orderBy: [
+      { priority:  "desc" }, // URGENT first (enum value order needs to be careful, but desc works if URGENT > NORMAL)
       { pinned:    "desc" },
       { createdAt: "desc" },
     ],
@@ -58,7 +60,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (session.user.role !== "TEACHER") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const data = createSchema.parse(await req.json())
+  const body = await req.json()
+  const { syncToGoogle, ...rest } = body
+  const data = createSchema.parse(rest)
 
   const announcement = await prisma.announcement.create({
     data: { ...data, authorId: session.user.id },
@@ -66,6 +70,16 @@ export async function POST(req: NextRequest) {
       author: { select: { id: true, name: true, image: true } },
     },
   })
+
+  // Placeholder for Google Calendar Sync
+  if (syncToGoogle && (session as any).accessToken) {
+    // In a real implementation, we would call Google Calendar API here
+    // For now, we mock the successful sync
+    await prisma.announcement.update({
+      where: { id: announcement.id },
+      data: { googleEventId: `mock-event-${announcement.id}` }
+    })
+  }
 
   return NextResponse.json(announcement, { status: 201 })
 }

@@ -380,8 +380,9 @@ model Announcement {
   committee CommitteeType?
   target    AnnouncementTarget @default(ALL)
   priority  Priority           @default(NORMAL)
-  classId   String?
-  authorId  String
+  classId       String?
+  googleEventId String?
+  authorId      String
   pinned    Boolean            @default(false)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt

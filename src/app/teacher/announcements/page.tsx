@@ -43,8 +43,9 @@ export default function AnnouncementsPage() {
   const [body,    setBody]    = useState("")
   const [target,  setTarget]  = useState<Target>("ALL")
   const [classId, setClassId] = useState("")
-  const [pinned,  setPinned]  = useState(false)
-  const [saving,  setSaving]  = useState(false)
+  const [pinned,       setPinned]       = useState(false)
+  const [syncToGoogle, setSyncToGoogle] = useState(false)
+  const [saving,       setSaving]       = useState(false)
 
   async function load() {
     setLoading(true)
@@ -65,12 +66,12 @@ export default function AnnouncementsPage() {
     const res = await fetch("/api/announcements", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, target, pinned, classId: target === "CLASS" ? classId : undefined }),
+      body: JSON.stringify({ title, body, target, priority, pinned, syncToGoogle, classId: target === "CLASS" ? classId : undefined }),
     })
     if (res.ok) {
       const created = await res.json()
       setAnnouncements((prev) => [created, ...prev])
-      setTitle(""); setBody(""); setTarget("ALL"); setClassId(""); setPinned(false); setShowForm(false)
+      setTitle(""); setBody(""); setTarget("ALL"); setPriority("NORMAL"); setClassId(""); setPinned(false); setSyncToGoogle(false); setShowForm(false)
     }
     setSaving(false)
   }
@@ -227,6 +228,16 @@ export default function AnnouncementsPage() {
                       </span>
                     )}
                     <h3 className="text-h3">{ann.title}</h3>
+                    {ann.priority === "URGENT" && (
+                      <span className="text-caption font-bold px-2 py-0.5 rounded bg-red-100 text-red-600 border border-red-200 animate-pulse">
+                        🚨 緊急
+                      </span>
+                    )}
+                    {ann.priority === "IMPORTANT" && (
+                      <span className="text-caption font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-600 border border-amber-200">
+                        ⭐ 重要
+                      </span>
+                    )}
                     {ann.target === "CLASS" ? (
                       <span className="text-caption px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
                         班別公告
@@ -264,6 +275,41 @@ export default function AnnouncementsPage() {
                     className="text-caption px-2.5 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
                     style={{ color: "var(--color-ink-300)" }}
                     title="刪除"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
                   >
                     ×
                   </button>
