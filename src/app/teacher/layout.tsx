@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { TeacherSidebar } from "@/components/teacher/TeacherSidebar"
+import { SessionTimeoutWatcher } from "@/components/SessionTimeoutWatcher"
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -10,6 +11,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
+      <SessionTimeoutWatcher expires={session.expires} />
       <TeacherSidebar
         user={{
           name:  session.user.name,

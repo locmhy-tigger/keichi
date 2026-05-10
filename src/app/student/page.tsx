@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { getPusherClient } from "@/lib/pusher-client"
 import type { PusherPointsAwardedPayload, PusherMissionApprovedPayload } from "@/types/mission"
+import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
+import { UnifiedTimeline } from "@/components/UnifiedTimeline"
 
 type ClassInfo = { id: string; name: string; classCode: string }
 type LeaderboardEntry = { rank: number; user: { id: string; name: string }; totalPoints: number }
@@ -32,7 +34,7 @@ export default function StudentDashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [classCode, setClassCode] = useState("")
-  const [upcomingActivities, setUpcomingActivities] = useState<UpcomingActivity[]>([])
+  const [timelineItems, setTimelineItems] = useState<any[]>([])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -65,13 +67,11 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     if (!activeClass) return
+    fetchLeaderboard(activeClass.id, session?.user?.id)
+  }, [activeClass, session?.user?.id, fetchLeaderboard])
 
-    // Fetch leaderboard to get personal points
-    fetch("/api/classes")
-      .then((r) => r.json())
-      .then(() => fetchLeaderboard(activeClass.id))
-
-    // Count due flashcards across all decks
+  useEffect(() => {
+    // Count due flashcards
     fetch("/api/flashcard-decks")
       .then((r) => r.json())
       .then(async (decks: { id: string }[]) => {
@@ -85,72 +85,59 @@ export default function StudentDashboard() {
         }
         setDueCount(total)
       })
-  }, [activeClass, fetchLeaderboard])
-
-  // Fetch upcoming activities on mount
-  useEffect(() => {
-    fetch("/api/activities")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: UpcomingActivity[]) => {
-        const now = new Date()
-        const upcoming = data
-          .filter((a) => new Date(a.startTime) > now)
-          .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-          .slice(0, 3)
-        setUpcomingActivities(upcoming)
-      })
-      .catch(() => {})
   }, [])
 
-  // Pusher subscription — class channel + private user channel
+  useEffect(() => {
+    // Fetch unified timeline (Todos + Activities)
+    Promise.all([
+      fetch("/api/todos?view=assigned").then(r => r.ok ? r.json() : []),
+      fetch("/api/activities").then(r => r.ok ? r.json() : [])
+    ]).then(([todos, acts]) => {
+      const items = [
+        ...todos.map((t: any) => ({
+          id: t.id,
+          type: "TODO",
+          title: t.title,
+          date: t.dueDate || new Date().toISOString(),
+          committee: t.committee
+        })),
+        ...acts.map((a: any) => ({
+          id: a.id,
+          type: "EVENT",
+          title: a.title,
+          date: a.startTime || new Date().toISOString(),
+          committee: a.committee
+        }))
+      ]
+      setTimelineItems(items)
+    })
+  }, [])
+
+  // Pusher subscriptions ... (omitted for brevity in thinking but I'll keep them in code)
   useEffect(() => {
     if (!activeClass) return
     const pusher = getPusherClient()
     const channel = pusher.subscribe(`class-${activeClass.id}`)
-
     channel.bind("points-awarded", (data: PusherPointsAwardedPayload) => {
       showToast(`+${data.amount} 積點！`)
-      fetchLeaderboard(activeClass.id)
+      fetchLeaderboard(activeClass.id, session?.user?.id)
     })
-
     channel.bind("mission-approved", (data: PusherMissionApprovedPayload) => {
       showToast(`任務批核！獲得 ${data.pointsAwarded} 積點`)
-      fetchLeaderboard(activeClass.id)
+      fetchLeaderboard(activeClass.id, session?.user?.id)
     })
+    return () => { channel.unbind_all(); pusher.unsubscribe(`class-${activeClass.id}`) }
+  }, [activeClass, session?.user?.id, fetchLeaderboard])
 
-    return () => {
-      channel.unbind_all()
-      pusher.unsubscribe(`class-${activeClass.id}`)
-    }
-  }, [activeClass, fetchLeaderboard])
-
-  // Private channel — activity alerts
   useEffect(() => {
     if (!session?.user?.id) return
     const pusher  = getPusherClient()
     const channel = pusher.subscribe(`private-user-${session.user.id}`)
-
     channel.bind("activity-alert", (data: { title: string; startTime: string; location?: string | null }) => {
       const loc = data.location ? ` 於 ${data.location}` : ""
       showToast(`📢 你有一個活動：${data.title} — ${formatActivityTime(data.startTime)}${loc}`)
-      // Refresh upcoming activities list
-      fetch("/api/activities")
-        .then((r) => r.ok ? r.json() : [])
-        .then((acts: UpcomingActivity[]) => {
-          const now = new Date()
-          const upcoming = acts
-            .filter((a) => new Date(a.startTime) > now)
-            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-            .slice(0, 3)
-          setUpcomingActivities(upcoming)
-        })
-        .catch(() => {})
     })
-
-    return () => {
-      channel.unbind_all()
-      pusher.unsubscribe(`private-user-${session.user.id}`)
-    }
+    return () => { channel.unbind_all(); pusher.unsubscribe(`private-user-${session.user.id}`) }
   }, [session?.user?.id])
 
   const handleJoin = async () => {
@@ -175,12 +162,14 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="p-4 max-w-2xl mx-auto">
+    <div className="p-4 max-w-2xl mx-auto space-y-4">
       {toast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg z-50 animate-bounce">
           {toast}
         </div>
       )}
+
+      <DashboardAnnouncements />
 
       {classes.length === 0 ? (
         <div className="bg-white rounded-2xl p-6 shadow-sm border text-center">
@@ -204,27 +193,7 @@ export default function StudentDashboard() {
         </div>
       ) : (
         <>
-          {/* Class selector */}
-          {classes.length > 1 && (
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-              {classes.map((cls) => (
-                <button
-                  key={cls.id}
-                  onClick={() => setActiveClass(cls)}
-                  className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap ${
-                    activeClass?.id === cls.id
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-gray-600 border"
-                  }`}
-                >
-                  {cls.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Stats row */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-3">
             <div className="bg-white rounded-2xl p-4 shadow-sm border text-center">
               <div className="text-2xl font-bold text-blue-600">{points}</div>
               <div className="text-xs text-gray-500 mt-1">積點</div>
@@ -239,7 +208,6 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Quick actions */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border">
             <h2 className="font-semibold mb-3">快速入口</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -247,7 +215,7 @@ export default function StudentDashboard() {
                 <span className="text-2xl">🗺️</span>
                 <div>
                   <div className="text-sm font-medium">衝關地圖</div>
-                  <div className="text-xs text-gray-500">完成任務賺積點</div>
+                  <div className="text-xs text-gray-500">賺積點</div>
                 </div>
               </a>
               <a href="/student/flashcards" className="flex items-center gap-3 p-3 bg-orange-50 rounded-xl">
@@ -260,32 +228,9 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Upcoming activities */}
-          {upcomingActivities.length > 0 && (
-            <div className="mt-4 bg-white rounded-2xl p-4 shadow-sm border">
-              <h2 className="font-semibold mb-3">即將到來的活動</h2>
-              <div className="space-y-2">
-                {upcomingActivities.map((act) => (
-                  <div key={act.id} className="flex items-start gap-3 p-2 rounded-xl bg-blue-50">
-                    <span className="text-lg mt-0.5">📅</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{act.title}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatActivityTime(act.startTime)}
-                        {act.location && ` · ${act.location}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <a href="/student/activities" className="block text-center text-xs text-blue-600 pt-1">
-                  查看全部活動 →
-                </a>
-              </div>
-            </div>
-          )}
+          <UnifiedTimeline initialItems={timelineItems} />
 
-          {/* Join another class */}
-          <div className="mt-4 bg-white rounded-2xl p-4 shadow-sm border">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border">
             <h2 className="font-semibold mb-3">加入其他班級</h2>
             <div className="flex gap-2">
               <input
@@ -306,6 +251,10 @@ export default function StudentDashboard() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
-type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "CLASS"
 
 type Announcement = {
   id:        string
@@ -13,12 +13,14 @@ type Announcement = {
   committee: CommitteeType | null
   target:    Target
   pinned:    boolean
+  classId:   string | null
   createdAt: string
   author:    { id: string; name: string | null; image: string | null }
 }
 
 const TARGET_OPTIONS: { label: string; value: Target }[] = [
   { label: "全校",     value: "ALL"        },
+  { label: "班別",     value: "CLASS"      },
   { label: "行政",     value: "ADMIN"      },
   { label: "訓育",     value: "DISCIPLINE" },
   { label: "資訊科技", value: "IT"         },
@@ -32,6 +34,7 @@ function formatDate(iso: string): string {
 
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [classes,       setClasses]       = useState<{ id: string; name: string }[]>([])
   const [loading,       setLoading]       = useState(true)
   const [showForm,      setShowForm]      = useState(false)
 
@@ -39,13 +42,18 @@ export default function AnnouncementsPage() {
   const [title,   setTitle]   = useState("")
   const [body,    setBody]    = useState("")
   const [target,  setTarget]  = useState<Target>("ALL")
+  const [classId, setClassId] = useState("")
   const [pinned,  setPinned]  = useState(false)
   const [saving,  setSaving]  = useState(false)
 
   async function load() {
     setLoading(true)
-    const res = await fetch("/api/announcements")
-    if (res.ok) setAnnouncements(await res.json())
+    const [aRes, cRes] = await Promise.all([
+      fetch("/api/announcements"),
+      fetch("/api/admin/classes")
+    ])
+    if (aRes.ok) setAnnouncements(await aRes.json())
+    if (cRes.ok) setClasses(await cRes.json())
     setLoading(false)
   }
 
@@ -57,17 +65,18 @@ export default function AnnouncementsPage() {
     const res = await fetch("/api/announcements", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, target, pinned }),
+      body: JSON.stringify({ title, body, target, pinned, classId: target === "CLASS" ? classId : undefined }),
     })
     if (res.ok) {
       const created = await res.json()
       setAnnouncements((prev) => [created, ...prev])
-      setTitle(""); setBody(""); setTarget("ALL"); setPinned(false); setShowForm(false)
+      setTitle(""); setBody(""); setTarget("ALL"); setClassId(""); setPinned(false); setShowForm(false)
     }
     setSaving(false)
   }
 
   async function deleteAnn(id: string) {
+    if (!confirm("確定刪除嗎？")) return
     setAnnouncements((prev) => prev.filter((a) => a.id !== id))
     await fetch(`/api/announcements/${id}`, { method: "DELETE" })
   }
@@ -88,7 +97,7 @@ export default function AnnouncementsPage() {
         <div>
           <h1 className="text-h1">公告</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-            校內通告發布
+            校內及班級通告發布
           </p>
         </div>
         <button
@@ -96,7 +105,7 @@ export default function AnnouncementsPage() {
           className="px-4 py-2 rounded-input text-body font-medium text-white transition-colors"
           style={{ background: "var(--color-accent)" }}
         >
-          + 發佈公告
+          {showForm ? "取消" : "+ 發佈公告"}
         </button>
       </div>
 
@@ -135,13 +144,13 @@ export default function AnnouncementsPage() {
               }}
             />
           </div>
-          <div className="flex gap-4 items-center flex-wrap">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>目標受眾</label>
               <select
                 value={target}
                 onChange={(e) => setTarget(e.target.value as Target)}
-                className="px-3 py-2 text-body rounded-input border"
+                className="w-full px-3 py-2 text-body rounded-input border"
                 style={{
                   border: "1px solid var(--color-border)",
                   background: "var(--color-surface)",
@@ -153,29 +162,42 @@ export default function AnnouncementsPage() {
                 ))}
               </select>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer mt-4">
-              <input
-                type="checkbox"
-                checked={pinned}
-                onChange={(e) => setPinned(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <span className="text-body" style={{ color: "var(--color-ink-700)" }}>置頂公告</span>
-            </label>
+            {target === "CLASS" && (
+              <div>
+                <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>選擇班別</label>
+                <select
+                  required
+                  value={classId}
+                  onChange={(e) => setClassId(e.target.value)}
+                  className="w-full px-3 py-2 text-body rounded-input border"
+                  style={{
+                    border: "1px solid var(--color-border)",
+                    background: "var(--color-surface)",
+                    color: "var(--color-ink-900)",
+                  }}
+                >
+                  <option value="">— 請選擇 —</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-body rounded-input border"
-              style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
-            >
-              取消
-            </button>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pinned}
+              onChange={(e) => setPinned(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-body" style={{ color: "var(--color-ink-700)" }}>置頂公告</span>
+          </label>
+          <div className="flex justify-end pt-2">
             <button
               type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-body font-medium rounded-input text-white"
+              disabled={saving || (target === "CLASS" && !classId)}
+              className="px-6 py-2 text-body font-medium rounded-input text-white w-full sm:w-auto"
               style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}
             >
               {saving ? "發佈中…" : "發佈"}
@@ -205,9 +227,17 @@ export default function AnnouncementsPage() {
                       </span>
                     )}
                     <h3 className="text-h3">{ann.title}</h3>
-                    {ann.committee && <CommitteeBadge committee={ann.committee} />}
-                    {ann.target !== "ALL" && !ann.committee && (
-                      <CommitteeBadge committee={ann.target as CommitteeType} />
+                    {ann.target === "CLASS" ? (
+                      <span className="text-caption px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                        班別公告
+                      </span>
+                    ) : (
+                      <>
+                        {ann.committee && <CommitteeBadge committee={ann.committee} />}
+                        {ann.target !== "ALL" && !ann.committee && (
+                          <CommitteeBadge committee={ann.target as CommitteeType} />
+                        )}
+                      </>
                     )}
                   </div>
                   <p className="text-body whitespace-pre-wrap mb-2" style={{ color: "var(--color-ink-700)" }}>

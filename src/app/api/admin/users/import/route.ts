@@ -38,15 +38,19 @@ export async function POST(req: NextRequest) {
   let updated = 0
   const errors: { row: number; email: string; reason: string }[] = []
 
+  // Pre-fetch all classes to avoid multiple lookups
+  const allClasses = await prisma.class.findMany({ select: { id: true, classCode: true } })
+  const classMap = new Map(allClasses.map((c) => [c.classCode, c.id]))
+
   for (let i = 0; i < dataLines.length; i++) {
     const row = dataLines[i]
     const parts = row.split(",")
     if (parts.length < 3) {
-      errors.push({ row: i + 2, email: parts[0] ?? "", reason: "Too few columns (expected: email,name,role,committees,chairOf)" })
+      errors.push({ row: i + 2, email: parts[0] ?? "", reason: "Too few columns (expected: email,name,role,committees,chairOf,classes)" })
       continue
     }
 
-    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = ""] = parts
+    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = "", classesRaw = ""] = parts
     const trimmedEmail = email.trim()
     const trimmedName  = name.trim()
     const role         = roleRaw.trim() as Role
@@ -63,9 +67,11 @@ export async function POST(req: NextRequest) {
 
     const committees = parseCommittees(committeesRaw)
     const chairOf    = parseCommittees(chairOfRaw)
+    const classes    = classesRaw.split("|").map((s) => s.trim()).filter(Boolean)
 
     try {
       const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } })
+      let userId = ""
 
       if (existing) {
         await prisma.user.update({
@@ -75,18 +81,7 @@ export async function POST(req: NextRequest) {
             role,
           },
         })
-
-        // Replace committee memberships
-        await prisma.committeeRole.deleteMany({ where: { userId: existing.id } })
-        if (committees.length > 0) {
-          await prisma.committeeRole.createMany({
-            data: committees.map((c) => ({
-              userId:    existing.id,
-              committee: c,
-              isChair:   chairOf.includes(c),
-            })),
-          })
-        }
+        userId = existing.id
         updated++
       } else {
         const newUser = await prisma.user.create({
@@ -96,20 +91,36 @@ export async function POST(req: NextRequest) {
             role,
           },
         })
-
-        if (committees.length > 0) {
-          await prisma.committeeRole.createMany({
-            data: committees.map((c) => ({
-              userId:    newUser.id,
-              committee: c,
-              isChair:   chairOf.includes(c),
-            })),
-          })
-        }
+        userId = newUser.id
         created++
       }
+
+      // Replace committee memberships
+      await prisma.committeeRole.deleteMany({ where: { userId } })
+      if (committees.length > 0) {
+        await prisma.committeeRole.createMany({
+          data: committees.map((c) => ({
+            userId,
+            committee: c,
+            isChair:   chairOf.includes(c),
+          })),
+        })
+      }
+
+      // Replace class enrollments
+      if (role === "STUDENT") {
+        await prisma.classEnrollment.deleteMany({ where: { studentId: userId } })
+        const enrollmentData = classes
+          .map((code) => classMap.get(code))
+          .filter((id): id is string => !!id)
+          .map((classId) => ({ classId, studentId: userId }))
+
+        if (enrollmentData.length > 0) {
+          await prisma.classEnrollment.createMany({ data: enrollmentData })
+        }
+      }
     } catch (_err) {
-      errors.push({ row: i + 2, email: trimmedEmail, reason: "Database error — check for duplicate entries" })
+      errors.push({ row: i + 2, email: trimmedEmail, reason: "Database error — check for duplicate entries or constraints" })
     }
   }
 

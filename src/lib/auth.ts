@@ -10,7 +10,10 @@ import type { Adapter } from "next-auth/adapters"
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
   trustHost: true,
-  session: { strategy: "jwt" },
+  session: { 
+    strategy: "jwt",
+    maxAge: 2 * 60 * 60, // 2 hours
+  },
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,

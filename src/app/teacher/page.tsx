@@ -2,16 +2,17 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { DashboardGreeting } from "@/components/teacher/DashboardGreeting"
-import { TodoPreview } from "@/components/teacher/TodoPreview"
 import { MiniCalendar } from "@/components/teacher/MiniCalendar"
 import { CommitteeToolsGrid } from "@/components/teacher/CommitteeToolsGrid"
+import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
+import { UnifiedTimeline } from "@/components/UnifiedTimeline"
 
 export default async function TeacherDashboard() {
   const session = await auth()
   if (!session?.user) redirect("/login")
 
   const now      = new Date()
-  const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const nextWeek = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
   const upcomingTodos = await prisma.todo.findMany({
     where: {
@@ -26,28 +27,50 @@ export default async function TeacherDashboard() {
     (t) => t.dueDate && t.dueDate < now
   )
   const todayTodos = upcomingTodos.filter(
-    (t) => t.dueDate && t.dueDate <= nextWeek
+    (t) => t.dueDate && t.dueDate <= new Date(now.getTime() + 24*60*60*1000)
   )
-
-  const serializedTodos = upcomingTodos.map((t) => ({
-    id:          t.id,
-    title:       t.title,
-    committee:   t.committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM",
-    status:      t.status    as "OPEN" | "IN_PROGRESS" | "DONE",
-    dueDate:     t.dueDate?.toISOString() ?? null,
-    description: t.description,
-  }))
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  const calEvents  = await prisma.calendarEvent.findMany({
-    where: { startDate: { gte: monthStart, lt: monthEnd } },
-    orderBy: { startDate: "asc" },
-    select: { startDate: true, committee: true },
-  })
-  const serializedEvents = calEvents.map((ev) => ({
+  
+  const [calEvents, allEvents] = await Promise.all([
+    prisma.calendarEvent.findMany({
+      where: { startDate: { gte: monthStart, lt: monthEnd } },
+      select: { startDate: true, committee: true },
+    }),
+    prisma.calendarEvent.findMany({
+      where: { startDate: { gte: now, lt: nextWeek } },
+      orderBy: { startDate: "asc" },
+      take: 10,
+    })
+  ])
+
+  // Map to Timeline items
+  const timelineItems: any[] = [
+    ...upcomingTodos.map(t => ({
+      id: t.id,
+      type: "TODO",
+      title: t.title,
+      date: t.dueDate?.toISOString() ?? now.toISOString(),
+      committee: t.committee,
+    })),
+    ...allEvents.map(e => ({
+      id: e.id,
+      type: "EVENT",
+      title: e.title,
+      date: e.startDate.toISOString(),
+      committee: e.committee,
+    }))
+  ]
+
+  const serializedTodos = upcomingTodos.map((t) => ({
+    dueDate: t.dueDate?.toISOString() ?? null,
+    status: t.status,
+  }))
+
+  const serializedCalendar = calEvents.map((ev) => ({
     startDate: ev.startDate.toISOString(),
-    committee: ev.committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | null,
+    committee: ev.committee as any,
   }))
 
   return (
@@ -58,9 +81,11 @@ export default async function TeacherDashboard() {
         todayCount={todayTodos.length}
       />
 
+      <DashboardAnnouncements />
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-        <TodoPreview initialTodos={serializedTodos} />
-        <MiniCalendar todos={serializedTodos} calendarEvents={serializedEvents} />
+        <UnifiedTimeline initialItems={timelineItems} />
+        <MiniCalendar todos={serializedTodos} calendarEvents={serializedCalendar} />
       </div>
 
       <CommitteeToolsGrid />

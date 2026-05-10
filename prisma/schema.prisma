@@ -90,6 +90,7 @@ enum AnnouncementTarget {
   DISCIPLINE
   IT
   CURRICULUM
+  CLASS
 }
 
 // ─────────────────────────────────────────
@@ -191,6 +192,7 @@ model Class {
   enrollments ClassEnrollment[]
   missions    Mission[]
   points      PointTransaction[]
+  announcements Announcement[]
 
   @@index([teacherId])
 }
@@ -337,15 +339,15 @@ model PointTransaction {
 // ─────────────────────────────────────────
 
 model Todo {
-  id          String        @id @default(cuid())
+  id          String         @id @default(cuid())
   title       String
-  description String?       @db.Text
-  committee   CommitteeType
-  status      TodoStatus    @default(OPEN)
+  description String?        @db.Text
+  committee   CommitteeType?
+  status      TodoStatus     @default(OPEN)
   dueDate     DateTime?
   createdById String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   createdBy   User          @relation("TodosCreated", fields: [createdById], references: [id], onDelete: Cascade)
   assignees   TodoAssignee[]
@@ -365,21 +367,32 @@ model TodoAssignee {
   @@index([userId])
 }
 
+enum Priority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
 model Announcement {
   id        String             @id @default(cuid())
   title     String
   body      String             @db.Text
   committee CommitteeType?
   target    AnnouncementTarget @default(ALL)
+  priority  Priority           @default(NORMAL)
+  classId   String?
   authorId  String
   pinned    Boolean            @default(false)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
   author    User               @relation("AnnouncementsAuthored", fields: [authorId], references: [id], onDelete: Cascade)
+  class     Class?             @relation(fields: [classId], references: [id])
 
   @@index([target, createdAt])
   @@index([pinned, createdAt])
+  @@index([classId])
+  @@index([priority])
 }
 
 model CommitteeRole {

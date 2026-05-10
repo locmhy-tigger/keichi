@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Inter, Noto_Sans_TC } from "next/font/google"
 import "./globals.css"
+import { Providers } from "@/components/Providers"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,7 +29,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-HK" className={`${inter.variable} ${notoSansTC.variable}`}>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   )
 }

@@ -10,6 +10,12 @@ type CommitteeRole = {
   isChair:   boolean
 }
 
+type ClassInfo = {
+  id: string
+  name: string
+  classCode: string
+}
+
 type User = {
   id:             string
   name:           string | null
@@ -18,6 +24,7 @@ type User = {
   role:           "TEACHER" | "STUDENT"
   createdAt:      string
   committeeRoles: CommitteeRole[]
+  enrollments:    { class: ClassInfo }[]
 }
 
 const COMMITTEES: { value: CommitteeType; label: string }[] = [
@@ -46,20 +53,36 @@ type ImportResult = { created: number; updated: number; errors: { row: number; e
 
 export default function AdminUsersPage() {
   const [users,        setUsers]        = useState<User[]>([])
+  const [classes,      setClasses]      = useState<ClassInfo[]>([])
   const [loading,      setLoading]      = useState(true)
   const [saving,       setSaving]       = useState<string | null>(null)
   const [importing,    setImporting]    = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
-    const res = await fetch("/api/admin/users")
-    if (res.ok) setUsers(await res.json())
+    const [uRes, cRes] = await Promise.all([
+      fetch("/api/admin/users"),
+      fetch("/api/admin/classes")
+    ])
+    if (uRes.ok) setUsers(await uRes.json())
+    if (cRes.ok) setClasses(await cRes.json())
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+
+  async function deleteUser(id: string) {
+    if (!confirm("確定要刪除此用戶嗎？此動作無法復原。")) return
+    setSaving(id)
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" })
+    if (res.ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== id))
+    }
+    setSaving(null)
+  }
 
   async function toggleRole(user: User) {
     const newRole = user.role === "TEACHER" ? "STUDENT" : "TEACHER"
@@ -129,7 +152,6 @@ export default function AdminUsersPage() {
     setImportResult(result)
     setImporting(false)
     if (result.created > 0 || result.updated > 0) await load()
-    // Reset file input so same file can be re-selected
     if (importRef.current) importRef.current.value = ""
   }
 
@@ -142,10 +164,17 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-h1">用戶管理</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-            管理教職員帳號及委員會成員
+            管理教職員、學生帳號及班別分配
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="text-caption px-3 py-1.5 rounded-input border transition-colors"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+          >
+            新增用戶
+          </button>
           <button
             onClick={downloadCsv}
             className="text-caption px-3 py-1.5 rounded-input border transition-colors"
@@ -171,12 +200,8 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Import result */}
       {importResult && (
-        <div
-          className="card p-4 mb-6 space-y-2"
-          style={{ borderLeft: "4px solid var(--color-accent)" }}
-        >
+        <div className="card p-4 mb-6 space-y-2" style={{ borderLeft: "4px solid var(--color-accent)" }}>
           <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
             匯入完成：新增 {importResult.created} 人，更新 {importResult.updated} 人
             {importResult.errors.length > 0 && `，${importResult.errors.length} 個錯誤`}
@@ -201,11 +226,7 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
           )}
-          <button
-            onClick={() => setImportResult(null)}
-            className="text-caption"
-            style={{ color: "var(--color-ink-400)" }}
-          >
+          <button onClick={() => setImportResult(null)} className="text-caption" style={{ color: "var(--color-ink-400)" }}>
             關閉
           </button>
         </div>
@@ -215,19 +236,13 @@ export default function AdminUsersPage() {
         <div className="text-center py-16 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
       ) : (
         <div className="space-y-8">
-
-          {/* Teachers section */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-h2">教職員</h2>
-              <span
-                className="text-caption px-2 py-0.5 rounded-pill font-medium"
-                style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
-              >
+              <span className="text-caption px-2 py-0.5 rounded-pill font-medium" style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}>
                 {teachers.length}
               </span>
             </div>
-
             <div className="space-y-3">
               {teachers.map((user) => (
                 <UserRow
@@ -235,166 +250,136 @@ export default function AdminUsersPage() {
                   user={user}
                   saving={saving}
                   onToggleRole={toggleRole}
+                  onDelete={deleteUser}
                   onAddCommittee={addToCommittee}
                   onRemoveCommittee={removeFromCommittee}
                   onToggleChair={toggleChair}
                 />
               ))}
-              {teachers.length === 0 && (
-                <p className="text-body" style={{ color: "var(--color-ink-300)" }}>無</p>
-              )}
+              {teachers.length === 0 && <p className="text-body" style={{ color: "var(--color-ink-300)" }}>無</p>}
             </div>
           </section>
 
-          {/* Students section */}
-          {students.length > 0 && (
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-h2">學生帳號</h2>
-                <span
-                  className="text-caption px-2 py-0.5 rounded-pill font-medium"
-                  style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}
-                >
-                  {students.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {students.map((user) => (
-                  <div key={user.id} className="card px-4 py-3 flex items-center gap-3">
-                    <Avatar user={user} size={32} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
-                        {user.name ?? "—"}
-                      </p>
-                      <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
-                        {user.email}
-                      </p>
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-h2">學生帳號</h2>
+              <span className="text-caption px-2 py-0.5 rounded-pill font-medium" style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}>
+                {students.length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {students.map((user) => (
+                <div key={user.id} className="card px-4 py-3 flex items-center gap-3">
+                  <Avatar user={user} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>{user.name ?? "—"}</p>
+                      {user.enrollments.map((e) => (
+                        <span key={e.class.id} className="text-caption px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                          {e.class.name}
+                        </span>
+                      ))}
                     </div>
+                    <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>{user.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleRole(user)}
                       disabled={saving === user.id}
-                      className="text-caption px-3 py-1.5 rounded-input border transition-colors"
+                      className="text-caption px-3 py-1.5 rounded-input border"
                       style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
                     >
                       升為教職員
                     </button>
+                    <button
+                      onClick={() => deleteUser(user.id)}
+                      disabled={saving === user.id}
+                      className="p-1.5 text-discipline opacity-50 hover:opacity-100 transition-opacity"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+                    </button>
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
+                </div>
+              ))}
+              {students.length === 0 && <p className="text-body" style={{ color: "var(--color-ink-300)" }}>無</p>}
+            </div>
+          </section>
         </div>
+      )}
+
+      {showAddModal && (
+        <AddUserModal
+          classes={classes}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={(u) => { setUsers(prev => [...prev, u]); setShowAddModal(false); }}
+        />
       )}
     </div>
   )
 }
 
 function UserRow({
-  user, saving, onToggleRole, onAddCommittee, onRemoveCommittee, onToggleChair,
+  user, saving, onToggleRole, onDelete, onAddCommittee, onRemoveCommittee, onToggleChair,
 }: {
   user:               User
   saving:             string | null
   onToggleRole:       (u: User) => void
+  onDelete:           (id: string) => void
   onAddCommittee:     (userId: string, c: CommitteeType, isChair: boolean) => void
   onRemoveCommittee:  (userId: string, c: CommitteeType) => void
   onToggleChair:      (userId: string, c: CommitteeType, current: boolean) => void
 }) {
   const [expanded, setExpanded] = useState(false)
-
-  function getRole(c: CommitteeType): CommitteeRole | undefined {
-    return user.committeeRoles.find((r) => r.committee === c)
-  }
+  const getRole = (c: CommitteeType) => user.committeeRoles.find((r) => r.committee === c)
 
   return (
     <div className="card overflow-hidden">
-      {/* User row */}
       <div className="px-4 py-3 flex items-center gap-3">
         <Avatar user={user} size={36} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
-              {user.name ?? "—"}
-            </p>
-            {/* Committee badges */}
+            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>{user.name ?? "—"}</p>
             <div className="flex gap-1 flex-wrap">
               {user.committeeRoles.map(({ committee, isChair }) => (
                 <span key={committee} className="relative">
                   <CommitteeBadge committee={committee} />
-                  {isChair && (
-                    <span
-                      className="ml-0.5 text-caption"
-                      style={{ color: "var(--color-ink-500)" }}
-                      title="主席"
-                    >★</span>
-                  )}
+                  {isChair && <span className="ml-0.5 text-caption" style={{ color: "var(--color-ink-500)" }}>★</span>}
                 </span>
               ))}
             </div>
           </div>
           <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>{user.email}</p>
         </div>
-
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-caption px-3 py-1.5 rounded-input border transition-colors"
-            style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}
-          >
+          <button onClick={() => setExpanded((v) => !v)} className="text-caption px-3 py-1.5 rounded-input border" style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}>
             委員會 {expanded ? "▲" : "▼"}
           </button>
-          <button
-            onClick={() => onToggleRole(user)}
-            disabled={saving === user.id}
-            className="text-caption px-3 py-1.5 rounded-input border transition-colors"
-            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
-          >
-            {saving === user.id ? "…" : "降為學生"}
+          <button onClick={() => onToggleRole(user)} disabled={saving === user.id} className="text-caption px-3 py-1.5 rounded-input border" style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
+            降為學生
+          </button>
+          <button onClick={() => onDelete(user.id)} disabled={saving === user.id} className="p-1.5 text-discipline opacity-50 hover:opacity-100 transition-opacity">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
           </button>
         </div>
       </div>
-
-      {/* Committee management panel */}
       {expanded && (
-        <div className="px-4 pb-4 pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2"
-          style={{ borderTop: "1px solid var(--color-border)" }}>
+        <div className="px-4 pb-4 pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2" style={{ borderTop: "1px solid var(--color-border)" }}>
           {COMMITTEES.map(({ value: c, label }) => {
-            const role      = getRole(c)
-            const isMember  = !!role
-            const key       = `${user.id}-${c}`
-            const isSaving  = saving === key
-
+            const role = getRole(c)
+            const isMember = !!role
+            const isSaving = saving === `${user.id}-${c}`
             return (
-              <div key={c} className="rounded-input p-3 flex flex-col gap-2"
-                style={{ background: isMember ? "var(--color-accent-soft)" : "var(--color-surface-2)" }}>
+              <div key={c} className="rounded-input p-3 flex flex-col gap-2" style={{ background: isMember ? "var(--color-accent-soft)" : "var(--color-surface-2)" }}>
                 <div className="flex items-center justify-between">
                   <CommitteeBadge committee={c} />
-                  {isMember && (
-                    <button
-                      onClick={() => onRemoveCommittee(user.id, c)}
-                      disabled={isSaving}
-                      className="text-caption leading-none"
-                      style={{ color: "var(--color-ink-300)" }}
-                      title="移除"
-                    >×</button>
-                  )}
+                  {isMember && <button onClick={() => onRemoveCommittee(user.id, c)} disabled={isSaving} className="text-caption leading-none" style={{ color: "var(--color-ink-300)" }}>×</button>}
                 </div>
-
                 {isMember ? (
-                  <button
-                    onClick={() => onToggleChair(user.id, c, role.isChair)}
-                    disabled={isSaving}
-                    className="text-caption py-1 rounded text-left transition-colors"
-                    style={{ color: role.isChair ? "var(--color-accent)" : "var(--color-ink-500)" }}
-                  >
+                  <button onClick={() => onToggleChair(user.id, c, role.isChair)} disabled={isSaving} className="text-caption py-1 rounded text-left" style={{ color: role.isChair ? "var(--color-accent)" : "var(--color-ink-500)" }}>
                     {role.isChair ? "★ 主席" : "一般成員"}
                   </button>
                 ) : (
-                  <button
-                    onClick={() => onAddCommittee(user.id, c, false)}
-                    disabled={isSaving}
-                    className="text-caption py-1 rounded transition-colors"
-                    style={{ color: "var(--color-ink-500)" }}
-                  >
+                  <button onClick={() => onAddCommittee(user.id, c, false)} disabled={isSaving} className="text-caption py-1 rounded" style={{ color: "var(--color-ink-500)" }}>
                     {isSaving ? "…" : "+ 加入"}
                   </button>
                 )}
@@ -403,6 +388,70 @@ function UserRow({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function AddUserModal({ classes, onClose, onSuccess }: { classes: ClassInfo[], onClose: () => void, onSuccess: (u: User) => void }) {
+  const [form, setForm] = useState({ email: "", name: "", role: "STUDENT" as const, classCode: "" })
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form)
+    })
+    if (res.ok) {
+      const newUser = await res.json()
+      // Note: newUser won't have enrollments populated yet from create, but we can fake it or re-fetch
+      onSuccess({ ...newUser, committeeRoles: [], enrollments: form.classCode ? [{ class: classes.find(c => c.classCode === form.classCode)! }] : [] })
+    } else {
+      const { error } = await res.json()
+      alert(error)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <h3 className="text-h2">新增用戶</h3>
+          <div>
+            <label className="text-caption block mb-1">Email (必填)</label>
+            <input required type="email" value={form.email} onChange={e => setForm(v => ({ ...v, email: e.target.value }))} className="w-full rounded-input border p-2" />
+          </div>
+          <div>
+            <label className="text-caption block mb-1">姓名</label>
+            <input type="text" value={form.name} onChange={e => setForm(v => ({ ...v, name: e.target.value }))} className="w-full rounded-input border p-2" />
+          </div>
+          <div>
+            <label className="text-caption block mb-1">角色</label>
+            <select value={form.role} onChange={e => setForm(v => ({ ...v, role: e.target.value as any }))} className="w-full rounded-input border p-2">
+              <option value="STUDENT">學生</option>
+              <option value="TEACHER">教職員</option>
+            </select>
+          </div>
+          {form.role === "STUDENT" && (
+            <div>
+              <label className="text-caption block mb-1">班別</label>
+              <select value={form.classCode} onChange={e => setForm(v => ({ ...v, classCode: e.target.value }))} className="w-full rounded-input border p-2">
+                <option value="">— 未分配 —</option>
+                {classes.map(c => <option key={c.id} value={c.classCode}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-input border">取消</button>
+            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-input bg-blue-600 text-white disabled:opacity-50">
+              {busy ? "提交中…" : "確認新增"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
