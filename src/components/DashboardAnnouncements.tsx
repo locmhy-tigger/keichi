@@ -14,14 +14,18 @@ export function DashboardAnnouncements() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch("/api/announcements").then(r => r.json()).then(data => {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      // Filter for today's announcements
-      const filtered = data.filter((a: any) => new Date(a.createdAt) >= today)
-      setAnnouncements(filtered)
-      setLoading(false)
-    })
+    fetch("/api/announcements")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (!Array.isArray(data)) { setLoading(false); return }
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        // Filter for today's announcements
+        const filtered = data.filter((a: any) => new Date(a.createdAt) >= today)
+        setAnnouncements(filtered)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   if (loading || announcements.length === 0) return null

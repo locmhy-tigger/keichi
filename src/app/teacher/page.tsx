@@ -6,6 +6,7 @@ import { MiniCalendar } from "@/components/teacher/MiniCalendar"
 import { CommitteeToolsGrid } from "@/components/teacher/CommitteeToolsGrid"
 import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
 import { UnifiedTimeline } from "@/components/UnifiedTimeline"
+import { AskICHI } from "@/components/teacher/AskICHI"
 
 export default async function TeacherDashboard() {
   const session = await auth()
@@ -80,6 +81,8 @@ export default async function TeacherDashboard() {
         urgentCount={overdueTodos.length}
         todayCount={todayTodos.length}
       />
+
+      <AskICHI />
 
       <DashboardAnnouncements />
 

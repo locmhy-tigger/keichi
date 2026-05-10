@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pwsh:*)"
+      "Bash(pwsh:*)",
+      "Bash(head:*)",
+      "Bash(test:*)",
+      "Bash(mount:*)",
+      "Bash(echo:*)"
     ]
   }
 }

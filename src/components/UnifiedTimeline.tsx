@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { CommitteeBadge } from "./teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
@@ -27,9 +26,7 @@ function formatDue(dateStr: string): string {
 }
 
 export function UnifiedTimeline({ initialItems }: { initialItems: TimelineItem[] }) {
-  const [items, setItems] = useState(initialItems)
-
-  const sorted = [...items]
+  const sorted = [...initialItems]
     .filter(item => item.date && !isNaN(new Date(item.date).getTime()))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
