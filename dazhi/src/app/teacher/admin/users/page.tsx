@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
@@ -42,10 +42,15 @@ function Avatar({ user, size = 32 }: { user: User; size?: number }) {
   )
 }
 
+type ImportResult = { created: number; updated: number; errors: { row: number; email: string; reason: string }[] }
+
 export default function AdminUsersPage() {
-  const [users,   setUsers]   = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState<string | null>(null)
+  const [users,        setUsers]        = useState<User[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [saving,       setSaving]       = useState<string | null>(null)
+  const [importing,    setImporting]    = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
@@ -105,17 +110,106 @@ export default function AdminUsersPage() {
     await addToCommittee(userId, committee, !currentIsChair)
   }
 
+  function downloadCsv() {
+    const a = document.createElement("a")
+    a.href = "/api/admin/users/export"
+    a.download = "users.csv"
+    a.click()
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    const form = new FormData()
+    form.append("file", file)
+    const res = await fetch("/api/admin/users/import", { method: "POST", body: form })
+    const result: ImportResult = await res.json()
+    setImportResult(result)
+    setImporting(false)
+    if (result.created > 0 || result.updated > 0) await load()
+    // Reset file input so same file can be re-selected
+    if (importRef.current) importRef.current.value = ""
+  }
+
   const teachers = users.filter((u) => u.role === "TEACHER")
   const students = users.filter((u) => u.role === "STUDENT")
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-h1">用戶管理</h1>
-        <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-          管理教職員帳號及委員會成員
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-h1">用戶管理</h1>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
+            管理教職員帳號及委員會成員
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={downloadCsv}
+            className="text-caption px-3 py-1.5 rounded-input border transition-colors"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+          >
+            下載 CSV
+          </button>
+          <button
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            className="text-caption px-3 py-1.5 rounded-input text-white transition-colors"
+            style={{ background: "var(--color-accent)" }}
+          >
+            {importing ? "匯入中…" : "匯入 CSV"}
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleImport}
+          />
+        </div>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <div
+          className="card p-4 mb-6 space-y-2"
+          style={{ borderLeft: "4px solid var(--color-accent)" }}
+        >
+          <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
+            匯入完成：新增 {importResult.created} 人，更新 {importResult.updated} 人
+            {importResult.errors.length > 0 && `，${importResult.errors.length} 個錯誤`}
+          </p>
+          {importResult.errors.length > 0 && (
+            <table className="w-full text-caption" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ color: "var(--color-ink-500)" }}>
+                  <th className="text-left py-1 pr-4">行</th>
+                  <th className="text-left py-1 pr-4">Email</th>
+                  <th className="text-left py-1">原因</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importResult.errors.map((e, i) => (
+                  <tr key={i} style={{ color: "var(--color-discipline)" }}>
+                    <td className="py-0.5 pr-4">{e.row}</td>
+                    <td className="py-0.5 pr-4">{e.email}</td>
+                    <td className="py-0.5">{e.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <button
+            onClick={() => setImportResult(null)}
+            className="text-caption"
+            style={{ color: "var(--color-ink-400)" }}
+          >
+            關閉
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-16 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>

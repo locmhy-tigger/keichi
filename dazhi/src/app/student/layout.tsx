@@ -1,38 +1,23 @@
-"use client"
+import { auth } from "@/lib/auth"
+import { redirect } from "next/navigation"
+import { StudentSidebar } from "@/components/student/StudentSidebar"
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-export default function StudentLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-
-  const navItems = [
-    { href: "/student", label: "首頁", icon: "🏠" },
-    { href: "/student/missions", label: "衝關地圖", icon: "🗺️" },
-    { href: "/student/flashcards", label: "閃卡", icon: "🃏" },
-  ]
+export default async function StudentLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth()
+  if (!session?.user) redirect("/login")
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <h1 className="font-bold text-lg">AI 大智若愚</h1>
-        <span className="text-xs text-gray-500 bg-blue-50 text-blue-600 px-2 py-1 rounded-full font-medium">學生</span>
-      </header>
-      <main className="flex-1 pb-20">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t flex">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex-1 flex flex-col items-center py-3 text-xs gap-1 transition-colors ${
-              pathname === item.href ? "text-blue-600 font-medium" : "text-gray-500"
-            }`}
-          >
-            <span className="text-xl">{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+    <div className="min-h-screen" style={{ background: "var(--color-bg-base)" }}>
+      <StudentSidebar
+        user={{
+          name:  session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+        }}
+      />
+      <main className="md:ml-[220px] pt-[56px] md:pt-0">
+        {children}
+      </main>
     </div>
   )
 }
