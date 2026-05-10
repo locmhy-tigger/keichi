@@ -3,14 +3,24 @@
 import { useEffect, useState } from "react"
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
+type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
 
 type Activity = {
-  id:        string
-  title:     string
-  startTime: string
-  endTime:   string | null
-  location:  string | null
+  id:          string
+  title:       string
+  startTime:   string
+  endTime:     string | null
+  location:    string | null
   assignments: { status: AttendanceStatus }[]
+}
+
+type SchoolEvent = {
+  id:          string
+  title:       string
+  startDate:   string
+  endDate:     string | null
+  description: string | null
+  committee:   CommitteeType | null
 }
 
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
@@ -27,9 +37,16 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
   ABSENT:    "缺席",
 }
 
+const COMMITTEE_COLORS: Record<CommitteeType, string> = {
+  ADMIN:      "var(--color-admin)",
+  DISCIPLINE: "var(--color-discipline)",
+  IT:         "var(--color-it)",
+  CURRICULUM: "var(--color-curriculum)",
+}
+
 function formatTime(iso: string) {
   const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
 }
 
 function isSameDay(a: Date, b: Date) {
@@ -38,16 +55,61 @@ function isSameDay(a: Date, b: Date) {
     a.getDate() === b.getDate()
 }
 
+function buildIcs(activities: Activity[], events: SchoolEvent[]): string {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ICHI EduPortal//Student//HK",
+  ]
+  for (const act of activities) {
+    const dtStart = new Date(act.startTime).toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z"
+    const dtEnd   = act.endTime
+      ? new Date(act.endTime).toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z"
+      : dtStart
+    lines.push("BEGIN:VEVENT")
+    lines.push(`UID:activity-${act.id}@ichi`)
+    lines.push(`DTSTART:${dtStart}`)
+    lines.push(`DTEND:${dtEnd}`)
+    lines.push(`SUMMARY:${act.title}`)
+    if (act.location) lines.push(`LOCATION:${act.location}`)
+    lines.push("END:VEVENT")
+  }
+  for (const ev of events) {
+    const dtStart = ev.startDate.slice(0, 10).replace(/-/g, "")
+    const dtEnd   = ev.endDate ? ev.endDate.slice(0, 10).replace(/-/g, "") : dtStart
+    lines.push("BEGIN:VEVENT")
+    lines.push(`UID:school-event-${ev.id}@ichi`)
+    lines.push(`DTSTART;VALUE=DATE:${dtStart}`)
+    lines.push(`DTEND;VALUE=DATE:${dtEnd}`)
+    lines.push(`SUMMARY:${ev.title}`)
+    if (ev.description) lines.push(`DESCRIPTION:${ev.description.replace(/\n/g, "\\n")}`)
+    lines.push("END:VEVENT")
+  }
+  lines.push("END:VCALENDAR")
+  return lines.join("\r\n")
+}
+
+function isActivity(item: Activity | SchoolEvent): item is Activity {
+  return "startTime" in item
+}
+
 export default function StudentCalendarPage() {
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [current,    setCurrent]    = useState(() => new Date())
-  const [selected,   setSelected]   = useState<Activity | null>(null)
+  const [activities,   setActivities]   = useState<Activity[]>([])
+  const [schoolEvents, setSchoolEvents] = useState<SchoolEvent[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [current,      setCurrent]      = useState(() => new Date())
+  const [selected,     setSelected]     = useState<Activity | SchoolEvent | null>(null)
 
   useEffect(() => {
-    fetch("/api/activities")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: Activity[]) => { setActivities(data); setLoading(false) })
+    Promise.all([
+      fetch("/api/activities").then(r => r.ok ? r.json() : []),
+      fetch("/api/calendar-events").then(r => r.ok ? r.json() : []),
+    ])
+      .then(([acts, evs]) => {
+        setActivities(Array.isArray(acts) ? acts : [])
+        setSchoolEvents(Array.isArray(evs) ? evs : [])
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [])
 
@@ -58,8 +120,8 @@ export default function StudentCalendarPage() {
   function nextMonth() { setCurrent(new Date(year, month + 1, 1)) }
 
   // Build 6×7 grid
-  const firstDay  = new Date(year, month, 1)
-  const startDay  = new Date(firstDay)
+  const firstDay = new Date(year, month, 1)
+  const startDay = new Date(firstDay)
   startDay.setDate(startDay.getDate() - firstDay.getDay())
 
   const days: Date[] = []
@@ -71,8 +133,19 @@ export default function StudentCalendarPage() {
 
   const today = new Date()
 
-  function activitiesForDay(day: Date) {
-    return activities.filter((a) => isSameDay(new Date(a.startTime), day))
+  function itemsForDay(day: Date): (Activity | SchoolEvent)[] {
+    const acts = activities.filter(a => isSameDay(new Date(a.startTime), day))
+    const evs  = schoolEvents.filter(e => isSameDay(new Date(e.startDate), day))
+    return [...evs, ...acts] // school events first
+  }
+
+  function exportIcs() {
+    const ics  = buildIcs(activities, schoolEvents)
+    const blob = new Blob([ics], { type: "text/calendar" })
+    const a    = document.createElement("a")
+    a.href     = URL.createObjectURL(blob)
+    a.download = "my-calendar.ics"
+    a.click()
   }
 
   const monthNames = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"]
@@ -80,11 +153,20 @@ export default function StudentCalendarPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-h1">活動行事曆</h1>
-        <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-          你的活動安排（只讀，由老師指派）
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-h1">活動行事曆</h1>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
+            你的指派活動及全校學校活動
+          </p>
+        </div>
+        <button
+          onClick={exportIcs}
+          className="px-4 py-2 rounded-input text-body border shrink-0"
+          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+        >
+          匯出 .ics
+        </button>
       </div>
 
       <div className="card overflow-hidden">
@@ -100,9 +182,7 @@ export default function StudentCalendarPage() {
           >
             ←
           </button>
-          <h2 className="text-h2">
-            {year}年 {monthNames[month]}
-          </h2>
+          <h2 className="text-h2">{year}年 {monthNames[month]}</h2>
           <button
             onClick={nextMonth}
             className="p-1.5 rounded-md transition-colors hover:bg-[var(--color-surface-2)]"
@@ -131,9 +211,9 @@ export default function StudentCalendarPage() {
         ) : (
           <div className="grid grid-cols-7">
             {days.map((day, idx) => {
-              const inMonth   = day.getMonth() === month
-              const isToday   = isSameDay(day, today)
-              const dayActs   = activitiesForDay(day)
+              const inMonth  = day.getMonth() === month
+              const isToday  = isSameDay(day, today)
+              const allItems = itemsForDay(day)
 
               return (
                 <div
@@ -146,9 +226,7 @@ export default function StudentCalendarPage() {
                 >
                   <div className="flex justify-center mb-1">
                     <span
-                      className={`text-caption font-medium w-6 h-6 flex items-center justify-center rounded-full ${
-                        isToday ? "text-white" : ""
-                      }`}
+                      className={`text-caption font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
                       style={{
                         background: isToday ? "var(--color-accent)" : "transparent",
                         color:      isToday ? "white" : inMonth ? "var(--color-ink-900)" : "var(--color-ink-300)",
@@ -158,26 +236,40 @@ export default function StudentCalendarPage() {
                     </span>
                   </div>
                   <div className="space-y-0.5">
-                    {dayActs.slice(0, 2).map((act) => {
-                      const status = act.assignments[0]?.status ?? "PENDING"
-                      return (
-                        <button
-                          key={act.id}
-                          onClick={() => setSelected(act)}
-                          className="w-full text-left px-1 py-0.5 rounded text-caption truncate"
-                          style={{
-                            background: STATUS_COLORS[status] + "20",
-                            color:      STATUS_COLORS[status],
-                            fontSize:   "10px",
-                          }}
-                        >
-                          {formatTime(act.startTime)} {act.title}
-                        </button>
-                      )
+                    {allItems.slice(0, 2).map((item) => {
+                      if (isActivity(item)) {
+                        const status = item.assignments[0]?.status ?? "PENDING"
+                        return (
+                          <button
+                            key={`act-${item.id}`}
+                            onClick={() => setSelected(item)}
+                            className="w-full text-left px-1 py-0.5 rounded text-caption truncate"
+                            style={{
+                              background: STATUS_COLORS[status] + "20",
+                              color:      STATUS_COLORS[status],
+                              fontSize:   "10px",
+                            }}
+                          >
+                            {formatTime(item.startTime)} {item.title}
+                          </button>
+                        )
+                      } else {
+                        const color = item.committee ? COMMITTEE_COLORS[item.committee] : "var(--color-accent)"
+                        return (
+                          <button
+                            key={`ev-${item.id}`}
+                            onClick={() => setSelected(item)}
+                            className="w-full text-left px-1 py-0.5 rounded text-caption truncate text-white"
+                            style={{ background: color, fontSize: "10px" }}
+                          >
+                            {item.title}
+                          </button>
+                        )
+                      }
                     })}
-                    {dayActs.length > 2 && (
+                    {allItems.length > 2 && (
                       <p className="text-caption text-center" style={{ color: "var(--color-ink-400)", fontSize: "10px" }}>
-                        +{dayActs.length - 2}
+                        +{allItems.length - 2}
                       </p>
                     )}
                   </div>
@@ -188,7 +280,18 @@ export default function StudentCalendarPage() {
         )}
       </div>
 
-      {/* Activity detail popover */}
+      {/* Legend */}
+      <div className="flex gap-x-5 gap-y-2 flex-wrap">
+        <span className="text-caption font-medium" style={{ color: "var(--color-ink-500)" }}>出席狀態：</span>
+        {(Object.entries(STATUS_LABELS) as [AttendanceStatus, string][]).map(([s, label]) => (
+          <div key={s} className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS_COLORS[s] }} />
+            <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail modal */}
       {selected && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30"
@@ -208,27 +311,56 @@ export default function StudentCalendarPage() {
                 ✕
               </button>
             </div>
-            {(() => {
-              const status = selected.assignments[0]?.status ?? "PENDING"
-              return (
-                <span
-                  className="text-caption font-medium px-2 py-0.5 rounded-pill inline-block"
-                  style={{ background: STATUS_COLORS[status] + "20", color: STATUS_COLORS[status] }}
-                >
-                  {STATUS_LABELS[status]}
-                </span>
-              )
-            })()}
-            <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
-              📅 {new Date(selected.startTime).toLocaleDateString("zh-HK", {
-                year: "numeric", month: "long", day: "numeric",
-              })} {formatTime(selected.startTime)}
-              {selected.endTime && ` — ${formatTime(selected.endTime)}`}
-            </p>
-            {selected.location && (
-              <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
-                📍 {selected.location}
-              </p>
+
+            {isActivity(selected) ? (
+              <>
+                {(() => {
+                  const status = selected.assignments[0]?.status ?? "PENDING"
+                  return (
+                    <span
+                      className="text-caption font-medium px-2 py-0.5 rounded-pill inline-block"
+                      style={{ background: STATUS_COLORS[status] + "20", color: STATUS_COLORS[status] }}
+                    >
+                      {STATUS_LABELS[status]}
+                    </span>
+                  )
+                })()}
+                <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
+                  📅 {new Date(selected.startTime).toLocaleDateString("zh-HK", {
+                    year: "numeric", month: "long", day: "numeric",
+                  })} {formatTime(selected.startTime)}
+                  {selected.endTime && ` — ${formatTime(selected.endTime)}`}
+                </p>
+                {selected.location && (
+                  <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
+                    📍 {selected.location}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                {selected.committee && (
+                  <span
+                    className="text-caption font-medium px-2 py-0.5 rounded-pill inline-block text-white"
+                    style={{ background: COMMITTEE_COLORS[selected.committee] }}
+                  >
+                    {selected.committee}
+                  </span>
+                )}
+                <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
+                  📅 {new Date(selected.startDate).toLocaleDateString("zh-HK", {
+                    year: "numeric", month: "long", day: "numeric",
+                  })}
+                  {selected.endDate && ` — ${new Date(selected.endDate).toLocaleDateString("zh-HK", {
+                    month: "long", day: "numeric",
+                  })}`}
+                </p>
+                {selected.description && (
+                  <p className="text-body" style={{ color: "var(--color-ink-700)" }}>
+                    {selected.description}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
