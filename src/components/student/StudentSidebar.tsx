@@ -122,7 +122,7 @@ export function StudentSidebar({ user }: { user: User }) {
             <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <Image src="/logo-placeholder.svg" alt="ICHI Logo" width={24} height={24} />
+        <Image src="/logo.png" alt="ICHI Logo" width={24} height={24} />
         <span className="text-body font-semibold" style={{ color: "var(--color-ink-900)" }}>基智若愚</span>
       </div>
 

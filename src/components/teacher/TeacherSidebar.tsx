@@ -54,7 +54,7 @@ export function TeacherSidebar({ user }: { user: User }) {
       {/* Logo — replace /logo-placeholder.svg with your actual logo */}
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
         <Image
-          src="/logo-placeholder.svg"
+          src="/logo.png"
           alt="ICHI Logo"
           width={32}
           height={32}

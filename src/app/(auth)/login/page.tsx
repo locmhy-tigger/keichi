@@ -17,7 +17,7 @@ export default function LoginPage() {
           {/* Logo — replace /logo-placeholder.svg with your actual logo */}
           <div className="flex justify-center mb-4">
             <Image
-              src="/logo-placeholder.svg"
+              src="/logo.png"
               alt="基智若愚 ICHI Logo"
               width={64}
               height={64}
