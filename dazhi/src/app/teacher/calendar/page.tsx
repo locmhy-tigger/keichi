@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
@@ -51,12 +51,60 @@ function buildDays(year: number, month: number) {
   return cells
 }
 
+type IcsImportResult = { imported: number; skipped: number; errors: string[] }
+
+function parseIcsDate(raw: string): string | null {
+  // Handles DTSTART;VALUE=DATE:YYYYMMDD and DTSTART:YYYYMMDDTHHMMSSZ
+  const digits = raw.replace(/[TZ]/g, "").replace(/-/g, "").slice(0, 8)
+  if (digits.length !== 8) return null
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+}
+
+function parseIcs(text: string): { title: string; startDate: string; endDate?: string; description?: string }[] {
+  const results: { title: string; startDate: string; endDate?: string; description?: string }[] = []
+  // Split into VEVENT blocks
+  const blocks = text.split("BEGIN:VEVENT").slice(1)
+  for (const block of blocks) {
+    const end = block.indexOf("END:VEVENT")
+    const body = end >= 0 ? block.slice(0, end) : block
+
+    // Unfold RFC 5545 line continuations (CRLF + whitespace)
+    const unfolded = body.replace(/\r?\n[ \t]/g, "")
+    const lines = unfolded.split(/\r?\n/)
+
+    let title = ""
+    let startDate = ""
+    let endDate: string | undefined
+    let description: string | undefined
+
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":")
+      if (colonIdx < 0) continue
+      const key = line.slice(0, colonIdx).split(";")[0].toUpperCase()
+      const val = line.slice(colonIdx + 1).trim()
+
+      if (key === "SUMMARY") title = val.replace(/\\,/g, ",").replace(/\\n/g, " ")
+      else if (key === "DTSTART") startDate = parseIcsDate(val) ?? ""
+      else if (key === "DTEND") endDate = parseIcsDate(val) ?? undefined
+      else if (key === "DESCRIPTION") description = val.replace(/\\n/g, "\n").replace(/\\,/g, ",") || undefined
+    }
+
+    if (title && startDate) results.push({ title, startDate, endDate, description })
+  }
+  return results
+}
+
 export default function CalendarPage() {
   const now = new Date()
   const [year,    setYear]    = useState(now.getFullYear())
   const [month,   setMonth]   = useState(now.getMonth())
   const [events,  setEvents]  = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Import state
+  const icsInputRef  = useRef<HTMLInputElement>(null)
+  const [importing,    setImporting]    = useState(false)
+  const [importResult, setImportResult] = useState<IcsImportResult | null>(null)
 
   // Modal state
   const [showCreate, setShowCreate]   = useState(false)
@@ -143,6 +191,53 @@ export default function CalendarPage() {
     setShowCreate(false)
   }
 
+  async function handleIcsImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+
+    const text = await file.text()
+    const parsed = parseIcs(text)
+
+    let imported = 0
+    let skipped  = 0
+    const errors: string[] = []
+
+    for (const ev of parsed) {
+      try {
+        const res = await fetch("/api/calendar-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title:       ev.title,
+            startDate:   ev.startDate,
+            endDate:     ev.endDate,
+            description: ev.description,
+          }),
+        })
+        if (res.ok) {
+          const created: CalendarEvent = await res.json()
+          // Only add to view if it falls in current month
+          const evMonth = new Date(ev.startDate).getMonth()
+          const evYear  = new Date(ev.startDate).getFullYear()
+          if (evYear === year && evMonth === month) {
+            setEvents((prev) => [...prev, created])
+          }
+          imported++
+        } else {
+          skipped++
+        }
+      } catch (_err) {
+        errors.push(ev.title)
+      }
+    }
+
+    setImportResult({ imported, skipped, errors })
+    setImporting(false)
+    if (icsInputRef.current) icsInputRef.current.value = ""
+  }
+
   function exportIcs() {
     const lines = [
       "BEGIN:VCALENDAR",
@@ -181,18 +276,33 @@ export default function CalendarPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-h1">全校行事曆</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>共 {events.length} 個活動</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => icsInputRef.current?.click()}
+            disabled={importing}
+            className="px-4 py-2 rounded-input text-body border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+          >
+            {importing ? "匯入中…" : "匯入 .ics"}
+          </button>
+          <input
+            ref={icsInputRef}
+            type="file"
+            accept=".ics,.ical,text/calendar"
+            className="hidden"
+            onChange={handleIcsImport}
+          />
           <button
             onClick={exportIcs}
             className="px-4 py-2 rounded-input text-body border"
             style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
           >
-            匙出 .ics
+            匯出 .ics
           </button>
           <button
             onClick={() => openCreate()}
@@ -203,6 +313,33 @@ export default function CalendarPage() {
           </button>
         </div>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <div
+          className="card p-4 mb-4 flex items-start justify-between gap-4"
+          style={{ borderLeft: `4px solid ${importResult.errors.length > 0 ? "var(--color-discipline)" : "var(--color-accent)"}` }}
+        >
+          <div className="space-y-1">
+            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
+              匯入完成：{importResult.imported} 個活動已新增
+              {importResult.skipped > 0 && `，${importResult.skipped} 個略過`}
+            </p>
+            {importResult.errors.length > 0 && (
+              <p className="text-caption" style={{ color: "var(--color-discipline)" }}>
+                錯誤：{importResult.errors.join("、")}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setImportResult(null)}
+            className="text-caption shrink-0"
+            style={{ color: "var(--color-ink-400)" }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Month navigation */}
       <div className="flex items-center gap-4 mb-4">

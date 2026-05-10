@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
@@ -14,6 +14,11 @@ type Colleague = {
   image: string | null
 }
 
+type TodoAssignee = {
+  userId: string
+  user:   Colleague
+}
+
 type Todo = {
   id:          string
   title:       string
@@ -21,7 +26,7 @@ type Todo = {
   committee:   CommitteeType
   status:      TodoStatus
   dueDate:     string | null
-  assignee:    Colleague | null
+  assignees:   TodoAssignee[]
   createdBy:   { id: string; name: string | null }
   createdById: string
 }
@@ -99,14 +104,135 @@ function Avatar({ user, size = 20 }: { user: Colleague | null | undefined; size?
   )
 }
 
+// Searchable chip multi-select for assignees
+function AssigneeChipSelect({
+  selected, onChange, currentUserId,
+}: {
+  selected: Colleague[]
+  onChange: (next: Colleague[]) => void
+  currentUserId: string | null
+}) {
+  const [query,    setQuery]    = useState("")
+  const [results,  setResults]  = useState<Colleague[]>([])
+  const [open,     setOpen]     = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapRef  = useRef<HTMLDivElement>(null)
+
+  const search = useCallback(async (q: string) => {
+    const url = q ? `/api/users?q=${encodeURIComponent(q)}` : "/api/users"
+    const res  = await fetch(url)
+    if (res.ok) {
+      const data: Colleague[] = await res.json()
+      setResults(data.filter(
+        (u) => u.id !== currentUserId && !selected.some((s) => s.id === u.id)
+      ))
+    }
+  }, [currentUserId, selected])
+
+  useEffect(() => {
+    if (open) {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => search(query), 300)
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [query, open, search])
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  function add(user: Colleague) {
+    onChange([...selected, user])
+    setQuery("")
+    setOpen(false)
+  }
+
+  function remove(id: string) {
+    onChange(selected.filter((u) => u.id !== id))
+  }
+
+  const inputStyle = {
+    border:     "1px solid var(--color-border)",
+    background: "var(--color-surface)",
+    color:      "var(--color-ink-900)",
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {/* Selected chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {selected.map((u) => (
+            <span
+              key={u.id}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-pill text-caption"
+              style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+            >
+              <Avatar user={u} size={14} />
+              {u.name ?? u.email}
+              <button
+                type="button"
+                onClick={() => remove(u.id)}
+                className="leading-none hover:opacity-60"
+              >×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => { setOpen(true); search(query) }}
+        placeholder={selected.length === 0 ? "搜尋同事姓名…" : "加入更多…"}
+        className="w-full px-3 py-2 text-body rounded-input border outline-none text-caption"
+        style={inputStyle}
+      />
+
+      {/* Dropdown */}
+      {open && results.length > 0 && (
+        <div
+          className="absolute z-20 w-full mt-1 rounded-input shadow-card overflow-hidden"
+          style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+        >
+          {results.slice(0, 8).map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => add(u)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-surface-2)] transition-colors"
+            >
+              <Avatar user={u} size={20} />
+              <span className="text-body" style={{ color: "var(--color-ink-900)" }}>
+                {u.name ?? u.email}
+              </span>
+              {u.email && u.name && (
+                <span className="text-caption ml-auto" style={{ color: "var(--color-ink-400)" }}>
+                  {u.email}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TodosPage() {
-  const [todos,        setTodos]        = useState<Todo[]>([])
-  const [colleagues,   setColleagues]   = useState<Colleague[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [committee,    setCommittee]    = useState<CommitteeType | "ALL">("ALL")
-  const [status,       setStatus]       = useState<TodoStatus | "ALL">("ALL")
-  const [view,         setView]         = useState<ViewMode>("all")
-  const [showForm,     setShowForm]     = useState(false)
+  const [todos,         setTodos]         = useState<Todo[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [committee,     setCommittee]     = useState<CommitteeType | "ALL">("ALL")
+  const [status,        setStatus]        = useState<TodoStatus | "ALL">("ALL")
+  const [view,          setView]          = useState<ViewMode>("all")
+  const [showForm,      setShowForm]      = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // New todo form state
@@ -114,16 +240,8 @@ export default function TodosPage() {
   const [desc,         setDesc]         = useState("")
   const [newCommittee, setNewCommittee] = useState<CommitteeType>("ADMIN")
   const [dueDate,      setDueDate]      = useState("")
-  const [assigneeId,   setAssigneeId]   = useState("")
+  const [assignees,    setAssignees]    = useState<Colleague[]>([])
   const [saving,       setSaving]       = useState(false)
-
-  async function loadColleagues() {
-    const res = await fetch("/api/users")
-    if (res.ok) {
-      const data: Colleague[] = await res.json()
-      setColleagues(data)
-    }
-  }
 
   async function load() {
     setLoading(true)
@@ -132,25 +250,16 @@ export default function TodosPage() {
     if (status    !== "ALL") params.set("status",    status)
     if (view !== "all")      params.set("view",      view)
     const res = await fetch(`/api/todos?${params}`)
-    if (res.ok) {
-      const data: Todo[] = await res.json()
-      setTodos(data)
-      // Detect current user id from a "mine" view todo, or from createdBy
-      if (!currentUserId && data.length > 0) {
-        const myTodo = data.find((t) => view === "mine")
-        if (myTodo) setCurrentUserId(myTodo.createdBy.id)
-      }
-    }
+    if (res.ok) setTodos(await res.json())
     setLoading(false)
   }
 
-  // Fetch current user id on mount
   useEffect(() => {
-    loadColleagues()
+    // Get current user id from a "mine" view fetch
     fetch("/api/todos?view=mine").then((r) => r.json()).then((d: Todo[]) => {
       if (d.length > 0) setCurrentUserId(d[0].createdBy.id)
     })
-  }, []) // eslint-disable-line
+  }, [])
 
   useEffect(() => { load() }, [committee, status, view]) // eslint-disable-line
 
@@ -180,13 +289,13 @@ export default function TodosPage() {
         description: desc || undefined,
         committee:   newCommittee,
         dueDate:     dueDate ? new Date(dueDate).toISOString() : undefined,
-        assigneeId:  assigneeId || undefined,
+        assigneeIds: assignees.map((a) => a.id),
       }),
     })
     if (res.ok) {
       const created: Todo = await res.json()
       setTodos((prev) => [created, ...prev])
-      setTitle(""); setDesc(""); setDueDate(""); setAssigneeId(""); setShowForm(false)
+      setTitle(""); setDesc(""); setDueDate(""); setAssignees([]); setShowForm(false)
     }
     setSaving(false)
   }
@@ -240,20 +349,16 @@ export default function TodosPage() {
             </div>
           </div>
 
-          {/* Assignee picker */}
+          {/* Multi-assignee chip select */}
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>
-              分配同事（選填）
+              分配同事（可多選）
             </label>
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
-              className={inputCls} style={inputStyle}>
-              <option value="">— 不分配 —</option>
-              {colleagues.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name ?? c.email}
-                </option>
-              ))}
-            </select>
+            <AssigneeChipSelect
+              selected={assignees}
+              onChange={setAssignees}
+              currentUserId={currentUserId}
+            />
           </div>
 
           <div>
@@ -332,6 +437,8 @@ export default function TodosPage() {
           {todos.map((todo) => {
             const overdue    = isOverdue(todo.dueDate, todo.status)
             const isAssigned = currentUserId ? todo.createdById !== currentUserId : false
+            const shownAssignees = todo.assignees.slice(0, 3)
+            const overflow       = todo.assignees.length - 3
 
             return (
               <li
@@ -344,7 +451,6 @@ export default function TodosPage() {
                       {todo.title}
                     </span>
                     <CommitteeBadge committee={todo.committee} />
-                    {/* Assigned-from badge */}
                     {isAssigned && todo.createdBy.name && (
                       <span
                         className="text-caption px-1.5 py-0.5 rounded-pill"
@@ -368,12 +474,20 @@ export default function TodosPage() {
                         {overdue ? "⚠ 逾期 · " : ""}{formatDue(todo.dueDate)}
                       </p>
                     )}
-                    {/* Assignee chip */}
-                    {todo.assignee && !isAssigned && (
+                    {/* Assignee chips (max 3 + overflow) */}
+                    {todo.assignees.length > 0 && (
                       <div className="flex items-center gap-1">
-                        <Avatar user={todo.assignee} size={16} />
+                        {shownAssignees.map((a) => (
+                          <Avatar key={a.userId} user={a.user} size={18} />
+                        ))}
+                        {overflow > 0 && (
+                          <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                            +{overflow}
+                          </span>
+                        )}
                         <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>
-                          {todo.assignee.name ?? todo.assignee.email}
+                          {shownAssignees.map((a) => a.user.name ?? a.user.email).slice(0, 2).join("、")}
+                          {todo.assignees.length > 2 ? "…" : ""}
                         </span>
                       </div>
                     )}
@@ -386,10 +500,9 @@ export default function TodosPage() {
                     style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface-2)" }}>
                     {BTN_LABEL[todo.status]}
                   </button>
-                  {/* Only creator can delete */}
                   {!isAssigned && (
                     <button onClick={() => deleteTodo(todo.id)}
-                      className="text-caption px-2 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
+                      className="text-caption px-2 py-1 rounded-input transition-colors"
                       style={{ color: "var(--color-ink-300)" }}
                       title="刪除">
                       ×

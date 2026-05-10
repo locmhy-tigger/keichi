@@ -8,9 +8,14 @@ const createSchema = z.object({
   description: z.string().max(2000).optional(),
   committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]),
   dueDate:     z.string().datetime().optional(),
-  assigneeId:  z.string().optional(),
+  assigneeIds: z.array(z.string()).default([]),
   status:      z.enum(["OPEN", "IN_PROGRESS", "DONE"]).default("OPEN"),
 })
+
+const assigneesInclude = {
+  assignees: { include: { user: { select: { id: true, name: true, image: true } } } },
+  createdBy: { select: { id: true, name: true } },
+} as const
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -29,13 +34,16 @@ export async function GET(req: NextRequest) {
   if (view === "mine") {
     whereClause = { createdById: session.user.id, ...statusFilter, ...committeeFilter }
   } else if (view === "assigned") {
-    whereClause = { assigneeId: session.user.id, ...statusFilter, ...committeeFilter }
+    whereClause = {
+      assignees: { some: { userId: session.user.id } },
+      ...statusFilter,
+      ...committeeFilter,
+    }
   } else {
-    // Default: all todos where I'm creator OR assignee
     whereClause = {
       OR: [
         { createdById: session.user.id },
-        { assigneeId:  session.user.id },
+        { assignees: { some: { userId: session.user.id } } },
       ],
       ...statusFilter,
       ...committeeFilter,
@@ -44,10 +52,7 @@ export async function GET(req: NextRequest) {
 
   const todos = await prisma.todo.findMany({
     where: whereClause,
-    include: {
-      assignee:  { select: { id: true, name: true, image: true } },
-      createdBy: { select: { id: true, name: true } },
-    },
+    include: assigneesInclude,
     orderBy: [{ dueDate: "asc" }],
   })
 
@@ -60,18 +65,18 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "TEACHER") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const body = await req.json()
-  const data = createSchema.parse(body)
+  const { assigneeIds, dueDate, ...rest } = createSchema.parse(body)
 
   const todo = await prisma.todo.create({
     data: {
-      ...data,
-      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      ...rest,
+      dueDate:    dueDate ? new Date(dueDate) : undefined,
       createdById: session.user.id,
+      assignees: assigneeIds.length > 0
+        ? { create: assigneeIds.map((userId) => ({ userId })) }
+        : undefined,
     },
-    include: {
-      assignee:  { select: { id: true, name: true, image: true } },
-      createdBy: { select: { id: true, name: true } },
-    },
+    include: assigneesInclude,
   })
 
   return NextResponse.json(todo, { status: 201 })

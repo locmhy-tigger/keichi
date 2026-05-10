@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
+import { CommitteeToolsManager } from "@/components/teacher/CommitteeToolsManager"
 import Link from "next/link"
 
 type Slug = "admin" | "discipline" | "it" | "curriculum"
@@ -109,16 +110,30 @@ export default async function CommitteePage({ params }: { params: { type: string
 
   const config = CONFIGS[committeeType]
 
-  // Fetch this committee's todos
-  const todos = await prisma.todo.findMany({
-    where: {
-      committee:   committeeType,
-      createdById: session.user.id,
-      status:      { not: "DONE" },
-    },
-    orderBy: [{ dueDate: "asc" }],
-    take: 5,
-  })
+  // Fetch DB tools + todos + user's committee membership
+  const [dbTools, todos, userRole] = await Promise.all([
+    prisma.committeeTool.findMany({
+      where: { committee: committeeType },
+      orderBy: { order: "asc" },
+    }),
+    prisma.todo.findMany({
+      where: {
+        committee:   committeeType,
+        createdById: session.user.id,
+        status:      { not: "DONE" },
+      },
+      orderBy: [{ dueDate: "asc" }],
+      take: 5,
+    }),
+    prisma.committeeRole.findFirst({
+      where: {
+        userId:    session.user.id,
+        OR: [{ committee: committeeType }, { committee: "ADMIN" }],
+      },
+    }),
+  ])
+
+  const canEditTools = !!userRole
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -143,9 +158,23 @@ export default async function CommitteePage({ params }: { params: { type: string
         </div>
       </div>
 
-      {/* Tools grid */}
+      {/* DB-backed tools */}
       <div>
         <h2 className="text-h2 mb-4">工具</h2>
+        <CommitteeToolsManager
+          initialTools={dbTools.map((t) => ({
+            id: t.id, label: t.label, description: t.description,
+            type: t.type as "LINK" | "EMBED" | "HTML" | "GOOGLE_SHEET",
+            content: t.content, order: t.order, active: t.active,
+          }))}
+          committee={committeeType}
+          slug={slug}
+          canEdit={canEditTools}
+          colorVar={config.colorVar}
+        />
+
+        {/* Hardcoded static tools */}
+        <h3 className="text-h3 mb-3" style={{ color: "var(--color-ink-700)" }}>預設工具</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {config.tools.map((tool) => {
             const inner = (

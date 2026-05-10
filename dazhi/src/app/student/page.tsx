@@ -1,13 +1,29 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useSession } from "next-auth/react"
 import { getPusherClient } from "@/lib/pusher-client"
 import type { PusherPointsAwardedPayload, PusherMissionApprovedPayload } from "@/types/mission"
 
 type ClassInfo = { id: string; name: string; classCode: string }
 type LeaderboardEntry = { rank: number; user: { id: string; name: string }; totalPoints: number }
 
+type UpcomingActivity = {
+  id:        string
+  title:     string
+  startTime: string
+  endTime:   string | null
+  location:  string | null
+  assignments: { status: string }[]
+}
+
+function formatActivityTime(iso: string) {
+  const d = new Date(iso)
+  return `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+}
+
 export default function StudentDashboard() {
+  const { data: session } = useSession()
   const [classes, setClasses] = useState<ClassInfo[]>([])
   const [activeClass, setActiveClass] = useState<ClassInfo | null>(null)
   const [points, setPoints] = useState(0)
@@ -16,6 +32,7 @@ export default function StudentDashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [classCode, setClassCode] = useState("")
+  const [upcomingActivities, setUpcomingActivities] = useState<UpcomingActivity[]>([])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -70,7 +87,22 @@ export default function StudentDashboard() {
       })
   }, [activeClass, fetchLeaderboard])
 
-  // Pusher subscription
+  // Fetch upcoming activities on mount
+  useEffect(() => {
+    fetch("/api/activities")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: UpcomingActivity[]) => {
+        const now = new Date()
+        const upcoming = data
+          .filter((a) => new Date(a.startTime) > now)
+          .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+          .slice(0, 3)
+        setUpcomingActivities(upcoming)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Pusher subscription — class channel + private user channel
   useEffect(() => {
     if (!activeClass) return
     const pusher = getPusherClient()
@@ -91,6 +123,35 @@ export default function StudentDashboard() {
       pusher.unsubscribe(`class-${activeClass.id}`)
     }
   }, [activeClass, fetchLeaderboard])
+
+  // Private channel — activity alerts
+  useEffect(() => {
+    if (!session?.user?.id) return
+    const pusher  = getPusherClient()
+    const channel = pusher.subscribe(`private-user-${session.user.id}`)
+
+    channel.bind("activity-alert", (data: { title: string; startTime: string; location?: string | null }) => {
+      const loc = data.location ? ` 於 ${data.location}` : ""
+      showToast(`📢 你有一個活動：${data.title} — ${formatActivityTime(data.startTime)}${loc}`)
+      // Refresh upcoming activities list
+      fetch("/api/activities")
+        .then((r) => r.ok ? r.json() : [])
+        .then((acts: UpcomingActivity[]) => {
+          const now = new Date()
+          const upcoming = acts
+            .filter((a) => new Date(a.startTime) > now)
+            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+            .slice(0, 3)
+          setUpcomingActivities(upcoming)
+        })
+        .catch(() => {})
+    })
+
+    return () => {
+      channel.unbind_all()
+      pusher.unsubscribe(`private-user-${session.user.id}`)
+    }
+  }, [session?.user?.id])
 
   const handleJoin = async () => {
     if (classCode.length !== 6) return
@@ -198,6 +259,30 @@ export default function StudentDashboard() {
               </a>
             </div>
           </div>
+
+          {/* Upcoming activities */}
+          {upcomingActivities.length > 0 && (
+            <div className="mt-4 bg-white rounded-2xl p-4 shadow-sm border">
+              <h2 className="font-semibold mb-3">即將到來的活動</h2>
+              <div className="space-y-2">
+                {upcomingActivities.map((act) => (
+                  <div key={act.id} className="flex items-start gap-3 p-2 rounded-xl bg-blue-50">
+                    <span className="text-lg mt-0.5">📅</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{act.title}</p>
+                      <p className="text-xs text-gray-500">
+                        {formatActivityTime(act.startTime)}
+                        {act.location && ` · ${act.location}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <a href="/student/activities" className="block text-center text-xs text-blue-600 pt-1">
+                  查看全部活動 →
+                </a>
+              </div>
+            </div>
+          )}
 
           {/* Join another class */}
           <div className="mt-4 bg-white rounded-2xl p-4 shadow-sm border">

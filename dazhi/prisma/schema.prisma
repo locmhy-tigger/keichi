@@ -64,6 +64,20 @@ enum CommitteeType {
   CURRICULUM
 }
 
+enum ToolType {
+  LINK
+  EMBED
+  HTML
+  GOOGLE_SHEET
+}
+
+enum AttendanceStatus {
+  PENDING
+  CONFIRMED
+  ATTENDED
+  ABSENT
+}
+
 enum TodoStatus {
   OPEN
   IN_PROGRESS
@@ -150,12 +164,15 @@ model User {
   cardReviews    FlashcardReview[]
 
   // EduPortal admin features
-  todosCreated    Todo[]          @relation("TodosCreated")
-  todosAssigned   Todo[]          @relation("TodosAssigned")
-  announcements   Announcement[]  @relation("AnnouncementsAuthored")
-  committeeRoles  CommitteeRole[]
-  behaviorRecords BehaviorRecord[] @relation("BehaviorRecords")
-  calendarEvents  CalendarEvent[]  @relation("CalendarEvents")
+  todosCreated      Todo[]              @relation("TodosCreated")
+  todoAssignments   TodoAssignee[]
+  announcements     Announcement[]      @relation("AnnouncementsAuthored")
+  committeeRoles    CommitteeRole[]
+  behaviorRecords   BehaviorRecord[]    @relation("BehaviorRecords")
+  calendarEvents    CalendarEvent[]     @relation("CalendarEvents")
+  committeeTools    CommitteeTool[]     @relation("CommitteeTools")
+  activitiesCreated Activity[]          @relation("ActivitiesCreated")
+  activityAssignments ActivityAssignment[] @relation("ActivityAssignments")
 }
 
 // ─────────────────────────────────────────
@@ -327,16 +344,25 @@ model Todo {
   status      TodoStatus    @default(OPEN)
   dueDate     DateTime?
   createdById String
-  assigneeId  String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  createdBy   User          @relation("TodosCreated",  fields: [createdById], references: [id], onDelete: Cascade)
-  assignee    User?         @relation("TodosAssigned", fields: [assigneeId],  references: [id])
+  createdBy   User          @relation("TodosCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  assignees   TodoAssignee[]
 
   @@index([committee])
   @@index([createdById])
   @@index([status, dueDate])
+}
+
+model TodoAssignee {
+  todoId String
+  userId String
+  todo   Todo   @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([todoId, userId])
+  @@index([userId])
 }
 
 model Announcement {
@@ -408,4 +434,58 @@ model CalendarEvent {
 
   @@index([startDate])
   @@index([committee])
+}
+
+model CommitteeTool {
+  id          String        @id @default(cuid())
+  committee   CommitteeType
+  label       String
+  description String?
+  type        ToolType
+  content     String        @db.Text
+  order       Int           @default(0)
+  active      Boolean       @default(true)
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  createdBy   User          @relation("CommitteeTools", fields: [createdById], references: [id])
+
+  @@index([committee, order])
+}
+
+model Activity {
+  id          String         @id @default(cuid())
+  title       String
+  description String?        @db.Text
+  startTime   DateTime
+  endTime     DateTime?
+  location    String?
+  committee   CommitteeType?
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  createdBy   User                @relation("ActivitiesCreated", fields: [createdById], references: [id])
+  assignments ActivityAssignment[]
+
+  @@index([startTime])
+  @@index([createdById])
+}
+
+model ActivityAssignment {
+  id         String           @id @default(cuid())
+  activityId String
+  studentId  String
+  status     AttendanceStatus @default(PENDING)
+  alertSent  Boolean          @default(false)
+  alertedAt  DateTime?
+  note       String?
+  createdAt  DateTime         @default(now())
+
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  student    User     @relation("ActivityAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, studentId])
+  @@index([studentId, status])
 }
