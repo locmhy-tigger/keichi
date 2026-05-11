@@ -5,6 +5,7 @@ import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
 type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "CLASS"
+type Priority      = "NORMAL" | "IMPORTANT" | "URGENT"
 
 type Announcement = {
   id:        string
@@ -13,6 +14,7 @@ type Announcement = {
   committee: CommitteeType | null
   target:    Target
   pinned:    boolean
+  priority:  Priority
   classId:   string | null
   createdAt: string
   author:    { id: string; name: string | null; image: string | null }
@@ -25,6 +27,12 @@ const TARGET_OPTIONS: { label: string; value: Target }[] = [
   { label: "訓育",     value: "DISCIPLINE" },
   { label: "資訊科技", value: "IT"         },
   { label: "課程發展", value: "CURRICULUM" },
+]
+
+const PRIORITY_OPTIONS: { label: string; value: Priority }[] = [
+  { label: "普通", value: "NORMAL" },
+  { label: "重要", value: "IMPORTANT" },
+  { label: "緊急", value: "URGENT" },
 ]
 
 function formatDate(iso: string): string {
@@ -43,6 +51,7 @@ export default function AnnouncementsPage() {
   const [body,    setBody]    = useState("")
   const [target,  setTarget]  = useState<Target>("ALL")
   const [classId, setClassId] = useState("")
+  const [priority, setPriority] = useState<Priority>("NORMAL")
   const [pinned,       setPinned]       = useState(false)
   const [syncToGoogle, setSyncToGoogle] = useState(false)
   const [saving,       setSaving]       = useState(false)
@@ -184,6 +193,23 @@ export default function AnnouncementsPage() {
                 </select>
               </div>
             )}
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>重要性</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as Priority)}
+                className="w-full px-3 py-2 text-body rounded-input border"
+                style={{
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-surface)",
+                  color: "var(--color-ink-900)",
+                }}
+              >
+                {PRIORITY_OPTIONS.map(({ label, value }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -275,41 +301,6 @@ export default function AnnouncementsPage() {
                     className="text-caption px-2.5 py-1 rounded-input transition-colors hover:bg-[var(--color-discipline-soft)]"
                     style={{ color: "var(--color-ink-300)" }}
                     title="刪除"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
                   >
                     ×
                   </button>

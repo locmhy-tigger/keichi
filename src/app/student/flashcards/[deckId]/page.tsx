@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 
 type Card = { id: string; front: string; back: string }
@@ -11,12 +11,12 @@ export default function DeckPage({ params }: { params: { deckId: string } }) {
   const [front, setFront] = useState("")
   const [back, setBack] = useState("")
 
-  const fetchCards = async () => {
+  const fetchCards = useCallback(async () => {
     const res = await fetch(`/api/flashcard-decks/${params.deckId}/cards`)
     if (res.ok) setCards(await res.json())
-  }
+  }, [params.deckId])
 
-  useEffect(() => { fetchCards() }, [params.deckId])
+  useEffect(() => { fetchCards() }, [fetchCards])
 
   const addCard = async () => {
     if (!front.trim() || !back.trim()) return

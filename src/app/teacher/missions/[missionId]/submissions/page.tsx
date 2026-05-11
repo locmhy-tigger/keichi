@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 
 type Submission = {
@@ -20,12 +20,12 @@ export default function SubmissionsPage({ params }: { params: { missionId: strin
   const [feedback, setFeedback] = useState("")
   const [processing, setProcessing] = useState(false)
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = useCallback(async () => {
     const res = await fetch(`/api/missions/${params.missionId}/submissions`)
     if (res.ok) setSubmissions(await res.json())
-  }
+  }, [params.missionId])
 
-  useEffect(() => { fetchSubmissions() }, [params.missionId])
+  useEffect(() => { fetchSubmissions() }, [fetchSubmissions])
 
   const review = async (action: "APPROVE" | "REJECT") => {
     if (!selected) return
