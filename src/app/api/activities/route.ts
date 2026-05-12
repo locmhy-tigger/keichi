@@ -10,6 +10,7 @@ const createSchema = z.object({
   endTime:     z.string().datetime().optional(),
   location:    z.string().max(200).optional(),
   committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
+  studentList: z.string().optional(), // Raw text from Excel paste
 })
 
 export async function GET(req: NextRequest) {
