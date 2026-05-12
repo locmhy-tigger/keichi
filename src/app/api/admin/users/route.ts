@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 // GET — list all users with committee memberships and class enrollments
 export async function GET() {
@@ -38,26 +39,39 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "TEACHER") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   try {
-    const { email, name, role, classCode } = await req.json()
+    const { email, name, role, password, committees, classCode } = await req.json()
 
     if (!email) return NextResponse.json({ error: "Email is required" }, { status: 400 })
+
+    const hashedPassword = password ? await bcrypt.hash(password, 10) : null
 
     const user = await prisma.user.create({
       data: {
         email,
         name: name || null,
         role: role || "STUDENT",
+        password: hashedPassword,
+        committeeRoles: committees && committees.length > 0 ? {
+          create: committees.map((c: any) => ({
+            committee: c.committee || c,
+            isChair: c.isChair || false
+          }))
+        } : undefined
       }
     })
 
     if (classCode && role === "STUDENT") {
-      const cls = await prisma.class.findUnique({ where: { classCode } })
-      if (cls) {
-        await prisma.classEnrollment.create({
-          data: {
+      const codes = Array.isArray(classCode) ? classCode : [classCode]
+      const classes = await prisma.class.findMany({
+        where: { classCode: { in: codes } }
+      })
+      
+      if (classes.length > 0) {
+        await prisma.classEnrollment.createMany({
+          data: classes.map(cls => ({
             classId: cls.id,
             studentId: user.id
-          }
+          }))
         })
       }
     }
@@ -67,6 +81,7 @@ export async function POST(req: NextRequest) {
     if (err.code === "P2002") {
       return NextResponse.json({ error: "Email already exists" }, { status: 400 })
     }
+    console.error("User creation error:", err)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

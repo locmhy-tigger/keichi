@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
 type Role = "TEACHER" | "STUDENT"
@@ -9,7 +10,7 @@ const VALID_COMMITTEES = new Set<CommitteeType>(["ADMIN", "DISCIPLINE", "IT", "C
 const VALID_ROLES      = new Set<Role>(["TEACHER", "STUDENT"])
 
 function parseCommittees(raw: string): CommitteeType[] {
-  if (!raw.trim()) return []
+  if (!raw || !raw.trim()) return []
   return raw.split("|").map((s) => s.trim()).filter((s): s is CommitteeType => VALID_COMMITTEES.has(s as CommitteeType))
 }
 
@@ -46,14 +47,15 @@ export async function POST(req: NextRequest) {
     const row = dataLines[i]
     const parts = row.split(",")
     if (parts.length < 3) {
-      errors.push({ row: i + 2, email: parts[0] ?? "", reason: "Too few columns (expected: email,name,role,committees,chairOf,classes)" })
+      errors.push({ row: i + 2, email: parts[0] ?? "", reason: "Too few columns (expected at least: email,name,role)" })
       continue
     }
 
-    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = "", classesRaw = ""] = parts
+    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = "", classesRaw = "", passwordRaw = ""] = parts
     const trimmedEmail = email.trim()
     const trimmedName  = name.trim()
     const role         = roleRaw.trim() as Role
+    const password     = passwordRaw.trim()
 
     if (!trimmedEmail) {
       errors.push({ row: i + 2, email: trimmedEmail, reason: "Email is required" })
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
     try {
       const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } })
       let userId = ""
+      
+      const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined
 
       if (existing) {
         await prisma.user.update({
@@ -79,6 +83,7 @@ export async function POST(req: NextRequest) {
           data: {
             name: trimmedName || existing.name,
             role,
+            ...(hashedPassword ? { password: hashedPassword } : {})
           },
         })
         userId = existing.id
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
             email: trimmedEmail,
             name:  trimmedName || null,
             role,
+            password: hashedPassword || null,
           },
         })
         userId = newUser.id
@@ -120,6 +126,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (_err) {
+      console.error(`Error importing row ${i + 2}:`, _err)
       errors.push({ row: i + 2, email: trimmedEmail, reason: "Database error — check for duplicate entries or constraints" })
     }
   }

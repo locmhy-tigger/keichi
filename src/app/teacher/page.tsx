@@ -6,7 +6,7 @@ import { MiniCalendar } from "@/components/teacher/MiniCalendar"
 import { CommitteeToolsGrid } from "@/components/teacher/CommitteeToolsGrid"
 import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
 import { UnifiedTimeline } from "@/components/UnifiedTimeline"
-import { AskICHI } from "@/components/teacher/AskICHI"
+import { AskKeida } from "@/components/teacher/AskKeida"
 
 export default async function TeacherDashboard() {
   const session = await auth()
@@ -82,8 +82,6 @@ export default async function TeacherDashboard() {
         todayCount={todayTodos.length}
       />
 
-      <AskICHI />
-
       <DashboardAnnouncements />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
@@ -92,6 +90,8 @@ export default async function TeacherDashboard() {
       </div>
 
       <CommitteeToolsGrid />
+
+      <AskKeida />
     </div>
   )
 }

@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const { query } = schema.parse(await req.json())
 
-  const [announcements, behaviorRecords] = await Promise.all([
+  const [announcements, behaviorRecords, calendarEvents, todos, activities] = await Promise.all([
     prisma.announcement.findMany({
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -44,9 +44,25 @@ export async function POST(req: NextRequest) {
         resolved:    true,
       },
     }),
+    prisma.calendarEvent.findMany({
+      orderBy: { startDate: "asc" },
+      where:   { startDate: { gte: new Date() } },
+      take:    20,
+    }),
+    prisma.todo.findMany({
+      where:   { createdById: session.user.id, status: { not: "DONE" } },
+      orderBy: { dueDate: "asc" },
+      take:    20,
+    }),
+    prisma.activity.findMany({
+      where:   { createdById: session.user.id, startTime: { gte: new Date() } },
+      orderBy: { startTime: "asc" },
+      take:    20,
+      include: { assignments: { include: { student: { select: { name: true } } } } }
+    })
   ])
 
-  const answer = await queryICHI(query, announcements, behaviorRecords)
+  const answer = await queryKeida(query, announcements, behaviorRecords, calendarEvents, todos, activities)
 
   return NextResponse.json({ answer })
 }

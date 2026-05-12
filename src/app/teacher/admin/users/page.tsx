@@ -393,7 +393,14 @@ function UserRow({
 }
 
 function AddUserModal({ classes, onClose, onSuccess }: { classes: ClassInfo[], onClose: () => void, onSuccess: (u: User) => void }) {
-  const [form, setForm] = useState({ email: "", name: "", role: "STUDENT" as const, classCode: "" })
+  const [form, setForm] = useState({ 
+    email: "", 
+    name: "", 
+    role: "STUDENT" as const, 
+    password: "",
+    committees: [] as CommitteeType[],
+    classCode: "" 
+  })
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
@@ -406,8 +413,12 @@ function AddUserModal({ classes, onClose, onSuccess }: { classes: ClassInfo[], o
     })
     if (res.ok) {
       const newUser = await res.json()
-      // Note: newUser won't have enrollments populated yet from create, but we can fake it or re-fetch
-      onSuccess({ ...newUser, committeeRoles: [], enrollments: form.classCode ? [{ class: classes.find(c => c.classCode === form.classCode)! }] : [] })
+      // For local update, populate with what we know
+      onSuccess({ 
+        ...newUser, 
+        committeeRoles: form.committees.map(c => ({ committee: c, isChair: false })), 
+        enrollments: form.classCode ? [{ class: classes.find(c => c.classCode === form.classCode)! }] : [] 
+      })
     } else {
       const { error } = await res.json()
       alert(error)
@@ -415,38 +426,74 @@ function AddUserModal({ classes, onClose, onSuccess }: { classes: ClassInfo[], o
     setBusy(false)
   }
 
+  const toggleCommittee = (c: CommitteeType) => {
+    setForm(v => ({
+      ...v,
+      committees: v.committees.includes(c) 
+        ? v.committees.filter(item => item !== c)
+        : [...v.committees, c]
+    }))
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-        <form onSubmit={submit} className="p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="p-6 border-b shrink-0">
           <h3 className="text-h2">新增用戶</h3>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4 overflow-y-auto">
           <div>
-            <label className="text-caption block mb-1">Email (必填)</label>
-            <input required type="email" value={form.email} onChange={e => setForm(v => ({ ...v, email: e.target.value }))} className="w-full rounded-input border p-2" />
+            <label className="text-caption block mb-1 font-medium">Email (必填)</label>
+            <input required type="email" value={form.email} onChange={e => setForm(v => ({ ...v, email: e.target.value }))} className="w-full rounded-input border p-2 text-body" placeholder="example@school.hk" />
           </div>
           <div>
-            <label className="text-caption block mb-1">姓名</label>
-            <input type="text" value={form.name} onChange={e => setForm(v => ({ ...v, name: e.target.value }))} className="w-full rounded-input border p-2" />
+            <label className="text-caption block mb-1 font-medium">姓名</label>
+            <input type="text" value={form.name} onChange={e => setForm(v => ({ ...v, name: e.target.value }))} className="w-full rounded-input border p-2 text-body" placeholder="輸入姓名" />
           </div>
           <div>
-            <label className="text-caption block mb-1">角色</label>
-            <select value={form.role} onChange={e => setForm(v => ({ ...v, role: e.target.value as any }))} className="w-full rounded-input border p-2">
-              <option value="STUDENT">學生</option>
-              <option value="TEACHER">教職員</option>
-            </select>
+            <label className="text-caption block mb-1 font-medium">密碼 (選填)</label>
+            <input type="password" value={form.password} onChange={e => setForm(v => ({ ...v, password: e.target.value }))} className="w-full rounded-input border p-2 text-body" placeholder="如需密碼登入請填寫" />
+            <p className="text-[10px] text-gray-400 mt-1">留空則僅限 Google 登入</p>
           </div>
-          {form.role === "STUDENT" && (
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-caption block mb-1">班別</label>
-              <select value={form.classCode} onChange={e => setForm(v => ({ ...v, classCode: e.target.value }))} className="w-full rounded-input border p-2">
-                <option value="">— 未分配 —</option>
-                {classes.map(c => <option key={c.id} value={c.classCode}>{c.name}</option>)}
+              <label className="text-caption block mb-1 font-medium">角色</label>
+              <select value={form.role} onChange={e => setForm(v => ({ ...v, role: e.target.value as any }))} className="w-full rounded-input border p-2 text-body">
+                <option value="STUDENT">學生</option>
+                <option value="TEACHER">教職員</option>
               </select>
             </div>
-          )}
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-input border">取消</button>
-            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-input bg-blue-600 text-white disabled:opacity-50">
+            {form.role === "STUDENT" && (
+              <div>
+                <label className="text-caption block mb-1 font-medium">班別</label>
+                <select value={form.classCode} onChange={e => setForm(v => ({ ...v, classCode: e.target.value }))} className="w-full rounded-input border p-2 text-body">
+                  <option value="">— 未分配 —</option>
+                  {classes.map(c => <option key={c.id} value={c.classCode}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-caption block mb-1 font-medium">委員會分配</label>
+            <div className="grid grid-cols-2 gap-2">
+              {COMMITTEES.map(({ value, label }) => (
+                <label key={value} className="flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={form.committees.includes(value)} 
+                    onChange={() => toggleCommittee(value)}
+                    className="rounded text-blue-600"
+                  />
+                  <span className="text-caption">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          
+          <div className="flex gap-2 pt-4 shrink-0">
+            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-input border font-medium">取消</button>
+            <button type="submit" disabled={busy} className="flex-1 py-2 rounded-input bg-blue-600 text-white font-medium disabled:opacity-50">
               {busy ? "提交中…" : "確認新增"}
             </button>
           </div>

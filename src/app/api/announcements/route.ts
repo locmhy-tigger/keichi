@@ -71,14 +71,40 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // Placeholder for Google Calendar Sync
+  // Google Calendar Sync Implementation
   if (syncToGoogle && (session as any).accessToken) {
-    // In a real implementation, we would call Google Calendar API here
-    // For now, we mock the successful sync
-    await prisma.announcement.update({
-      where: { id: announcement.id },
-      data: { googleEventId: `mock-event-${announcement.id}` }
-    })
+    try {
+      const googleRes = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${(session as any).accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          summary: announcement.title,
+          description: announcement.body,
+          start: {
+            dateTime: new Date(announcement.createdAt).toISOString(),
+          },
+          end: {
+            dateTime: new Date(announcement.createdAt.getTime() + 3600000).toISOString(), // 1 hour duration
+          },
+        }),
+      })
+
+      if (googleRes.ok) {
+        const event = await googleRes.json()
+        await prisma.announcement.update({
+          where: { id: announcement.id },
+          data: { googleEventId: event.id }
+        })
+      } else {
+        const error = await googleRes.text()
+        console.error("Google Calendar Sync failed:", error)
+      }
+    } catch (err) {
+      console.error("Google Calendar Sync error:", err)
+    }
   }
 
   return NextResponse.json(announcement, { status: 201 })

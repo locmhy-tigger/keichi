@@ -15,7 +15,7 @@ const client = new Anthropic({
 })
 
 // ─────────────────────────────────────────
-// QUIZ GENERATION — claude-sonnet-4-5
+// QUIZ GENERATION — claude-3-5-sonnet-latest
 // Teacher-triggered, quality over speed
 // ─────────────────────────────────────────
 
@@ -48,7 +48,7 @@ export async function generateQuiz(
   difficulty: 'BASIC' | 'ADVANCED' | 'CHALLENGE' = 'BASIC'
 ): Promise<AiQuizGenerationResponse> {
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-3-5-sonnet-latest',
     max_tokens: 2000,
     system: QUIZ_SYSTEM_PROMPT,
     messages: [
@@ -74,7 +74,7 @@ export async function generateQuiz(
 }
 
 // ─────────────────────────────────────────
-// PROMPT EVALUATION — claude-haiku-4-5
+// PROMPT EVALUATION — claude-3-haiku-20240307
 // Student-triggered, speed is critical
 // ─────────────────────────────────────────
 
@@ -127,20 +127,21 @@ export async function evaluatePrompt(
 }
 
 // ─────────────────────────────────────────
-// ICHI QUERY — claude-sonnet-4-5
+// KEIDA QUERY — claude-3-5-sonnet-latest
 // Teacher-facing contextual Q&A over school data
 // ─────────────────────────────────────────
 
-const ICHI_SYSTEM_PROMPT = `你是「ICHI」，香港中學的 AI 校務助理。
-你根據學校公告記錄和學生行為記錄，以繁體中文回答老師的問題。
+const KEIDA_SYSTEM_PROMPT = `你是「Keida」，香港中學的 AI 校務助理。
+你根據學校公告記錄、學生行為記錄、行事曆事件、待辦事項及活動指派，以繁體中文回答老師的問題。
 
 規則：
 1. 只根據提供的記錄作答，不要捏造資料
 2. 若記錄中找不到相關資訊，直接說明
 3. 回答簡潔清晰，可用條列式
-4. 涉及個別學生時，謹慎表述，只引用記錄中已有的事實`
+4. 涉及個別學生時，謹慎表述，只引用記錄中已有的事實
+5. 優先處理與當前日期相關或標註為緊急的事項`
 
-type ICHIAnnouncement = {
+type KEIDAAnnouncement = {
   title: string
   body: string
   target: string
@@ -150,7 +151,7 @@ type ICHIAnnouncement = {
   author: { name: string | null }
 }
 
-type ICHIBehaviorRecord = {
+type KEIDABehaviorRecord = {
   date: Date
   className: string
   studentName: string
@@ -160,17 +161,46 @@ type ICHIBehaviorRecord = {
   resolved: boolean
 }
 
-export async function queryICHI(
+type KEIDACalendarEvent = {
+  title: string
+  startDate: Date
+  endDate: Date | null
+  allDay: boolean
+  description: string | null
+  committee: string | null
+}
+
+type KEIDATodo = {
+  title: string
+  description: string | null
+  status: string
+  dueDate: Date | null
+  committee: string | null
+}
+
+type KEIDAActivity = {
+  title: string
+  description: string | null
+  startTime: Date
+  endTime: Date | null
+  location: string | null
+  assignments: { student: { name: string | null }, status: string }[]
+}
+
+export async function queryKeida(
   query: string,
-  announcements: ICHIAnnouncement[],
-  behaviorRecords: ICHIBehaviorRecord[],
+  announcements: KEIDAAnnouncement[],
+  behaviorRecords: KEIDABehaviorRecord[],
+  calendarEvents: KEIDACalendarEvent[] = [],
+  todos: KEIDATodo[] = [],
+  activities: KEIDAActivity[] = [],
 ): Promise<string> {
   const annLines = announcements.length > 0
     ? announcements.map((a) => {
         const date = new Date(a.createdAt).toLocaleDateString('zh-HK')
         const badge = a.priority !== 'NORMAL' ? `【${a.priority === 'URGENT' ? '緊急' : '重要'}】` : ''
         const scope = a.committee ? ` (${a.committee})` : ` (${a.target})`
-        return `[${date}]${badge} ${a.title}${scope}\n${a.body}`
+        return `[公告][${date}]${badge} ${a.title}${scope}\n${a.body}`
       }).join('\n\n')
     : '（無公告記錄）'
 
@@ -180,18 +210,62 @@ export async function queryICHI(
         const kind = r.type === 'MISCONDUCT' ? '違規' : '嘉許'
         const followUp = r.action ? ` → 跟進：${r.action}` : ''
         const status = r.resolved ? ' ✓已處理' : ''
-        return `[${date}] ${r.className} · ${r.studentName} · ${kind}：${r.description}${followUp}${status}`
+        return `[行為][${date}] ${r.className} · ${r.studentName} · ${kind}：${r.description}${followUp}${status}`
       }).join('\n')
     : '（無行為記錄）'
 
+  const calLines = calendarEvents.length > 0
+    ? calendarEvents.map((e) => {
+        const start = new Date(e.startDate).toLocaleString('zh-HK')
+        const end = e.endDate ? ` 至 ${new Date(e.endDate).toLocaleString('zh-HK')}` : ''
+        const scope = e.committee ? ` [${e.committee}]` : ''
+        return `[行事曆] ${start}${end}${scope}：${e.title}${e.description ? ` (${e.description})` : ''}`
+      }).join('\n')
+    : '（無即將行事曆事件）'
+
+  const todoLines = todos.length > 0
+    ? todos.map((t) => {
+        const due = t.dueDate ? ` (期限：${new Date(t.dueDate).toLocaleDateString('zh-HK')})` : ''
+        const scope = t.committee ? ` [${t.committee}]` : ''
+        return `[待辦] ${t.title}${due}${scope} - 狀態：${t.status}`
+      }).join('\n')
+    : '（無進行中待辦事項）'
+
+  const actLines = activities.length > 0
+    ? activities.map((a) => {
+        const time = new Date(a.startTime).toLocaleString('zh-HK')
+        const students = a.assignments.map(as => `${as.student.name}(${as.status})`).join(', ')
+        return `[活動] ${time} · ${a.title}${a.location ? ` @ ${a.location}` : ''}\n  指派學生：${students}`
+      }).join('\n')
+    : '（無即將活動指派）'
+
+  const context = `
+當前日期：${new Date().toLocaleDateString('zh-HK')}
+
+--- 公告記錄 ---
+${annLines}
+
+--- 行為記錄 ---
+${bhrLines}
+
+--- 行事曆事件 ---
+${calLines}
+
+--- 待辦事項 ---
+${todoLines}
+
+--- 活動指派 ---
+${actLines}
+`.trim()
+
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 700,
-    system: ICHI_SYSTEM_PROMPT,
+    model: 'claude-3-5-sonnet-latest',
+    max_tokens: 1000,
+    system: KEIDA_SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
-        content: `公告記錄（最近 30 條）：\n${annLines}\n\n學生行為記錄（最近 30 條）：\n${bhrLines}\n\n問題：${query}`,
+        content: `以下是學校的最新數據上下文：\n\n${context}\n\n我的問題：${query}`,
       },
     ],
   })
