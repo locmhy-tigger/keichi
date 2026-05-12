@@ -29,16 +29,20 @@ export async function GET(req: NextRequest) {
   }
 
   // Student: see assigned activities
-  const assignments = await prisma.activityAssignment.findMany({
-    where: { studentId: session.user.id },
-    include: {
-      activity: {
-        include: { createdBy: { select: { id: true, name: true } } },
-      },
+  const studentActivities = await prisma.activity.findMany({
+    where: {
+      assignments: { some: { studentId: session.user.id } }
     },
-    orderBy: { activity: { startTime: "asc" } },
+    include: {
+      assignments: {
+        where: { studentId: session.user.id },
+        select: { status: true, note: true }
+      },
+      createdBy: { select: { id: true, name: true } }
+    },
+    orderBy: { startTime: "asc" },
   })
-  return NextResponse.json(assignments)
+  return NextResponse.json(studentActivities)
 }
 
 export async function POST(req: NextRequest) {
@@ -46,16 +50,75 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (session.user.role !== "TEACHER") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const data = createSchema.parse(await req.json())
+  const body = await req.json()
+  const data = createSchema.parse(body)
+  const { studentList, ...rest } = data
+  
   const activity = await prisma.activity.create({
     data: {
-      ...data,
+      title:       data.title,
+      description: data.description,
       startTime:   new Date(data.startTime),
       endTime:     data.endTime ? new Date(data.endTime) : undefined,
+      location:    data.location,
+      committee:   data.committee,
       createdById: session.user.id,
     },
     include: { _count: { select: { assignments: true } } },
   })
+
+  // Process student list if provided
+  if (studentList) {
+    const lines = studentList.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    if (lines.length > 0) {
+      const resolvedUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { email: { in: lines } },
+            { name:  { in: lines } }
+          ],
+          role: "STUDENT"
+        },
+        select: { id: true, name: true }
+      })
+
+      if (resolvedUsers.length > 0) {
+        const targetStudentIds = resolvedUsers.map(u => u.id)
+        const activityEnd = activity.endTime ?? new Date(activity.startTime.getTime() + 60 * 60 * 1000)
+
+        // Clash detection
+        const clashingAssignments = await prisma.activityAssignment.findMany({
+          where: {
+            studentId: { in: targetStudentIds },
+            activity: {
+              id:        { not: activity.id },
+              startTime: { lt: activityEnd },
+              endTime:   { gt: activity.startTime },
+            },
+          },
+          include: {
+            activity: { select: { title: true } }
+          }
+        })
+
+        const clashMap = new Map(clashingAssignments.map(a => [a.studentId, a.activity.title]))
+
+        // Assign all
+        await prisma.activityAssignment.createMany({
+          data: resolvedUsers.map(user => {
+            const clashTitle = clashMap.get(user.id)
+            return {
+              activityId: activity.id,
+              studentId:  user.id,
+              status:     clashTitle ? "PENDING" : "CONFIRMED" as any,
+              note:       clashTitle ? `時間衝突：與「${clashTitle}」重疊` : null
+            }
+          }),
+          skipDuplicates: true
+        })
+      }
+    }
+  }
 
   return NextResponse.json(activity, { status: 201 })
 }

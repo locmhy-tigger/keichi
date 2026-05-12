@@ -32,6 +32,7 @@ export default function TeacherActivitiesPage() {
   const [start,   setStart]   = useState("")
   const [end,     setEnd]     = useState("")
   const [location, setLocation] = useState("")
+  const [studentList, setStudentList] = useState("")
 
   async function load() {
     setLoading(true)
@@ -54,12 +55,13 @@ export default function TeacherActivitiesPage() {
         startTime:   new Date(start).toISOString(),
         endTime:     end ? new Date(end).toISOString() : undefined,
         location:    location || undefined,
+        studentList: studentList || undefined,
       }),
     })
     if (res.ok) {
       const created: Activity = await res.json()
       setActivities((prev) => [created, ...prev])
-      setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation("")
+      setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setStudentList("")
       setShowForm(false)
     }
     setSaving(false)
@@ -113,6 +115,13 @@ export default function TeacherActivitiesPage() {
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>備注（選填）</label>
             <textarea rows={2} value={desc} onChange={(e) => setDesc(e.target.value)}
               className={`${inputCls} resize-none`} style={inputStyle} />
+          </div>
+          <div>
+            <label className="text-caption block mb-1 font-medium" style={{ color: "var(--color-ink-700)" }}>學生名單 (選填)</label>
+            <textarea rows={4} value={studentList} onChange={(e) => setStudentList(e.target.value)}
+              placeholder="可從 Excel 貼上姓名或 Email (每行一個)"
+              className={`${inputCls} resize-none font-mono text-[11px]`} style={inputStyle} />
+            <p className="text-[10px] text-gray-400 mt-1">系統將自動匹配學生並檢查時間衝突</p>
           </div>
           <div className="flex gap-3 justify-end">
             <button type="button" onClick={() => setShowForm(false)}

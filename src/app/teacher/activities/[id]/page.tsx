@@ -145,6 +145,58 @@ function StudentSearch({ onAssign, existingIds }: {
   )
 }
 
+function BulkAssignModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (count: number, clashes: Clash[]) => void }) {
+  const [list, setList] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!list.trim() || busy) return
+    setBusy(true)
+    const actId = window.location.pathname.split("/").pop()
+    const res = await fetch(`/api/activities/${actId}/assign`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ studentList: list }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      onSuccess(data.assignedCount, data.clashes)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <h3 className="text-h3">批量指派學生</h3>
+          <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
+            請貼上從 Excel 複製的學生姓名或 Email 列表（每行一個）。
+          </p>
+          <textarea
+            required
+            rows={8}
+            value={list}
+            onChange={(e) => setList(e.target.value)}
+            className="w-full px-3 py-2 text-caption rounded-input border outline-none font-mono"
+            style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
+            placeholder="陳大文&#10;lee.siu.ming@school.hk&#10;..."
+          />
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-input border text-body">取消</button>
+            <button type="submit" disabled={busy || !list.trim()} 
+              className="flex-1 py-2 rounded-input bg-blue-600 text-white text-body font-medium disabled:opacity-50"
+              style={{ background: "var(--color-accent)" }}>
+              {busy ? "處理中…" : "確認指派"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [activity,  setActivity]  = useState<Activity | null>(null)
@@ -152,6 +204,7 @@ export default function ActivityDetailPage() {
   const [clashes,   setClashes]   = useState<Clash[]>([])
   const [alerting,  setAlerting]  = useState(false)
   const [alertDone, setAlertDone] = useState(false)
+  const [showBulk,  setShowBulk]  = useState(false)
 
   async function load() {
     const res = await fetch(`/api/activities/${id}`)
@@ -183,10 +236,10 @@ export default function ActivityDetailPage() {
     setAlertDone(true)
   }
 
-  function handleAssign(assigned: { studentId: string }[], newClashes: Clash[]) {
+  function handleAssign(assigned: any, newClashes: Clash[]) {
     setClashes(newClashes)
-    // Reload to get full assignment data
     load()
+    setShowBulk(false)
   }
 
   if (loading) return <div className="p-6 text-center text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
@@ -219,7 +272,7 @@ export default function ActivityDetailPage() {
       {clashes.length > 0 && (
         <div className="card p-4 space-y-2" style={{ borderLeft: "4px solid var(--color-admin)" }}>
           <p className="text-body font-medium" style={{ color: "var(--color-admin)" }}>
-            ⚠ {clashes.length} 名學生時間衝突，未能指派：
+            ⚠ {clashes.length} 名學生時間衝突，已設為待確認：
           </p>
           {clashes.map((c, i) => (
             <p key={i} className="text-caption" style={{ color: "var(--color-ink-700)" }}>
@@ -234,6 +287,13 @@ export default function ActivityDetailPage() {
       <div className="card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-h2">指派學生</h2>
+          <button 
+            onClick={() => setShowBulk(true)}
+            className="text-caption px-3 py-1.5 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}
+          >
+            批量指派 (Excel)
+          </button>
         </div>
         <StudentSearch onAssign={handleAssign} existingIds={existingIds} />
       </div>
@@ -263,6 +323,7 @@ export default function ActivityDetailPage() {
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                   <th className="text-left px-4 py-3 text-caption" style={{ color: "var(--color-ink-500)" }}>學生</th>
                   <th className="text-left px-4 py-3 text-caption" style={{ color: "var(--color-ink-500)" }}>狀態</th>
+                  <th className="text-left px-4 py-3 text-caption" style={{ color: "var(--color-ink-500)" }}>備註</th>
                   <th className="px-4 py-3 text-caption" style={{ color: "var(--color-ink-500)" }}>更新</th>
                 </tr>
               </thead>
@@ -280,6 +341,11 @@ export default function ActivityDetailPage() {
                         style={{ background: STATUS_COLORS[a.status] + "20", color: STATUS_COLORS[a.status] }}>
                         {STATUS_LABELS[a.status]}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-caption" style={{ color: a.status === "PENDING" ? "var(--color-discipline)" : "var(--color-ink-400)" }}>
+                        {a.note ?? "—"}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
                       <select
@@ -300,6 +366,12 @@ export default function ActivityDetailPage() {
           </div>
         )}
       </div>
+      {showBulk && (
+        <BulkAssignModal 
+          onClose={() => setShowBulk(false)} 
+          onSuccess={handleAssign} 
+        />
+      )}
     </div>
   )
 }
