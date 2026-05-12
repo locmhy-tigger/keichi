@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { queryICHI } from "@/lib/claude"
+import { queryKeida } from "@/lib/claude"
 import { z } from "zod"
 
 const schema = z.object({

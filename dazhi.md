@@ -77,7 +77,7 @@ dazhi/
 ├── src/
 │   ├── lib/
 │   │   ├── auth.ts (新增 accessToken 存儲)
-│   │   └── claude.ts (新增 queryICHI 邏輯)
+│   │   └── claude.ts (新增 queryKeida 邏輯)
 │   ├── components/
 │   │   ├── teacher/
 │   │   │   └── AskICHI.tsx (AI 搜尋組件)
