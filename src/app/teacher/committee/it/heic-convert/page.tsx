@@ -26,13 +26,15 @@ export default function HeicConvertPage() {
       const file = files[i]
       setProgress(`轉換中 ${i + 1} / ${files.length}：${file.name}`)
       try {
-        const { default: heic2any } = await import("heic2any")
+        const mod = await import("heic2any")
+        const heic2any = (mod as any).default || mod
         const blob    = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 }) as Blob
         const url     = URL.createObjectURL(blob)
         const sizeMB  = (blob.size / 1024 / 1024).toFixed(2)
         newResults.push({ name: file.name, url, sizeMB, thumbUrl: url })
-      } catch (_err) {
-        setProgress(`⚠ 跳過 ${file.name}（不是有效的 HEIC 檔案）`)
+      } catch (err) {
+        console.error("HEIC Conversion Error:", err)
+        setProgress(`⚠ 跳過 ${file.name}（轉換失敗，請檢查檔案格式）`)
         await new Promise((r) => setTimeout(r, 1000))
       }
     }

@@ -37,7 +37,7 @@ export default async function TeacherDashboard() {
   const [calEvents, allEvents] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: { startDate: { gte: monthStart, lt: monthEnd } },
-      select: { startDate: true, committee: true },
+      select: { id: true, startDate: true, title: true, committee: true },
     }),
     prisma.calendarEvent.findMany({
       where: { startDate: { gte: now, lt: nextWeek } },
@@ -65,12 +65,16 @@ export default async function TeacherDashboard() {
   ]
 
   const serializedTodos = upcomingTodos.map((t) => ({
+    id: t.id,
+    title: t.title,
     dueDate: t.dueDate?.toISOString() ?? null,
     status: t.status,
   }))
 
   const serializedCalendar = calEvents.map((ev) => ({
+    id: ev.id,
     startDate: ev.startDate.toISOString(),
+    title: ev.title,
     committee: ev.committee as any,
   }))
 

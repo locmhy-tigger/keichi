@@ -30,7 +30,8 @@ const COMMITTEE_NAV = [
 ]
 
 const ADMIN_NAV = [
-  { href: "/teacher/admin/users", label: "用戶管理", icon: UsersIcon },
+  { href: "/teacher/admin/users",   label: "用戶管理", icon: UsersIcon },
+  { href: "/teacher/admin/groups",  label: "群組管理", icon: GroupsIcon },
 ]
 
 export function TeacherSidebar({ user }: { user: User }) {
@@ -367,6 +368,17 @@ function UsersIcon() {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
+
+function GroupsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="7" r="3" />
+      <circle cx="17" cy="7" r="3" />
+      <path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6" />
+      <path d="M22 20c0-3.3-2.1-6-5-6" />
     </svg>
   )
 }

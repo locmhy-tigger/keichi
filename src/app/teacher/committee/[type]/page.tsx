@@ -73,6 +73,8 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "課堂計時器",     description: "計時器助你掌握課堂節奏",      href: "/teacher/committee/it/timer"          },
       { label: "隨機點名器",     description: "隨機抽選學生，支援記錄名單",   href: "/teacher/committee/it/random-picker"  },
       { label: "HEIC 轉 JPG",   description: "本地轉換 iPhone 相片格式",     href: "/teacher/committee/it/heic-convert"   },
+      { label: "KCnotice 通知書", description: "從 DOCX 模板快速生成通知書", href: "/teacher/committee/it/notice-gen" },
+      { label: "KCquotation 報價", description: "採購報價管理與 OCR 識別", href: "/teacher/committee/it/quotation" },
     ],
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-it)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

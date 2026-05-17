@@ -5,7 +5,10 @@
       "Bash(dir C:\\\\medvault 2>&1 && dir C:\\\\medvault\\\\backend 2>&1)",
       "Bash(cmd:*)",
       "Bash(powershell:*)",
-      "mcp__team__reply_to_team"
+      "mcp__team__reply_to_team",
+      "Bash(test:*)",
+      "Bash(pwd:*)",
+      "Bash(ls:*)"
     ]
   }
 }

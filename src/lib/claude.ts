@@ -258,17 +258,24 @@ ${todoLines}
 ${actLines}
 `.trim()
 
-  const message = await client.messages.create({
-    model: 'claude-3-5-sonnet-latest',
-    max_tokens: 1000,
-    system: KEIDA_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `以下是學校的最新數據上下文：\n\n${context}\n\n我的問題：${query}`,
-      },
-    ],
-  })
+  try {
+    const message = await client.messages.create({
+      model: 'claude-3-5-sonnet-latest',
+      max_tokens: 1000,
+      system: KEIDA_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `以下是學校的最新數據上下文：\n\n${context}\n\n我的問題：${query}`,
+        },
+      ],
+    })
 
-  return message.content[0].type === 'text' ? message.content[0].text : ''
+    return message.content[0].type === 'text' ? message.content[0].text : ''
+  } catch (error) {
+    console.error('Claude API Error (queryKeida):', error)
+    throw new Error('AI_QUERY_FAILED')
+  }
+}
+message.content[0].type === 'text' ? message.content[0].text : ''
 }

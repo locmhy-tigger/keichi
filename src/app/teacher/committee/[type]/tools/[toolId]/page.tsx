@@ -15,6 +15,44 @@ type Tool = {
   content:     string
 }
 
+function EmbedFrame({ src }: { src: string }) {
+  const [blocked, setBlocked] = useState(false)
+
+  // Proactively detect known non-embeddable patterns
+  const likelyBlocked =
+    src.includes("script.google.com") ||
+    src.includes("accounts.google.com") ||
+    src.includes("google.com/forms")
+
+  if (blocked || likelyBlocked) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center">
+        <p className="text-body" style={{ color: "var(--color-ink-500)" }}>
+          此網站不允許嵌入顯示（通常為登入保護或安全限制）
+        </p>
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-2 text-body font-medium rounded-input text-white"
+          style={{ background: "var(--color-accent)" }}
+        >
+          在新分頁開啟 ↗
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <iframe
+      src={src}
+      className="w-full h-full border-none"
+      allow="fullscreen"
+      onError={() => setBlocked(true)}
+    />
+  )
+}
+
 function toEmbedUrl(content: string): string {
   // Convert Google Sheets /edit... URL to /pubhtml for embedding
   return content.replace(/\/edit[^?]*(\?.*)?$/, "/pubhtml")
@@ -74,13 +112,9 @@ export default function ToolViewerPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         {tool.type === "EMBED" && (
-          <iframe
-            src={tool.content}
-            className="w-full h-full border-none"
-            allow="fullscreen"
-          />
+          <EmbedFrame src={tool.content} />
         )}
         {tool.type === "GOOGLE_SHEET" && (
           <iframe

@@ -9,60 +9,69 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user || session.user.role !== "TEACHER") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  try {
+    const session = await auth()
+    if (!session?.user || session.user.role !== "TEACHER") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { query } = schema.parse(body)
+
+    const [announcements, behaviorRecords, calendarEvents, todos, activities] = await Promise.all([
+      prisma.announcement.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: {
+          title:     true,
+          body:      true,
+          target:    true,
+          committee: true,
+          priority:  true,
+          createdAt: true,
+          author:    { select: { name: true } },
+        },
+      }),
+      prisma.behaviorRecord.findMany({
+        where:   { authorId: session.user.id },
+        orderBy: { date: "desc" },
+        take:    30,
+        select: {
+          date:        true,
+          className:   true,
+          studentName: true,
+          type:        true,
+          description: true,
+          action:      true,
+          resolved:    true,
+        },
+      }),
+      prisma.calendarEvent.findMany({
+        orderBy: { startDate: "asc" },
+        where:   { startDate: { gte: new Date() } },
+        take:    20,
+      }),
+      prisma.todo.findMany({
+        where:   { createdById: session.user.id, status: { not: "DONE" } },
+        orderBy: { dueDate: "asc" },
+        take:    20,
+      }),
+      prisma.activity.findMany({
+        where:   { createdById: session.user.id, startTime: { gte: new Date() } },
+        orderBy: { startTime: "asc" },
+        take:    20,
+        include: { assignments: { include: { student: { select: { name: true } } } } }
+      })
+    ])
+
+    const answer = await queryKeida(query, announcements, behaviorRecords, calendarEvents, todos, activities)
+
+    return NextResponse.json({ answer })
+  } catch (error) {
+    console.error('API Error (/api/ai/query):', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal Server Error" },
+      { status: 500 }
+    )
   }
-
-  const { query } = schema.parse(await req.json())
-
-  const [announcements, behaviorRecords, calendarEvents, todos, activities] = await Promise.all([
-    prisma.announcement.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: {
-        title:     true,
-        body:      true,
-        target:    true,
-        committee: true,
-        priority:  true,
-        createdAt: true,
-        author:    { select: { name: true } },
-      },
-    }),
-    prisma.behaviorRecord.findMany({
-      where:   { authorId: session.user.id },
-      orderBy: { date: "desc" },
-      take:    30,
-      select: {
-        date:        true,
-        className:   true,
-        studentName: true,
-        type:        true,
-        description: true,
-        action:      true,
-        resolved:    true,
-      },
-    }),
-    prisma.calendarEvent.findMany({
-      orderBy: { startDate: "asc" },
-      where:   { startDate: { gte: new Date() } },
-      take:    20,
-    }),
-    prisma.todo.findMany({
-      where:   { createdById: session.user.id, status: { not: "DONE" } },
-      orderBy: { dueDate: "asc" },
-      take:    20,
-    }),
-    prisma.activity.findMany({
-      where:   { createdById: session.user.id, startTime: { gte: new Date() } },
-      orderBy: { startTime: "asc" },
-      take:    20,
-      include: { assignments: { include: { student: { select: { name: true } } } } }
-    })
-  ])
-
-  const answer = await queryKeida(query, announcements, behaviorRecords, calendarEvents, todos, activities)
-
-  return NextResponse.json({ answer })
 }
