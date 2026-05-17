@@ -277,5 +277,3 @@ ${actLines}
     throw new Error('AI_QUERY_FAILED')
   }
 }
-message.content[0].type === 'text' ? message.content[0].text : ''
-}
