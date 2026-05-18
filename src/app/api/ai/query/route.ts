@@ -15,8 +15,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('Missing ANTHROPIC_API_KEY')
+      return NextResponse.json({ error: "AI service not configured" }, { status: 500 })
+    }
+
     const body = await req.json()
     const { query } = schema.parse(body)
+
+    console.log(`[AskKeida] Query: "${query}" from user ${session.user.id}`)
 
     const [announcements, behaviorRecords, calendarEvents, todos, activities] = await Promise.all([
       prisma.announcement.findMany({

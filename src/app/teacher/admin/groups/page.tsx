@@ -51,7 +51,16 @@ type Group = {
 
 type GroupDetail = Group & { members: GroupMember[] }
 
-type Student = { id: string; name: string | null; email: string | null; image: string | null }
+type Student = { 
+  id: string; 
+  name: string | null; 
+  email: string | null; 
+  image: string | null;
+  enrollments?: {
+    classNumber: string | null;
+    class: { id: string; name: string }
+  }[]
+}
 
 type Tab = "COMMITTEE" | "STUDENT_GROUPS"
 

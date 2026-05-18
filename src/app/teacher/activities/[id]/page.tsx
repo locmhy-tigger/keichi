@@ -6,7 +6,16 @@ import Link from "next/link"
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
 
-type Student = { id: string; name: string | null; email: string | null; image: string | null }
+type Student = { 
+  id: string; 
+  name: string | null; 
+  email: string | null; 
+  image: string | null;
+  enrollments?: {
+    classNumber: string | null;
+    class: { id: string; name: string }
+  }[]
+}
 
 type Assignment = {
   activityId: string

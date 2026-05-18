@@ -258,6 +258,8 @@ ${todoLines}
 ${actLines}
 `.trim()
 
+  console.log(`[queryKeida] Context size: ${context.length} chars. Query: ${query}`)
+
   try {
     const message = await client.messages.create({
       model: 'claude-3-5-sonnet-latest',
