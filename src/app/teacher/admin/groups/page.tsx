@@ -88,102 +88,145 @@ export default function AdminGroupsPage() {
 
   async function load() {
     setLoading(true)
-    const [uRes, gRes] = await Promise.all([
+    const [uRes, gRes, cRes] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/admin/groups"),
+      fetch("/api/classes"),
     ])
     if (uRes.ok) {
       const users = await uRes.json()
       setTeachers(users.filter((u: { role: string }) => u.role === "TEACHER"))
       setStudents(users.filter((u: { role: string }) => u.role === "STUDENT"))
     }
-    if (gRes.ok) setGroups(await gRes.json())
+    
+    let allGroups: any[] = []
+    if (gRes.ok) allGroups = [...await gRes.json()]
+    if (cRes.ok) {
+      const classes = await cRes.json()
+      // Map classes to look like groups and categorize them
+      const classGroups = classes.map((c: any) => {
+        // Simple logic: names like "4A", "1B" are FORM_CLASS
+        const isFormClass = /^[1-6][A-Z]$/.test(c.name)
+        return {
+          id: c.id,
+          name: c.name,
+          type: isFormClass ? "FORM_CLASS" : "SUBJECT_CLASS",
+          isClass: true,
+          classCode: c.classCode,
+          _count: { members: c._count?.enrollments ?? 0 }
+        }
+      })
+      allGroups = [...allGroups, ...classGroups]
+    }
+    setGroups(allGroups)
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  async function addToCommittee(userId: string, committee: CommitteeType, isChair: boolean) {
-    setSaving(`${userId}-${committee}`)
-    const res = await fetch("/api/admin/committee-roles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, committee, isChair }),
-    })
-    if (res.ok) {
-      setTeachers((prev) => prev.map((t) => {
-        if (t.id !== userId) return t
-        const existing = t.committeeRoles.filter((r) => r.committee !== committee)
-        return { ...t, committeeRoles: [...existing, { committee, isChair }] }
-      }))
-    }
-    setSaving(null)
-  }
-
-  async function removeFromCommittee(userId: string, committee: CommitteeType) {
-    setSaving(`${userId}-${committee}`)
-    const params = new URLSearchParams({ userId, committee })
-    await fetch(`/api/admin/committee-roles?${params}`, { method: "DELETE" })
-    setTeachers((prev) => prev.map((t) => {
-      if (t.id !== userId) return t
-      return { ...t, committeeRoles: t.committeeRoles.filter((r) => r.committee !== committee) }
-    }))
-    setSaving(null)
-  }
-
   async function createGroup() {
     if (!newGroup.name.trim()) return
-    const res = await fetch("/api/admin/groups", {
+    
+    // If it's a class type, we create a Class to ensure sync with points/missions
+    const isClassType = newGroup.type === "FORM_CLASS" || newGroup.type === "SUBJECT_CLASS"
+    const endpoint = isClassType ? "/api/classes" : "/api/admin/groups"
+    
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newGroup),
+      body: JSON.stringify({
+        name: newGroup.name,
+        ...(isClassType ? {} : { type: newGroup.type, description: newGroup.description })
+      }),
     })
+
     if (res.ok) {
-      const g = await res.json()
-      setGroups((prev) => [...prev, { ...g, _count: { members: 0 } }])
+      const result = await res.json()
+      if (isClassType) {
+        setGroups((prev) => [...prev, { 
+          id: result.id, 
+          name: result.name, 
+          type: newGroup.type, 
+          isClass: true,
+          classCode: result.classCode,
+          _count: { members: 0 } 
+        }])
+      } else {
+        setGroups((prev) => [...prev, { ...result, _count: { members: 0 } }])
+      }
       setNewGroup({ name: "", type: newGroup.type, description: "" })
       setShowCreateGroup(false)
-      showToast("群組已建立")
+      showToast(isClassType ? "班別已建立（具備積點與任務功能）" : "群組已建立")
+    } else {
+      showToast("建立失敗，請重試")
     }
   }
 
-  async function deleteGroup(id: string) {
-    if (!confirm("確定刪除此群組？")) return
-    const res = await fetch(`/api/admin/groups/${id}`, { method: "DELETE" })
-    if (res.status === 204) {
-      setGroups((prev) => prev.filter((g) => g.id !== id))
-      if (selectedGroup?.id === id) setSelectedGroup(null)
-      showToast("群組已刪除")
+  async function deleteGroup(group: any) {
+    if (!confirm(`確定刪除「${group.name}」？\n注意：這會移除所有成員關係。`)) return
+    const endpoint = group.isClass ? `/api/classes/${group.id}` : `/api/admin/groups/${group.id}`
+    const res = await fetch(endpoint, { method: "DELETE" })
+    if (res.status === 204 || res.ok) {
+      setGroups((prev) => prev.filter((g) => g.id !== group.id))
+      if (selectedGroup?.id === group.id) setSelectedGroup(null)
+      showToast("已刪除")
     }
   }
 
-  async function openManageMembers(group: Group) {
-    const res = await fetch(`/api/admin/groups/${group.id}`)
-    if (res.ok) {
-      setSelectedGroup(await res.json())
-      setShowManageMembers(true)
+  async function openManageMembers(group: any) {
+    if (group.isClass) {
+      const res = await fetch(`/api/classes/${group.id}/members`)
+      if (res.ok) {
+        const members = await res.json()
+        setSelectedGroup({
+          ...group,
+          members: members.map((m: any) => ({
+            id: m.id,
+            user: m.student
+          }))
+        })
+        setShowManageMembers(true)
+      }
+    } else {
+      const res = await fetch(`/api/admin/groups/${group.id}`)
+      if (res.ok) {
+        setSelectedGroup(await res.json())
+        setShowManageMembers(true)
+      }
     }
   }
 
   async function addMember(userId: string) {
     if (!selectedGroup) return
-    const res = await fetch(`/api/admin/groups/${selectedGroup.id}/members`, {
+    const endpoint = selectedGroup.isClass 
+      ? `/api/classes/${selectedGroup.id}/members` 
+      : `/api/admin/groups/${selectedGroup.id}/members`
+    
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
     })
     if (res.ok) {
-      const member: GroupMember = await res.json()
-      setSelectedGroup((prev) => prev ? { ...prev, members: [...prev.members, member] } : null)
+      const result = await res.json()
+      const newUser = selectedGroup.isClass ? result.student : result.user
+      setSelectedGroup((prev: any) => prev ? { 
+        ...prev, 
+        members: [...prev.members, { id: result.id, user: newUser }] 
+      } : null)
       setGroups((prev) => prev.map((g) => g.id === selectedGroup.id ? { ...g, _count: { members: g._count.members + 1 } } : g))
     }
   }
 
   async function removeMember(userId: string) {
     if (!selectedGroup) return
-    const res = await fetch(`/api/admin/groups/${selectedGroup.id}/members?userId=${userId}`, { method: "DELETE" })
-    if (res.status === 204) {
-      setSelectedGroup((prev) => prev ? { ...prev, members: prev.members.filter((m) => m.user.id !== userId) } : null)
+    const endpoint = selectedGroup.isClass
+      ? `/api/classes/${selectedGroup.id}/members?userId=${userId}`
+      : `/api/admin/groups/${selectedGroup.id}/members?userId=${userId}`
+    
+    const res = await fetch(endpoint, { method: "DELETE" })
+    if (res.status === 204 || res.ok) {
+      setSelectedGroup((prev: any) => prev ? { ...prev, members: prev.members.filter((m: any) => m.user.id !== userId) } : null)
       setGroups((prev) => prev.map((g) => g.id === selectedGroup.id ? { ...g, _count: { members: g._count.members - 1 } } : g))
     }
   }
@@ -337,15 +380,24 @@ export default function AdminGroupsPage() {
                     <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
                       {group.name}
                     </p>
-                    <span className={`text-caption px-2 py-0.5 rounded-full border ${GROUP_TYPE_COLORS[group.type]}`}>
-                      {GROUP_TYPE_LABELS[group.type]}
+                    <span className={`text-caption px-2 py-0.5 rounded-full border ${GROUP_TYPE_COLORS[group.type as GroupType]}`}>
+                      {GROUP_TYPE_LABELS[group.type as GroupType]}
                     </span>
+                    {group.isClass && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 border border-green-100 font-bold">
+                        具備積點與任務
+                      </span>
+                    )}
                   </div>
-                  {group.description && (
+                  {group.isClass ? (
+                    <p className="text-caption mt-0.5 font-mono" style={{ color: "var(--color-ink-400)" }}>
+                      課程代碼: {group.classCode}
+                    </p>
+                  ) : group.description ? (
                     <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-400)" }}>
                       {group.description}
                     </p>
-                  )}
+                  ) : null}
                   <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
                     {group._count.members} 位成員
                   </p>
