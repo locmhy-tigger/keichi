@@ -175,6 +175,97 @@ model User {
   activitiesCreated Activity[]          @relation("ActivitiesCreated")
   activityAssignments ActivityAssignment[] @relation("ActivityAssignments")
   groupMemberships    GroupMember[]
+
+  // Inventory & Assets
+  assetsLent        Asset[]             @relation("UserAssets")
+  assetLogs         AssetLog[]          @relation("LoggedBy")
+  bookings          Booking[]           @relation("UserBookings")
+}
+
+// ─────────────────────────────────────────
+// INVENTORY & ASSET MANAGEMENT (IT Committee)
+// ─────────────────────────────────────────
+
+enum AssetType {
+  IPAD
+  LAPTOP
+  PROJECTOR
+  OTHER
+}
+
+enum AssetStatus {
+  AVAILABLE
+  LENT
+  REPAIR
+  RETIRED
+}
+
+model Asset {
+  id           String      @id @default(cuid())
+  tag          String      @unique // School Asset Tag
+  name         String
+  type         AssetType
+  status       AssetStatus @default(AVAILABLE)
+  location     String?
+  assignedToId String?     // User ID if currently lent
+  purchaseDate DateTime?
+  lastChecked  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  assignedTo   User?       @relation("UserAssets", fields: [assignedToId], references: [id])
+  history      AssetLog[]
+
+  @@index([status])
+  @@index([type])
+}
+
+model AssetLog {
+  id        String      @id @default(cuid())
+  assetId   String
+  userId    String      // User who performed the action
+  action    String      // e.g., "CHECK_OUT", "CHECK_IN", "REPAIR_START"
+  fromStatus AssetStatus
+  toStatus   AssetStatus
+  note      String?     @db.Text
+  createdAt DateTime    @default(now())
+
+  asset     Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user      User  @relation("LoggedBy", fields: [userId], references: [id])
+
+  @@index([assetId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────
+// FACILITY & ROOM BOOKING
+// ─────────────────────────────────────────
+
+model Resource {
+  id          String    @id @default(cuid())
+  name        String    // e.g., "Computer Lab (Room 201)"
+  type        String    // e.g., "LAB", "HALL", "STEM"
+  capacity    Int?
+  bookings    Booking[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Booking {
+  id         String   @id @default(cuid())
+  resourceId String
+  userId     String
+  startTime  DateTime
+  endTime    DateTime
+  purpose    String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  user       User     @relation("UserBookings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, startTime])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────

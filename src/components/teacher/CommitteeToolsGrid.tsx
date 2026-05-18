@@ -38,9 +38,9 @@ const COMMITTEES: Committee[] = [
   {
     slug:         "it",
     label:        "資訊委員",
-    description:  "QR 碼生成、課堂計時器",
+    description:  "QR 碼生成、課堂計時器、設備管理",
     colorVar:     "it",
-    quickActions: ["QR 碼", "計時器"],
+    quickActions: ["QR 碼", "計時器", "設備管理"],
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-it)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
