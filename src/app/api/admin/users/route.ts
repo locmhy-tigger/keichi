@@ -22,6 +22,7 @@ export async function GET() {
       },
       enrollments: {
         select: {
+          classNumber: true,
           class: { select: { id: true, name: true, classCode: true } }
         }
       }
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "TEACHER") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   try {
-    const { email, name, role, password, committees, classCode } = await req.json()
+    const { email, name, role, password, committees, classCode, classNumber } = await req.json()
 
     if (!email) return NextResponse.json({ error: "Email is required" }, { status: 400 })
 
@@ -62,15 +63,17 @@ export async function POST(req: NextRequest) {
 
     if (classCode && role === "STUDENT") {
       const codes = Array.isArray(classCode) ? classCode : [classCode]
+      const nums  = Array.isArray(classNumber) ? classNumber : [classNumber]
       const classes = await prisma.class.findMany({
         where: { classCode: { in: codes } }
       })
       
       if (classes.length > 0) {
         await prisma.classEnrollment.createMany({
-          data: classes.map(cls => ({
+          data: classes.map((cls, idx) => ({
             classId: cls.id,
-            studentId: user.id
+            studentId: user.id,
+            classNumber: nums[idx] || null
           }))
         })
       }

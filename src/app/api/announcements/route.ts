@@ -11,6 +11,7 @@ const createSchema = z.object({
   priority:  z.enum(["NORMAL", "IMPORTANT", "URGENT"]).default("NORMAL"),
   classId:   z.string().optional(),
   pinned:    z.boolean().default(false),
+  publishAt: z.string().optional().transform(v => v ? new Date(v) : undefined),
 })
 
 export async function GET(req: NextRequest) {
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (session.user.role === "TEACHER") {
     if (target) whereClause.target = target
   } else {
-    // STUDENT: can only see ALL, or their specific CLASS
+    // STUDENT: can only see ALL, or their specific CLASS, and only if publishAt <= now
     const studentEnrollments = await prisma.classEnrollment.findMany({
       where: { studentId: session.user.id },
       select: { classId: true }
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
     const classIds = studentEnrollments.map(e => e.classId)
 
     whereClause = {
+      publishAt: { lte: new Date() },
       OR: [
         { target: "ALL" },
         { target: "CLASS", classId: { in: classIds } }
@@ -46,9 +48,9 @@ export async function GET(req: NextRequest) {
       author: { select: { id: true, name: true, image: true } },
     },
     orderBy: [
-      { priority:  "desc" }, // URGENT first (enum value order needs to be careful, but desc works if URGENT > NORMAL)
+      { priority:  "desc" },
       { pinned:    "desc" },
-      { createdAt: "desc" },
+      { publishAt: "desc" },
     ],
   })
 

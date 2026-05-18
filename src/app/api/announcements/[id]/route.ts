@@ -10,6 +10,7 @@ const patchSchema = z.object({
   target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "CLASS"]).optional(),
   priority:  z.enum(["NORMAL", "IMPORTANT", "URGENT"]).optional(),
   pinned:    z.boolean().optional(),
+  publishAt: z.string().optional().transform(v => v ? new Date(v) : undefined),
 })
 
 async function getOwned(id: string, userId: string) {

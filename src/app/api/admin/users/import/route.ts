@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = "", classesRaw = "", passwordRaw = ""] = parts
+    const [email, name, roleRaw, committeesRaw = "", chairOfRaw = "", classesRaw = "", classNumbersRaw = "", passwordRaw = ""] = parts
     const trimmedEmail = email.trim()
     const trimmedName  = name.trim()
     const role         = roleRaw.trim() as Role
@@ -67,9 +67,10 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    const committees = parseCommittees(committeesRaw)
-    const chairOf    = parseCommittees(chairOfRaw)
-    const classes    = classesRaw.split("|").map((s) => s.trim()).filter(Boolean)
+    const committees   = parseCommittees(committeesRaw)
+    const chairOf      = parseCommittees(chairOfRaw)
+    const classCodes   = classesRaw.split("|").map((s) => s.trim()).filter(Boolean)
+    const classNumbers = classNumbersRaw.split("|").map((s) => s.trim())
 
     try {
       const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } })
@@ -116,10 +117,17 @@ export async function POST(req: NextRequest) {
       // Replace class enrollments
       if (role === "STUDENT") {
         await prisma.classEnrollment.deleteMany({ where: { studentId: userId } })
-        const enrollmentData = classes
-          .map((code) => classMap.get(code))
-          .filter((id): id is string => !!id)
-          .map((classId) => ({ classId, studentId: userId }))
+        const enrollmentData = classCodes
+          .map((code, idx) => {
+            const classId = classMap.get(code)
+            if (!classId) return null
+            return { 
+              classId, 
+              studentId: userId,
+              classNumber: classNumbers[idx] || null
+            }
+          })
+          .filter((d): d is { classId: string; studentId: string; classNumber: string | null } => !!d)
 
         if (enrollmentData.length > 0) {
           await prisma.classEnrollment.createMany({ data: enrollmentData })

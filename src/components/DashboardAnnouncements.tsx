@@ -7,6 +7,7 @@ type Announcement = {
   title: string
   body: string
   priority: "NORMAL" | "IMPORTANT" | "URGENT"
+  publishAt: string
   createdAt: string
 }
 
@@ -21,8 +22,16 @@ export function DashboardAnnouncements() {
         if (!Array.isArray(data)) { setLoading(false); return }
         const today = new Date()
         today.setHours(0, 0, 0, 0)
-        // Filter for today's announcements
-        const filtered = data.filter((a: any) => new Date(a.createdAt) >= today)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        
+        // Filter for announcements scheduled for today (or before if we want to show all active)
+        // User asked "can it choose the the date of posting", implying they want to see notices for a specific date.
+        // Let's show notices that are published between today 00:00 and tomorrow 00:00.
+        const filtered = data.filter((a: any) => {
+          const pubDate = new Date(a.publishAt || a.createdAt)
+          return pubDate >= today && pubDate < tomorrow
+        })
         setAnnouncements(filtered)
         setLoading(false)
       })

@@ -25,17 +25,56 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (studentList) {
     const lines = studentList.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
     if (lines.length > 0) {
-      const resolvedUsers = await prisma.user.findMany({
-        where: {
-          OR: [
-            { email: { in: lines } },
-            { name:  { in: lines } }
-          ],
-          role: "STUDENT"
-        },
-        select: { id: true }
-      })
-      targetStudentIds = Array.from(new Set([...targetStudentIds, ...resolvedUsers.map(u => u.id)]))
+      const resolvedIds: string[] = []
+      
+      for (const line of lines) {
+        // Try to match email directly
+        if (line.includes("@")) {
+          const u = await prisma.user.findUnique({ where: { email: line, role: "STUDENT" }, select: { id: true } })
+          if (u) resolvedIds.push(u.id)
+          continue
+        }
+
+        // Try to parse "Class No Name" (e.g. "4A 15 Chan Tai Man")
+        const parts = line.split(/\s+/).filter(Boolean)
+        if (parts.length >= 2) {
+          const className = parts[0]
+          const classNo   = parts[1]
+          const maybeName = parts.slice(2).join(" ")
+
+          // Find class first
+          const cls = await prisma.class.findFirst({
+            where: { name: { equals: className, mode: "insensitive" } },
+            select: { id: true }
+          })
+
+          if (cls) {
+            // Find enrollment by class and number
+            const enrollment = await prisma.classEnrollment.findFirst({
+              where: {
+                classId: cls.id,
+                classNumber: classNo
+              },
+              select: { studentId: true }
+            })
+            if (enrollment) {
+              resolvedIds.push(enrollment.studentId)
+              continue
+            }
+          }
+        }
+
+        // Fallback: match by full name
+        const users = await prisma.user.findMany({
+          where: { name: { equals: line, mode: "insensitive" }, role: "STUDENT" },
+          select: { id: true }
+        })
+        if (users.length === 1) {
+          resolvedIds.push(users[0].id)
+        }
+      }
+      
+      targetStudentIds = Array.from(new Set([...targetStudentIds, ...resolvedIds]))
     }
   }
 

@@ -103,6 +103,7 @@ export default function CalendarPage() {
 
   // Import state
   const icsInputRef  = useRef<HTMLInputElement>(null)
+  const [importCommittee, setImportCommittee] = useState<CommitteeType | "">("")
   const [importing,    setImporting]    = useState(false)
   const [importResult, setImportResult] = useState<IcsImportResult | null>(null)
 
@@ -214,6 +215,7 @@ export default function CalendarPage() {
             startDate:   ev.startDate,
             endDate:     ev.endDate,
             description: ev.description,
+            committee:   importCommittee || undefined,
           }),
         })
         if (res.ok) {
@@ -282,14 +284,29 @@ export default function CalendarPage() {
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>共 {events.length} 個活動</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => icsInputRef.current?.click()}
-            disabled={importing}
-            className="px-4 py-2 rounded-input text-body border"
-            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
-          >
-            {importing ? "匯入中…" : "匯入 .ics"}
-          </button>
+          <div className="flex items-center gap-2 border rounded-input px-3" style={{ border: "1px solid var(--color-border)" }}>
+            <span className="text-caption text-gray-500 whitespace-nowrap">匯入至:</span>
+            <select
+              value={importCommittee}
+              onChange={(e) => setImportCommittee(e.target.value as CommitteeType | "")}
+              className="bg-transparent text-caption py-1.5 outline-none font-medium"
+              style={{ color: "var(--color-ink-700)" }}
+            >
+              <option value="">— 全校 —</option>
+              <option value="ADMIN">行政</option>
+              <option value="DISCIPLINE">訓育</option>
+              <option value="IT">資訊科技</option>
+              <option value="CURRICULUM">課程發展</option>
+            </select>
+            <button
+              onClick={() => icsInputRef.current?.click()}
+              disabled={importing}
+              className="text-body font-medium transition-opacity pl-2 ml-2 border-l"
+              style={{ borderLeft: "1px solid var(--color-border)", color: "var(--color-accent)", opacity: importing ? 0.5 : 1 }}
+            >
+              {importing ? "中…" : "匯入 .ics"}
+            </button>
+          </div>
           <input
             ref={icsInputRef}
             type="file"

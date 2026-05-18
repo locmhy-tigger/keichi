@@ -57,26 +57,49 @@ function StudentSearch({ onAssign, existingIds }: {
   existingIds: Set<string>
 }) {
   const [query,   setQuery]   = useState("")
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+  const [classId, setClassId] = useState("")
   const [results, setResults] = useState<Student[]>([])
   const [selected, setSelected] = useState<Student[]>([])
   const [assigning, setAssigning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const search = useCallback(async (q: string) => {
-    const url = q ? `/api/users?q=${encodeURIComponent(q)}` : "/api/users"
-    const res  = await fetch(url)
+  useEffect(() => {
+    fetch("/api/admin/classes").then(r => r.ok && r.json()).then(setClasses)
+  }, [])
+
+  const search = useCallback(async (q: string, cid: string) => {
+    let url = "/api/admin/users?"
+    if (q) url += `q=${encodeURIComponent(q)}&`
+    if (cid) url += `classId=${cid}`
+    
+    // We'll update the /api/admin/users to support these filters or use a search endpoint
+    // For now, let's assume we use the admin users list and filter client-side if q/cid is small
+    const res  = await fetch("/api/admin/users")
     if (res.ok) {
-      const data: (Student & { role: string })[] = await res.json()
-      // Show all users (teachers visible for now; in production filter by role=STUDENT)
-      setResults(data.filter((u) => !existingIds.has(u.id) && !selected.some((s) => s.id === u.id)))
+      const data: any[] = await res.json()
+      let filtered = data.filter(u => u.role === "STUDENT" && !existingIds.has(u.id) && !selected.some(s => s.id === u.id))
+      
+      if (cid) {
+        filtered = filtered.filter(u => u.enrollments?.some((e: any) => e.class.id === cid))
+      }
+      if (q) {
+        const lq = q.toLowerCase()
+        filtered = filtered.filter(u => 
+          u.name?.toLowerCase().includes(lq) || 
+          u.email?.toLowerCase().includes(lq) ||
+          u.enrollments?.some((e: any) => e.classNumber?.includes(lq))
+        )
+      }
+      setResults(filtered)
     }
   }, [existingIds, selected])
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => search(query), 300)
+    timerRef.current = setTimeout(() => search(query, classId), 300)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [query, search])
+  }, [query, classId, search])
 
   const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
@@ -92,26 +115,51 @@ function StudentSearch({ onAssign, existingIds }: {
               <button type="button" onClick={() => setSelected((prev) => prev.filter((x) => x.id !== s.id))}>×</button>
             </span>
           ))}
+          <button 
+            onClick={() => setSelected([])}
+            className="text-[10px] text-gray-400 hover:underline ml-1"
+          >
+            清除全部
+          </button>
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="w-full sm:w-40">
+          <select
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="w-full px-3 py-2 text-caption rounded-input border outline-none h-[38px]"
+            style={inputStyle}
+          >
+            <option value="">所有班別</option>
+            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         <div className="relative flex-1">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜尋學生姓名…"
-            className="w-full px-3 py-2 text-body rounded-input border outline-none text-caption"
+            placeholder="搜尋姓名或學號…"
+            className="w-full px-3 py-2 text-body rounded-input border outline-none text-caption h-[38px]"
             style={inputStyle}
           />
           {results.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 rounded-input shadow-card overflow-hidden"
+            <div className="absolute z-10 w-full mt-1 rounded-input shadow-card overflow-hidden max-h-60 overflow-y-auto"
               style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
-              {results.slice(0, 8).map((u) => (
+              {results.slice(0, 20).map((u) => (
                 <button key={u.id} type="button"
                   onClick={() => { setSelected((prev) => [...prev, u]); setQuery(""); setResults([]) }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-surface-2)] transition-colors">
-                  <span className="text-body" style={{ color: "var(--color-ink-900)" }}>{u.name ?? u.email}</span>
+                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--color-surface-2)] transition-colors">
+                  <div>
+                    <span className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>{u.name ?? u.email}</span>
+                    <span className="text-[10px] text-gray-400 ml-2">{u.email}</span>
+                  </div>
+                  {u.enrollments?.[0] && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                      {u.enrollments[0].class.name} ({u.enrollments[0].classNumber ?? "--"})
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -129,16 +177,16 @@ function StudentSearch({ onAssign, existingIds }: {
               body:    JSON.stringify({ studentIds: selected.map((s) => s.id) }),
             })
             if (res.ok) {
-              const { assigned, clashes } = await res.json()
-              onAssign(assigned, clashes)
+              const { assignedCount, clashes } = await res.json()
+              onAssign([], clashes)
               setSelected([])
             }
             setAssigning(false)
           }}
-          className="px-4 py-2 text-body rounded-input text-white shrink-0"
+          className="px-6 py-2 text-body rounded-input text-white shrink-0 h-[38px] font-medium"
           style={{ background: "var(--color-accent)", opacity: selected.length === 0 ? 0.5 : 1 }}
         >
-          {assigning ? "指派中…" : "指派"}
+          {assigning ? "指派中…" : "指派選擇"}
         </button>
       </div>
     </div>
@@ -167,28 +215,45 @@ function BulkAssignModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-        <form onSubmit={submit} className="p-6 space-y-4">
-          <h3 className="text-h3">批量指派學生</h3>
-          <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
-            請貼上從 Excel 複製的學生姓名或 Email 列表（每行一個）。
-          </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <form onSubmit={submit} className="p-8 space-y-5">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">批量指派 (Excel 貼上)</h3>
+            <p className="text-sm mt-1" style={{ color: "var(--color-ink-500)" }}>
+              系統會自動根據班別、學號或姓名匹配學生。
+            </p>
+          </div>
+          
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+            <p className="text-xs text-blue-700 font-medium mb-1">支援格式範例：</p>
+            <ul className="text-[11px] text-blue-600 space-y-0.5 list-disc list-inside">
+              <li>4A 15 陳大文 (班別 + 學號 + 姓名)</li>
+              <li>4A 15 (班別 + 學號)</li>
+              <li>陳大文 (姓名)</li>
+              <li>chan.tai.man@school.hk (Email)</li>
+            </ul>
+          </div>
+
           <textarea
             required
-            rows={8}
+            rows={10}
             value={list}
             onChange={(e) => setList(e.target.value)}
-            className="w-full px-3 py-2 text-caption rounded-input border outline-none font-mono"
+            className="w-full px-4 py-3 text-sm rounded-xl border outline-none font-mono focus:ring-2 focus:ring-blue-500 transition-all"
             style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
-            placeholder="陳大文&#10;lee.siu.ming@school.hk&#10;..."
+            placeholder="請直接從 Excel 複製列並在此貼上..."
           />
+
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-input border text-body">取消</button>
+            <button type="button" onClick={onClose} 
+              className="flex-1 py-2.5 rounded-xl border text-sm font-medium hover:bg-gray-50 transition-colors">
+              取消
+            </button>
             <button type="submit" disabled={busy || !list.trim()} 
-              className="flex-1 py-2 rounded-input bg-blue-600 text-white text-body font-medium disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold disabled:opacity-50 hover:opacity-90 transition-opacity"
               style={{ background: "var(--color-accent)" }}>
-              {busy ? "處理中…" : "確認指派"}
+              {busy ? "正在匹配並指派…" : "確認並批量指派"}
             </button>
           </div>
         </form>

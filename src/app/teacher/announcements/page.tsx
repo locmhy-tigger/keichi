@@ -16,6 +16,7 @@ type Announcement = {
   pinned:    boolean
   priority:  Priority
   classId:   string | null
+  publishAt: string
   createdAt: string
   author:    { id: string; name: string | null; image: string | null }
 }
@@ -40,11 +41,17 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`
 }
 
+function toLocalISO(dateStr: string): string {
+  const d = new Date(dateStr)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [classes,       setClasses]       = useState<{ id: string; name: string }[]>([])
   const [loading,       setLoading]       = useState(true)
   const [showForm,      setShowForm]      = useState(false)
+  const [editingId,     setEditingId]     = useState<string | null>(null)
 
   // Form state
   const [title,   setTitle]   = useState("")
@@ -53,6 +60,7 @@ export default function AnnouncementsPage() {
   const [classId, setClassId] = useState("")
   const [priority, setPriority] = useState<Priority>("NORMAL")
   const [pinned,       setPinned]       = useState(false)
+  const [publishAt,    setPublishAt]    = useState(new Date().toISOString().slice(0, 16))
   const [syncToGoogle, setSyncToGoogle] = useState(false)
   const [saving,       setSaving]       = useState(false)
 
@@ -72,17 +80,53 @@ export default function AnnouncementsPage() {
   async function publish(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const res = await fetch("/api/announcements", {
-      method:  "POST",
+
+    const payload = { 
+      title, 
+      body, 
+      target, 
+      priority, 
+      pinned, 
+      syncToGoogle, 
+      publishAt: new Date(publishAt).toISOString(),
+      classId: target === "CLASS" ? classId : undefined 
+    }
+
+    const res = await fetch(editingId ? `/api/announcements/${editingId}` : "/api/announcements", {
+      method:  editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body, target, priority, pinned, syncToGoogle, classId: target === "CLASS" ? classId : undefined }),
+      body: JSON.stringify(payload),
     })
+
     if (res.ok) {
-      const created = await res.json()
-      setAnnouncements((prev) => [created, ...prev])
-      setTitle(""); setBody(""); setTarget("ALL"); setPriority("NORMAL"); setClassId(""); setPinned(false); setSyncToGoogle(false); setShowForm(false)
+      const result = await res.json()
+      if (editingId) {
+        setAnnouncements((prev) => prev.map(a => a.id === editingId ? result : a))
+      } else {
+        setAnnouncements((prev) => [result, ...prev])
+      }
+      resetForm()
     }
     setSaving(false)
+  }
+
+  function resetForm() {
+    setTitle(""); setBody(""); setTarget("ALL"); setPriority("NORMAL"); setClassId(""); 
+    setPinned(false); setSyncToGoogle(false); setShowForm(false); setEditingId(null);
+    setPublishAt(new Date().toISOString().slice(0, 16))
+  }
+
+  function startEdit(ann: Announcement) {
+    setEditingId(ann.id)
+    setTitle(ann.title)
+    setBody(ann.body)
+    setTarget(ann.target)
+    setPriority(ann.priority)
+    setPinned(ann.pinned)
+    setClassId(ann.classId ?? "")
+    setPublishAt(toLocalISO(ann.publishAt))
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   async function deleteAnn(id: string) {
@@ -210,6 +254,20 @@ export default function AnnouncementsPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>發佈日期</label>
+              <input
+                type="datetime-local"
+                value={publishAt}
+                onChange={(e) => setPublishAt(e.target.value)}
+                className="w-full px-3 py-2 text-body rounded-input border"
+                style={{
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-surface)",
+                  color: "var(--color-ink-900)",
+                }}
+              />
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -220,14 +278,24 @@ export default function AnnouncementsPage() {
             />
             <span className="text-body" style={{ color: "var(--color-ink-700)" }}>置頂公告</span>
           </label>
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-2 gap-3">
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-6 py-2 text-body font-medium rounded-input border w-full sm:w-auto hover:bg-gray-50 transition-colors"
+                style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
+              >
+                取消編輯
+              </button>
+            )}
             <button
               type="submit"
               disabled={saving || (target === "CLASS" && !classId)}
               className="px-6 py-2 text-body font-medium rounded-input text-white w-full sm:w-auto"
               style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}
             >
-              {saving ? "發佈中…" : "發佈"}
+              {saving ? (editingId ? "更新中…" : "發佈中…") : (editingId ? "更新公告" : "發佈")}
             </button>
           </div>
         </form>
@@ -281,10 +349,21 @@ export default function AnnouncementsPage() {
                     {ann.body}
                   </p>
                   <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>
-                    {ann.author.name ?? "老師"} · {formatDate(ann.createdAt)}
+                    {ann.author.name ?? "老師"} · {formatDate(ann.publishAt)}
+                    {new Date(ann.publishAt) > new Date() && (
+                      <span className="ml-2 text-blue-500 font-medium">預約發佈</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    onClick={() => startEdit(ann)}
+                    className="text-caption px-2.5 py-1 rounded-input border transition-colors hover:bg-gray-50"
+                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
+                    title="編輯"
+                  >
+                    ✏️
+                  </button>
                   <button
                     onClick={() => togglePin(ann)}
                     className="text-caption px-2.5 py-1 rounded-input border transition-colors"
