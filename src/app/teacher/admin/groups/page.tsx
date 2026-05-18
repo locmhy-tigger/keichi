@@ -156,6 +156,7 @@ export default function AdminGroupsPage() {
           id: result.id, 
           name: result.name, 
           type: newGroup.type, 
+          description: null, // Ensure Group type consistency
           isClass: true,
           classCode: result.classCode,
           _count: { members: 0 } 
