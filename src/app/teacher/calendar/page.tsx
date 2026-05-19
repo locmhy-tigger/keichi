@@ -238,6 +238,19 @@ export default function CalendarPage() {
     setImportResult({ imported, skipped, errors })
     setImporting(false)
     if (icsInputRef.current) icsInputRef.current.value = ""
+
+    window.alert(`åŒ¯å…¥å®Œæˆï¼
+å·²æ–°å¢ž: ${imported}
+å·²ç•¥éŽ: ${skipped}${errors.length > 0 ? `\néŒ¯èª¤: ${errors.join(", ")}` : ""}`)
+
+    fetch("/api/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Calendar ICS Import",
+        content: `Imported ${imported} events from ICS file. Skipped ${skipped}.`
+      })
+    }).catch(err => console.error("Logging failed:", err))
   }
 
   function exportIcs() {
