@@ -46,6 +46,8 @@ type Group = {
   name: string
   type: GroupType
   description: string | null
+  isClass?: boolean
+  classCode?: string
   _count: { members: number }
 }
 
@@ -241,6 +243,40 @@ export default function AdminGroupsPage() {
     }
   }
 
+  async function addToCommittee(userId: string, committee: CommitteeType, isChair: boolean) {
+    setSaving(`${userId}-${committee}`)
+    const res = await fetch("/api/admin/committee-roles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, committee, isChair }),
+    })
+    if (res.ok) {
+      setTeachers((prev) => prev.map((t) =>
+        t.id === userId
+          ? { ...t, committeeRoles: [...t.committeeRoles, { committee, isChair }] }
+          : t
+      ))
+      showToast("已新增")
+    }
+    setSaving(null)
+  }
+
+  async function removeFromCommittee(userId: string, committee: CommitteeType) {
+    setSaving(`${userId}-${committee}`)
+    const res = await fetch(`/api/admin/committee-roles?userId=${userId}&committee=${committee}`, {
+      method: "DELETE",
+    })
+    if (res.ok) {
+      setTeachers((prev) => prev.map((t) =>
+        t.id === userId
+          ? { ...t, committeeRoles: t.committeeRoles.filter((r) => r.committee !== committee) }
+          : t
+      ))
+      showToast("已移除")
+    }
+    setSaving(null)
+  }
+
   const filteredGroups = groups.filter((g) => g.type === activeGroupType)
   const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]
 
@@ -421,7 +457,7 @@ export default function AdminGroupsPage() {
                     管理成員
                   </button>
                   <button
-                    onClick={() => deleteGroup(group.id)}
+                    onClick={() => deleteGroup(group)}
                     className="p-1.5 opacity-40 hover:opacity-100 transition-opacity"
                     style={{ color: "var(--color-discipline, #dc2626)" }}
                   >
