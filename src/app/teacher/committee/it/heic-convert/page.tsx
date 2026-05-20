@@ -28,9 +28,11 @@ export default function HeicConvertPage() {
       try {
         const mod = await import("heic2any")
         const heic2any = (mod as any).default ?? mod
-        const result  = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 })
+        // Force image/heic MIME type — browsers often set it to application/octet-stream
+        const heicBlob = new Blob([await file.arrayBuffer()], { type: "image/heic" })
+        const result   = await heic2any({ blob: heicBlob, toType: "image/jpeg", quality: 0.92 })
         // heic2any returns Blob[] for burst/multi-image files, Blob for single
-        const blobs   = Array.isArray(result) ? result : [result]
+        const blobs    = Array.isArray(result) ? result : [result]
         for (let j = 0; j < blobs.length; j++) {
           const blob   = blobs[j] as Blob
           const url    = URL.createObjectURL(blob)
