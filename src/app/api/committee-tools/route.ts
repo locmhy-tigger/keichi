@@ -14,17 +14,12 @@ const createSchema = z.object({
   active:      z.boolean().default(true),
 })
 
-async function canEdit(userId: string, committee: string): Promise<boolean> {
-  const role = await prisma.committeeRole.findFirst({
-    where: {
-      userId,
-      OR: [
-        { committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" },
-        { committee: "ADMIN" },
-      ],
-    },
+async function canEdit(userId: string, role: string, committee: string): Promise<boolean> {
+  if (role === "ADMIN") return true
+  const committeeRole = await prisma.committeeRole.findFirst({
+    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM", isChair: true },
   })
-  return !!role
+  return !!committeeRole
 }
 
 export async function GET(req: NextRequest) {
@@ -32,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const committee = new URL(req.url).searchParams.get("committee")
-  const isAdmin   = session.user.role === "TEACHER"
+  const isAdmin   = session.user.role === "ADMIN" || session.user.role === "TEACHER"
 
   const tools = await prisma.committeeTool.findMany({
     where: {
@@ -53,8 +48,8 @@ export async function POST(req: NextRequest) {
 
   const data = createSchema.parse(await req.json())
 
-  if (!(await canEdit(session.user.id, data.committee))) {
-    return NextResponse.json({ error: "Only committee members or admins can add tools" }, { status: 403 })
+  if (!(await canEdit(session.user.id, session.user.role, data.committee))) {
+    return NextResponse.json({ error: "管理員或組長專屬功能" }, { status: 403 })
   }
 
   const tool = await prisma.committeeTool.create({

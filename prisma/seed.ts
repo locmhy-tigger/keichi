@@ -89,7 +89,26 @@ async function main() {
     skipDuplicates: true,
   })
 
-  console.log("Seed completed: demo accounts + class + todos created.")
+  // Seed "活動文件" EMBED tool for ADMIN committee
+  const existingTool = await prisma.committeeTool.findFirst({
+    where: { committee: "ADMIN", label: "活動文件" },
+  })
+  if (!existingTool) {
+    await prisma.committeeTool.create({
+      data: {
+        committee:   "ADMIN",
+        label:       "活動文件",
+        description: "活動通知書生成系統 (KCnotice)",
+        type:        "EMBED",
+        content:     "https://kcnotice.zeabur.app/",
+        order:       1,
+        active:      true,
+        createdById: admin.id,
+      },
+    })
+  }
+
+  console.log("Seed completed: demo accounts + class + todos + committee tools created.")
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect())
