@@ -112,6 +112,9 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState("")
   const [editEvent,   setEditEvent]   = useState<CalendarEvent | null>(null)
 
+  // Overflow day popover state
+  const [overflowDay, setOverflowDay] = useState<string | null>(null)
+
   // Form state
   const [formTitle,     setFormTitle]     = useState("")
   const [formStartDate, setFormStartDate] = useState("")
@@ -347,27 +350,42 @@ export default function CalendarPage() {
       {/* Import result */}
       {importResult && (
         <div
-          className="card p-4 mb-4 flex items-start justify-between gap-4"
+          className="card p-4 mb-4"
           style={{ borderLeft: `4px solid ${importResult.errors.length > 0 ? "var(--color-discipline)" : "var(--color-accent)"}` }}
         >
-          <div className="space-y-1">
-            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
-              匯入完成：{importResult.imported} 個活動已新增
-              {importResult.skipped > 0 && `，${importResult.skipped} 個略過`}
-            </p>
-            {importResult.errors.length > 0 && (
-              <p className="text-caption" style={{ color: "var(--color-discipline)" }}>
-                錯誤：{importResult.errors.join("、")}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <p className="text-body font-medium" style={{ color: "var(--color-curriculum)" }}>
+                ✓ 已匯入 {importResult.imported} 個活動
               </p>
-            )}
+              {importResult.skipped > 0 && (
+                <p className="text-body" style={{ color: "var(--color-admin)" }}>
+                  ⚠ 已略過 {importResult.skipped} 個（重複或格式錯誤）
+                </p>
+              )}
+              {importResult.errors.length > 0 && (
+                <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                  {importResult.errors.slice(0, 5).map((err, i) => (
+                    <li key={i} className="text-caption" style={{ color: "var(--color-discipline)" }}>
+                      {err}
+                    </li>
+                  ))}
+                  {importResult.errors.length > 5 && (
+                    <li className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                      …還有 {importResult.errors.length - 5} 個錯誤
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setImportResult(null)}
+              className="text-body shrink-0 px-2"
+              style={{ color: "var(--color-ink-400)" }}
+            >
+              × 關閉
+            </button>
           </div>
-          <button
-            onClick={() => setImportResult(null)}
-            className="text-caption shrink-0"
-            style={{ color: "var(--color-ink-400)" }}
-          >
-            ×
-          </button>
         </div>
       )}
 
@@ -425,7 +443,7 @@ export default function CalendarPage() {
                     {cell.date || ""}
                   </div>
                   <div className="space-y-0.5">
-                    {dayEvents.slice(0, 3).map((ev) => (
+                    {dayEvents.slice(0, 2).map((ev) => (
                       <div
                         key={ev.id}
                         onClick={(e) => { e.stopPropagation(); openEdit(ev) }}
@@ -436,9 +454,13 @@ export default function CalendarPage() {
                         {ev.title}
                       </div>
                     ))}
-                    {dayEvents.length > 3 && (
-                      <div className="text-[10px]" style={{ color: "var(--color-ink-400)" }}>
-                        +{dayEvents.length - 3}
+                    {dayEvents.length > 2 && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); setOverflowDay(cell.iso) }}
+                        className="text-[10px] px-1 py-0.5 rounded cursor-pointer"
+                        style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                      >
+                        +{dayEvents.length - 2} 更多
                       </div>
                     )}
                   </div>
@@ -448,6 +470,76 @@ export default function CalendarPage() {
           </div>
         )}
       </div>
+
+      {/* Overflow day modal */}
+      {overflowDay && (() => {
+        const overflowEvents = eventsOnDay(overflowDay)
+        const [oy, om, od] = overflowDay.split("-").map(Number)
+        const dateLabel = `${oy}年${om}月${od}日`
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/30" onClick={() => setOverflowDay(null)} />
+            <div className="relative card p-5 w-full max-w-sm z-10 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-h3">{dateLabel}</h3>
+                <button
+                  onClick={() => setOverflowDay(null)}
+                  className="text-body w-7 h-7 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)]"
+                  style={{ color: "var(--color-ink-400)" }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-2">
+                {overflowEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="flex items-center gap-2 p-2 rounded-input"
+                    style={{ background: "var(--color-surface-2)" }}
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: ev.committee ? COMMITTEE_COLORS[ev.committee] : "var(--color-accent)" }}
+                    />
+                    <span className="text-body flex-1 truncate" style={{ color: "var(--color-ink-900)" }}>{ev.title}</span>
+                    {ev.committee && (
+                      <span
+                        className="text-caption px-1.5 py-0.5 rounded shrink-0 text-white"
+                        style={{ background: COMMITTEE_COLORS[ev.committee], fontSize: "10px" }}
+                      >
+                        {COMMITTEE_LABELS[ev.committee]}
+                      </span>
+                    )}
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => { setOverflowDay(null); openEdit(ev) }}
+                        className="text-caption px-2 py-0.5 rounded"
+                        style={{ color: "var(--color-accent)" }}
+                      >
+                        編輯
+                      </button>
+                      <button
+                        onClick={() => deleteEvent(ev.id)}
+                        className="text-caption px-2 py-0.5 rounded"
+                        style={{ color: "var(--color-discipline)" }}
+                      >
+                        刪除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => { setOverflowDay(null); openCreate(overflowDay) }}
+                className="w-full py-2 text-body font-medium rounded-input text-white"
+                style={{ background: "var(--color-accent)" }}
+              >
+                + 新增活動
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Create/Edit modal */}
       {showCreate && (

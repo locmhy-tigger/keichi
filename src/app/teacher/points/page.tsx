@@ -28,7 +28,10 @@ export default function TeacherPointsPage() {
       fetch(`/api/classes/${classId}/members`),
     ])
     if (lbRes.ok) setLeaderboard(await lbRes.json())
-    if (membersRes.ok) setMembers(await membersRes.json())
+    if (membersRes.ok) {
+      const data = await membersRes.json()
+      setMembers(data.map((e: any) => e.student))
+    }
   }
 
   useEffect(() => {

@@ -1,7 +1,8 @@
-import { exec } from 'child_process';
+import { exec } from 'child_process'
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { isTeacherOrAdmin } from "@/lib/roles"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session?.user || session.user.role !== "TEACHER") {
+  if (!session?.user || !isTeacherOrAdmin(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -63,11 +64,10 @@ export async function POST(req: NextRequest) {
     include: { author: { select: { id: true, name: true } } },
   })
 
-  // Logging hook
-  const logTitle = "Calendar Event Created";
-  const logContent = `Event "${event.title}" created by ${session.user.name} (${session.user.id})`;
-  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js");
-  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`);
+  const logTitle = "Calendar Event Created"
+  const logContent = `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
+  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js")
+  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`)
 
   return NextResponse.json(event, { status: 201 })
 }

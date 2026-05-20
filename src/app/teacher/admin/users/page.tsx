@@ -21,7 +21,7 @@ type User = {
   name:           string | null
   email:          string | null
   image:          string | null
-  role:           "TEACHER" | "STUDENT"
+  role:           "TEACHER" | "STUDENT" | "ADMIN"
   createdAt:      string
   committeeRoles: CommitteeRole[]
   enrollments:    { class: ClassInfo }[]
@@ -85,7 +85,7 @@ export default function AdminUsersPage() {
   }
 
   async function toggleRole(user: User) {
-    const newRole = user.role === "TEACHER" ? "STUDENT" : "TEACHER"
+    const newRole = user.role === "STUDENT" ? "TEACHER" : user.role === "TEACHER" ? "ADMIN" : "STUDENT"
     setSaving(user.id)
     const res = await fetch(`/api/admin/users/${user.id}`, {
       method: "PATCH",
@@ -155,6 +155,7 @@ export default function AdminUsersPage() {
     if (importRef.current) importRef.current.value = ""
   }
 
+  const admins   = users.filter((u) => u.role === "ADMIN")
   const teachers = users.filter((u) => u.role === "TEACHER")
   const students = users.filter((u) => u.role === "STUDENT")
 
@@ -236,6 +237,31 @@ export default function AdminUsersPage() {
         <div className="text-center py-16 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
       ) : (
         <div className="space-y-8">
+          {admins.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-h2">管理員</h2>
+                <span className="text-caption px-2 py-0.5 rounded-pill font-medium" style={{ background: "var(--color-discipline-soft)", color: "var(--color-discipline)" }}>
+                  {admins.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {admins.map((user) => (
+                  <UserRow
+                    key={user.id}
+                    user={user}
+                    saving={saving}
+                    onToggleRole={toggleRole}
+                    onDelete={deleteUser}
+                    onAddCommittee={addToCommittee}
+                    onRemoveCommittee={removeFromCommittee}
+                    onToggleChair={toggleChair}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-h2">教職員</h2>
@@ -289,7 +315,7 @@ export default function AdminUsersPage() {
                       className="text-caption px-3 py-1.5 rounded-input border"
                       style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
                     >
-                      升為教職員
+                      升為教職員 →
                     </button>
                     <button
                       onClick={() => deleteUser(user.id)}
@@ -355,7 +381,7 @@ function UserRow({
             委員會 {expanded ? "▲" : "▼"}
           </button>
           <button onClick={() => onToggleRole(user)} disabled={saving === user.id} className="text-caption px-3 py-1.5 rounded-input border" style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
-            降為學生
+            {user.role === "ADMIN" ? "→ 教職員" : "→ 學生"}
           </button>
           <button onClick={() => onDelete(user.id)} disabled={saving === user.id} className="p-1.5 text-discipline opacity-50 hover:opacity-100 transition-opacity">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
@@ -461,6 +487,7 @@ function AddUserModal({ classes, onClose, onSuccess }: { classes: ClassInfo[], o
               <select value={form.role} onChange={e => setForm(v => ({ ...v, role: e.target.value as any }))} className="w-full rounded-input border p-2 text-body">
                 <option value="STUDENT">學生</option>
                 <option value="TEACHER">教職員</option>
+                <option value="ADMIN">管理員</option>
               </select>
             </div>
             {form.role === "STUDENT" && (

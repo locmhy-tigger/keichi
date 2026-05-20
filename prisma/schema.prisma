@@ -22,6 +22,7 @@ datasource db {
 enum Role {
   STUDENT
   TEACHER
+  ADMIN
 }
 
 enum MissionType {
