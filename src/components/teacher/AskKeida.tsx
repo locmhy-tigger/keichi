@@ -33,11 +33,14 @@ export function AskKeida() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ query: q }),
       })
-      if (!res.ok) throw new Error("request failed")
       const data = await res.json()
-      setAnswer(data.answer)
+      if (!res.ok) {
+        setError(data?.error ?? `錯誤 ${res.status}，請稍後再試。`)
+      } else {
+        setAnswer(data.answer)
+      }
     } catch {
-      setError("無法取得回答，請稍後再試。")
+      setError("網絡錯誤，請檢查連接後再試。")
     } finally {
       setLoading(false)
     }
