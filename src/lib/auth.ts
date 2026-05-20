@@ -67,6 +67,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // Credentials provider — always allow
+      if (!account || account.provider === "credentials") return true
+
+      // For Google (or any OAuth provider): if a user with this email already
+      // exists but has no linked OAuth account, create the link now.
+      // This handles users created via CSV import, seed, or password sign-up.
+      if (user.email) {
+        const existing = await prisma.user.findUnique({
+          where: { email: user.email },
+          select: { id: true },
+        })
+        if (existing) {
+          const linked = await prisma.account.findUnique({
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+              },
+            },
+          })
+          if (!linked) {
+            await prisma.account.create({
+              data: {
+                userId:            existing.id,
+                type:              account.type,
+                provider:          account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token:      account.access_token,
+                expires_at:        account.expires_at,
+                token_type:        account.token_type,
+                scope:             account.scope,
+                id_token:          account.id_token,
+                refresh_token:     account.refresh_token ?? null,
+              },
+            })
+          }
+        }
+      }
+      return true
+    },
     jwt({ token, user, account }) {
       if (user) {
         token.id   = user.id
