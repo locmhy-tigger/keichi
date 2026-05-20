@@ -99,6 +99,7 @@ export default function StudentCalendarPage() {
   const [loading,      setLoading]      = useState(true)
   const [current,      setCurrent]      = useState(() => new Date())
   const [selected,     setSelected]     = useState<Activity | SchoolEvent | null>(null)
+  const [overflowDay,  setOverflowDay]  = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -214,6 +215,7 @@ export default function StudentCalendarPage() {
               const inMonth  = day.getMonth() === month
               const isToday  = isSameDay(day, today)
               const allItems = itemsForDay(day)
+              const dayIso   = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`
 
               return (
                 <div
@@ -268,9 +270,13 @@ export default function StudentCalendarPage() {
                       }
                     })}
                     {allItems.length > 2 && (
-                      <p className="text-caption text-center" style={{ color: "var(--color-ink-400)", fontSize: "10px" }}>
-                        +{allItems.length - 2}
-                      </p>
+                      <div
+                        onClick={() => setOverflowDay(dayIso)}
+                        className="text-[10px] px-1 py-0.5 rounded cursor-pointer"
+                        style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                      >
+                        +{allItems.length - 2} 更多
+                      </div>
                     )}
                   </div>
                 </div>
@@ -290,6 +296,85 @@ export default function StudentCalendarPage() {
           </div>
         ))}
       </div>
+
+      {/* Overflow day modal */}
+      {overflowDay && (() => {
+        const overflowItems = itemsForDay(new Date(overflowDay + "T00:00:00"))
+        const [oy, om, od] = overflowDay.split("-").map(Number)
+        const dateLabel = `${oy}年${om}月${od}日`
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30"
+            onClick={() => setOverflowDay(null)}
+          >
+            <div
+              className="card p-5 w-full max-w-sm space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-h3">{dateLabel}</h3>
+                <button
+                  onClick={() => setOverflowDay(null)}
+                  className="text-body w-7 h-7 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)]"
+                  style={{ color: "var(--color-ink-400)" }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-2">
+                {overflowItems.map((item) => {
+                  if (isActivity(item)) {
+                    const status = item.assignments[0]?.status ?? "PENDING"
+                    return (
+                      <button
+                        key={`act-${item.id}`}
+                        onClick={() => { setOverflowDay(null); setSelected(item) }}
+                        className="w-full text-left flex items-center gap-2 p-2 rounded-input"
+                        style={{ background: "var(--color-surface-2)" }}
+                      >
+                        <div
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: STATUS_COLORS[status] }}
+                        />
+                        <span className="text-body flex-1 truncate" style={{ color: "var(--color-ink-900)" }}>
+                          {formatTime(item.startTime)} {item.title}
+                        </span>
+                        <span
+                          className="text-caption px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: STATUS_COLORS[status] + "20", color: STATUS_COLORS[status], fontSize: "10px" }}
+                        >
+                          {STATUS_LABELS[status]}
+                        </span>
+                      </button>
+                    )
+                  } else {
+                    const color = item.committee ? COMMITTEE_COLORS[item.committee] : "var(--color-accent)"
+                    return (
+                      <button
+                        key={`ev-${item.id}`}
+                        onClick={() => { setOverflowDay(null); setSelected(item) }}
+                        className="w-full text-left flex items-center gap-2 p-2 rounded-input"
+                        style={{ background: "var(--color-surface-2)" }}
+                      >
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="text-body flex-1 truncate" style={{ color: "var(--color-ink-900)" }}>{item.title}</span>
+                        {item.committee && (
+                          <span
+                            className="text-caption px-1.5 py-0.5 rounded shrink-0 text-white"
+                            style={{ background: color, fontSize: "10px" }}
+                          >
+                            {item.committee}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  }
+                })}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Detail modal */}
       {selected && (

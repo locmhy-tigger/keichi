@@ -10,6 +10,7 @@ type User = {
   name?: string | null
   email?: string | null
   image?: string | null
+  role?: string | null
 }
 
 const MAIN_NAV = [
@@ -110,24 +111,28 @@ export function TeacherSidebar({ user }: { user: User }) {
           ))}
         </ul>
 
-        {/* Admin */}
-        <p className="px-3 mt-5 mb-1 text-caption" style={{ color: "var(--color-ink-300)" }}>
-          管理 · ADMIN
-        </p>
-        <ul className="space-y-0.5">
-          {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`nav-item ${isActive(href) ? "active" : ""}`}
-              >
-                <Icon />
-                {label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {/* Admin — only visible to ADMIN role */}
+        {user.role === "ADMIN" && (
+          <>
+            <p className="px-3 mt-5 mb-1 text-caption" style={{ color: "var(--color-ink-300)" }}>
+              管理 · ADMIN
+            </p>
+            <ul className="space-y-0.5">
+              {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={() => setOpen(false)}
+                    className={`nav-item ${isActive(href) ? "active" : ""}`}
+                  >
+                    <Icon />
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </nav>
 
       {/* User footer */}
@@ -155,7 +160,7 @@ export function TeacherSidebar({ user }: { user: User }) {
             {user.name ?? user.email ?? "老師"}
           </p>
           <p className="text-caption truncate" style={{ color: "var(--color-ink-500)" }}>
-            登入身份
+            {user.role === "ADMIN" ? "管理員" : "老師"}
           </p>
         </div>
         <button

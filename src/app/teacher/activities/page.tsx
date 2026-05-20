@@ -20,11 +20,18 @@ function formatDateTime(iso: string) {
   return `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
 }
 
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"]
+
 export default function TeacherActivitiesPage() {
   const [activities, setActivities]   = useState<Activity[]>([])
   const [loading,    setLoading]      = useState(true)
   const [showForm,   setShowForm]     = useState(false)
   const [saving,     setSaving]       = useState(false)
+
+  // Filters
+  const [searchQ,    setSearchQ]      = useState("")
+  const [weekdayFilter, setWeekdayFilter] = useState<number | null>(null)
+  const [sortBy,     setSortBy]       = useState<"date" | "students" | "title">("date")
 
   // Form state
   const [title,   setTitle]   = useState("")
@@ -138,13 +145,74 @@ export default function TeacherActivitiesPage() {
         </form>
       )}
 
+      {/* Filter bar */}
+      {!loading && activities.length > 0 && (
+        <div className="mb-4 space-y-3">
+          {/* Search */}
+          <input
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="搜尋活動名稱或地點…"
+            className="w-full px-3 py-2 text-body rounded-input border outline-none"
+            style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
+          />
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Weekday chips */}
+            <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>星期：</span>
+            {WEEKDAYS.map((d, i) => (
+              <button
+                key={i}
+                onClick={() => setWeekdayFilter(weekdayFilter === i ? null : i)}
+                className="text-caption px-2.5 py-1 rounded-full border transition-colors"
+                style={{
+                  background: weekdayFilter === i ? "var(--color-accent)" : "var(--color-surface)",
+                  color:      weekdayFilter === i ? "#fff" : "var(--color-ink-700)",
+                  borderColor: weekdayFilter === i ? "var(--color-accent)" : "var(--color-border)",
+                }}
+              >
+                {d}
+              </button>
+            ))}
+            {/* Sort */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>排序：</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "date" | "students" | "title")}
+                className="text-caption px-2 py-1 rounded-input border"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface)" }}
+              >
+                <option value="date">日期</option>
+                <option value="students">學生人數</option>
+                <option value="title">名稱</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
       ) : activities.length === 0 ? (
         <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>尚未建立任何活動</div>
-      ) : (
+      ) : (() => {
+        const filtered = activities
+          .filter((a) => {
+            const q = searchQ.toLowerCase()
+            const matchQ = !q || a.title.toLowerCase().includes(q) || (a.location ?? "").toLowerCase().includes(q)
+            const matchDay = weekdayFilter === null || new Date(a.startTime).getDay() === weekdayFilter
+            return matchQ && matchDay
+          })
+          .sort((a, b) => {
+            if (sortBy === "students") return b._count.assignments - a._count.assignments
+            if (sortBy === "title") return a.title.localeCompare(b.title)
+            return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+          })
+        return filtered.length === 0 ? (
+          <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>沒有符合的活動</div>
+        ) : (
         <div className="space-y-3">
-          {activities.map((act) => (
+          {filtered.map((act) => (
             <Link
               key={act.id}
               href={`/teacher/activities/${act.id}`}
@@ -177,7 +245,8 @@ export default function TeacherActivitiesPage() {
             </Link>
           ))}
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
