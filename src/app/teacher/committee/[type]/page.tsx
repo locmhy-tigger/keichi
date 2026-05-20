@@ -137,7 +137,7 @@ export default async function CommitteePage({ params }: { params: { type: string
     }),
   ])
 
-  const canEditTools = !!userRole
+  const canEditTools = session.user.role === "ADMIN" || (!!userRole && userRole.isChair)
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
