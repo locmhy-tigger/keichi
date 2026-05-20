@@ -52,9 +52,16 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!isTeacherOrAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const body = await req.json()
-  const data = createSchema.parse(body)
-  const { studentList, ...rest } = data
+  let body: unknown
+  try { body = await req.json() } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }) }
+
+  let data: ReturnType<typeof createSchema.parse>
+  try { data = createSchema.parse(body) } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Validation error"
+    return NextResponse.json({ error: msg }, { status: 400 })
+  }
+
+  const { studentList } = data
   
   const activity = await prisma.activity.create({
     data: {
@@ -66,7 +73,10 @@ export async function POST(req: NextRequest) {
       committee:   data.committee,
       createdById: session.user.id,
     },
-    include: { _count: { select: { assignments: true } } },
+    include: {
+      _count:      { select: { assignments: true } },
+      assignments: { where: { status: "CONFIRMED" }, select: { id: true } },
+    },
   })
 
   // Process student list if provided

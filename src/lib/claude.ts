@@ -48,7 +48,7 @@ export async function generateQuiz(
   difficulty: 'BASIC' | 'ADVANCED' | 'CHALLENGE' = 'BASIC'
 ): Promise<AiQuizGenerationResponse> {
   const message = await client.messages.create({
-    model: 'claude-3-5-sonnet-latest',
+    model: 'claude-sonnet-4-5',
     max_tokens: 2000,
     system: QUIZ_SYSTEM_PROMPT,
     messages: [
@@ -109,7 +109,7 @@ export async function evaluatePrompt(
   missionContent: PromptMissionContent
 ): Promise<PromptEvaluationResponse> {
   const message = await client.messages.create({
-    model: 'claude-3-haiku-20240307',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 512,
     system: buildEvaluationSystemPrompt(missionContent.rubric),
     messages: [
@@ -262,7 +262,7 @@ ${actLines}
 
   try {
     const message = await client.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1000,
       system: KEIDA_SYSTEM_PROMPT,
       messages: [
@@ -275,7 +275,8 @@ ${actLines}
 
     return message.content[0].type === 'text' ? message.content[0].text : ''
   } catch (error) {
-    console.error('Claude API Error (queryKeida):', error)
-    throw new Error('AI_QUERY_FAILED')
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('Claude API Error (queryKeida):', msg)
+    throw new Error(`AI 服務錯誤：${msg}`)
   }
 }

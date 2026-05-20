@@ -27,6 +27,7 @@ export default function TeacherActivitiesPage() {
   const [loading,    setLoading]      = useState(true)
   const [showForm,   setShowForm]     = useState(false)
   const [saving,     setSaving]       = useState(false)
+  const [formError,  setFormError]    = useState<string | null>(null)
 
   // Filters
   const [searchQ,    setSearchQ]      = useState("")
@@ -53,25 +54,34 @@ export default function TeacherActivitiesPage() {
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const res = await fetch("/api/activities", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        description: desc || undefined,
-        startTime:   new Date(start).toISOString(),
-        endTime:     end ? new Date(end).toISOString() : undefined,
-        location:    location || undefined,
-        studentList: studentList || undefined,
-      }),
-    })
-    if (res.ok) {
-      const created: Activity = await res.json()
-      setActivities((prev) => [created, ...prev])
-      setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setStudentList("")
-      setShowForm(false)
+    setFormError(null)
+    try {
+      const res = await fetch("/api/activities", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description: desc || undefined,
+          startTime:   new Date(start).toISOString(),
+          endTime:     end ? new Date(end).toISOString() : undefined,
+          location:    location || undefined,
+          studentList: studentList || undefined,
+        }),
+      })
+      if (res.ok) {
+        const created: Activity = await res.json()
+        setActivities((prev) => [created, ...prev])
+        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setStudentList("")
+        setShowForm(false)
+      } else {
+        const body = await res.json().catch(() => ({}))
+        setFormError(body?.error ?? `建立失敗 (${res.status})，請重試`)
+      }
+    } catch {
+      setFormError("網絡錯誤，請檢查連接後重試")
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const inputCls   = "w-full px-3 py-2 text-body rounded-input border outline-none"
@@ -130,6 +140,11 @@ export default function TeacherActivitiesPage() {
               className={`${inputCls} resize-none font-mono text-[11px]`} style={inputStyle} />
             <p className="text-[10px] text-gray-400 mt-1">系統將自動匹配學生並檢查時間衝突</p>
           </div>
+          {formError && (
+            <p className="text-caption px-3 py-2 rounded-input" style={{ background: "var(--color-discipline-soft, #fef2f2)", color: "var(--color-discipline, #dc2626)" }}>
+              {formError}
+            </p>
+          )}
           <div className="flex gap-3 justify-end">
             <button type="button" onClick={() => setShowForm(false)}
               className="px-4 py-2 text-body rounded-input border"
