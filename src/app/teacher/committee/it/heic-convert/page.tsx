@@ -27,15 +27,22 @@ export default function HeicConvertPage() {
       setProgress(`轉換中 ${i + 1} / ${files.length}：${file.name}`)
       try {
         const mod = await import("heic2any")
-        const heic2any = (mod as any).default || mod
-        const blob    = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 }) as Blob
-        const url     = URL.createObjectURL(blob)
-        const sizeMB  = (blob.size / 1024 / 1024).toFixed(2)
-        newResults.push({ name: file.name, url, sizeMB, thumbUrl: url })
-      } catch (err) {
+        const heic2any = (mod as any).default ?? mod
+        const result  = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 })
+        // heic2any returns Blob[] for burst/multi-image files, Blob for single
+        const blobs   = Array.isArray(result) ? result : [result]
+        for (let j = 0; j < blobs.length; j++) {
+          const blob   = blobs[j] as Blob
+          const url    = URL.createObjectURL(blob)
+          const sizeMB = (blob.size / 1024 / 1024).toFixed(2)
+          const suffix = blobs.length > 1 ? `_${j + 1}` : ""
+          newResults.push({ name: file.name.replace(/\.[^.]+$/, "") + suffix, url, sizeMB, thumbUrl: url })
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
         console.error("HEIC Conversion Error:", err)
-        setProgress(`⚠ 跳過 ${file.name}（轉換失敗，請檢查檔案格式）`)
-        await new Promise((r) => setTimeout(r, 1000))
+        setProgress(`⚠ 跳過 ${file.name}（${msg}）`)
+        await new Promise((r) => setTimeout(r, 1500))
       }
     }
 
@@ -47,7 +54,7 @@ export default function HeicConvertPage() {
   function download(item: ConvertedFile) {
     const a      = document.createElement("a")
     a.href       = item.url
-    a.download   = item.name.replace(/\.heic$/i, ".jpg").replace(/\.HEIC$/, ".jpg")
+    a.download   = item.name + ".jpg"
     a.click()
   }
 
@@ -144,7 +151,7 @@ export default function HeicConvertPage() {
                 />
                 <div className="p-2">
                   <p className="text-caption font-medium truncate" style={{ color: "var(--color-ink-900)" }}>
-                    {item.name.replace(/\.heic$/i, ".jpg")}
+                    {item.name}.jpg
                   </p>
                   <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
                     {item.sizeMB} MB
