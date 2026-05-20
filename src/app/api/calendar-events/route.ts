@@ -1,3 +1,4 @@
+import { exec } from 'child_process';
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -61,6 +62,12 @@ export async function POST(req: NextRequest) {
     },
     include: { author: { select: { id: true, name: true } } },
   })
+
+  // Logging hook
+  const logTitle = "Calendar Event Created";
+  const logContent = `Event "${event.title}" created by ${session.user.name} (${session.user.id})`;
+  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js");
+  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`);
 
   return NextResponse.json(event, { status: 201 })
 }
