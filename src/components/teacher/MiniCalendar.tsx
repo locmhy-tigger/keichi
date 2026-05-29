@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 type Todo = { id: string; title: string; dueDate: string | null; status: string }
 
@@ -59,6 +59,18 @@ export function MiniCalendar({ todos, calendarEvents = [] }: { todos: Todo[]; ca
   const [year,         setYear]         = useState(now.getFullYear())
   const [month,        setMonth]        = useState(now.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [fetchedEvents, setFetchedEvents] = useState<CalendarEventMin[] | null>(null)
+
+  // Re-fetch calendar events whenever the displayed month changes
+  useEffect(() => {
+    const ym = `${year}-${String(month + 1).padStart(2, "0")}`
+    fetch(`/api/calendar-events?month=${ym}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: CalendarEventMin[]) => setFetchedEvents(data))
+      .catch(() => {})
+  }, [year, month])
+
+  const activeEvents = fetchedEvents ?? calendarEvents
 
   const todoDates = new Set(
     todos
@@ -74,7 +86,7 @@ export function MiniCalendar({ todos, calendarEvents = [] }: { todos: Todo[]; ca
     return acc
   }, {})
 
-  const eventsByDate = calendarEvents.reduce<Record<string, CalendarEventMin[]>>((acc, ev) => {
+  const eventsByDate = activeEvents.reduce<Record<string, CalendarEventMin[]>>((acc, ev) => {
     const iso = ev.startDate.slice(0, 10)
     if (!acc[iso]) acc[iso] = []
     acc[iso].push(ev)

@@ -128,6 +128,16 @@ export default function RandomPickerPage() {
           >
             {spinning ? "抄籤中…" : "抄籤"}
           </button>
+          {names.length === 0 && (
+            <p className="text-caption text-center" style={{ color: "var(--color-ink-400)" }}>
+              請先在左方輸入學生名單
+            </p>
+          )}
+          {names.length > 0 && pool.length === 0 && (
+            <p className="text-caption text-center" style={{ color: "var(--color-ink-400)" }}>
+              所有學生已抄出，請按「重置記錄」
+            </p>
+          )}
 
           {picked.length > 0 && (
             <button
