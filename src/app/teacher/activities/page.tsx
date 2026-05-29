@@ -55,6 +55,13 @@ export default function TeacherActivitiesPage() {
     e.preventDefault()
     setSaving(true)
     setFormError(null)
+
+    if (end && new Date(end) <= new Date(start)) {
+      setFormError("截止時間不可早於或等於開始時間")
+      setSaving(false)
+      return
+    }
+
     try {
       const res = await fetch("/api/activities", {
         method:  "POST",

@@ -71,6 +71,12 @@ const BTN_LABEL: Record<TodoStatus, string> = {
   DONE:        "重開",
 }
 
+const STATUS_BADGE: Record<TodoStatus, { label: string; bg: string; color: string }> = {
+  OPEN:        { label: "待處理", bg: "var(--color-surface-2)",     color: "var(--color-ink-500)"    },
+  IN_PROGRESS: { label: "進行中", bg: "var(--color-admin-soft)",    color: "var(--color-admin)"      },
+  DONE:        { label: "完成",   bg: "var(--color-curriculum-soft)", color: "var(--color-curriculum)" },
+}
+
 function formatDue(d: string | null): string {
   if (!d) return ""
   const date = new Date(d)
@@ -274,6 +280,7 @@ export default function TodosPage() {
   }
 
   async function deleteTodo(id: string) {
+    if (!window.confirm("確認刪除此待辦事項？此操作無法撤回。")) return
     setTodos((prev) => prev.filter((t) => t.id !== id))
     await fetch(`/api/todos/${id}`, { method: "DELETE" })
   }
@@ -451,6 +458,12 @@ export default function TodosPage() {
                       {todo.title}
                     </span>
                     <CommitteeBadge committee={todo.committee} />
+                    <span
+                      className="text-caption px-1.5 py-0.5 rounded-pill shrink-0"
+                      style={{ background: STATUS_BADGE[todo.status].bg, color: STATUS_BADGE[todo.status].color }}
+                    >
+                      {STATUS_BADGE[todo.status].label}
+                    </span>
                     {isAssigned && todo.createdBy.name && (
                       <span
                         className="text-caption px-1.5 py-0.5 rounded-pill"
