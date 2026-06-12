@@ -2,6 +2,9 @@ import { isTeacherOrAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 
+// libheif WASM conversion of large photos can take a while
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -14,14 +17,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 })
   }
 
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
+  const buffer = Buffer.from(await file.arrayBuffer())
 
   try {
-    const sharp = (await import("sharp")).default
-    const jpeg = await sharp(buffer).jpeg({ quality: 92 }).toBuffer()
+    // sharp's prebuilt binaries can't decode HEIC (HEVC patent licensing) —
+    // heic-convert bundles libheif as WASM, which can
+    const { default: convert } = await import("heic-convert")
+    const output = await convert({ buffer, format: "JPEG", quality: 0.92 })
+    const jpeg = Buffer.from(output)
 
-    return new NextResponse(jpeg.buffer as ArrayBuffer, {
+    return new NextResponse(new Blob([new Uint8Array(jpeg)], { type: "image/jpeg" }), {
       status: 200,
       headers: {
         "Content-Type":   "image/jpeg",
@@ -30,6 +35,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: msg }, { status: 422 })
+    return NextResponse.json({ error: `轉換失敗：${msg}` }, { status: 422 })
   }
 }
