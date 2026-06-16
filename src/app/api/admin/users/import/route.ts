@@ -4,10 +4,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 type Role = "TEACHER" | "STUDENT"
 
-const VALID_COMMITTEES = new Set<CommitteeType>(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"])
+const VALID_COMMITTEES = new Set<CommitteeType>(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"])
 const VALID_ROLES      = new Set<Role>(["TEACHER", "STUDENT"])
 
 function parseCommittees(raw: string): CommitteeType[] {

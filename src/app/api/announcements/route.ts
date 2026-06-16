@@ -7,8 +7,8 @@ import { z } from "zod"
 const createSchema = z.object({
   title:     z.string().min(1).max(200),
   body:      z.string().min(1).max(10000),
-  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
-  target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "CLASS"]).default("ALL"),
+  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "CLASS"]).default("ALL"),
   priority:  z.enum(["NORMAL", "IMPORTANT", "URGENT"]).default("NORMAL"),
   classId:   z.string().optional(),
   pinned:    z.boolean().default(false),

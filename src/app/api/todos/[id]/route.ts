@@ -6,7 +6,7 @@ import { z } from "zod"
 const patchSchema = z.object({
   title:       z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
   dueDate:     z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string()).optional(),
   status:      z.enum(["OPEN", "IN_PROGRESS", "DONE"]).optional(),

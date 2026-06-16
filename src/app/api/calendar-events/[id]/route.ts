@@ -11,7 +11,7 @@ const patchSchema = z.object({
   endDate:     z.string().nullable().optional(),
   allDay:      z.boolean().optional(),
   description: z.string().optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).nullable().optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).nullable().optional(),
 })
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

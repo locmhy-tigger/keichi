@@ -3,10 +3,12 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 import { CommitteeToolsManager } from "@/components/teacher/CommitteeToolsManager"
+import { FavoriteToolButton } from "@/components/teacher/FavoriteToolButton"
+import { isRegisteredTool } from "@/lib/tool-registry"
 import Link from "next/link"
 
-type Slug = "admin" | "discipline" | "it" | "curriculum"
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
 export async function generateStaticParams() {
   return [
@@ -14,6 +16,7 @@ export async function generateStaticParams() {
     { type: "discipline" },
     { type: "it" },
     { type: "curriculum" },
+    { type: "eca" },
   ]
 }
 
@@ -22,6 +25,7 @@ const SLUG_TO_ENUM: Record<Slug, CommitteeType> = {
   discipline: "DISCIPLINE",
   it:         "IT",
   curriculum: "CURRICULUM",
+  eca:        "ECA",
 }
 
 type CommitteeConfig = {
@@ -105,6 +109,22 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       </svg>
     ),
   },
+  ECA: {
+    label:       "課外活動委員",
+    description: "策劃及管理課外活動、學會及聯課活動，豐富學生校園生活。",
+    colorVar:    "eca",
+    tools: [
+      { label: "活動報名",     description: "管理課外活動及學會報名" },
+      { label: "活動出席記錄", description: "記錄學生課外活動出席情況" },
+      { label: "比賽及獎項",   description: "登記校外比賽及學生獎項"   },
+    ],
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-eca)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="6" />
+        <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+      </svg>
+    ),
+  },
 }
 
 export default async function CommitteePage({ params }: { params: { type: string } }) {
@@ -117,8 +137,8 @@ export default async function CommitteePage({ params }: { params: { type: string
 
   const config = CONFIGS[committeeType]
 
-  // Fetch DB tools + todos + user's committee membership
-  const [dbTools, todos, userRole] = await Promise.all([
+  // Fetch DB tools + todos + user's committee membership + favorited tools
+  const [dbTools, todos, userRole, favorites] = await Promise.all([
     prisma.committeeTool.findMany({
       where: { committee: committeeType },
       orderBy: { order: "asc" },
@@ -138,7 +158,13 @@ export default async function CommitteePage({ params }: { params: { type: string
         OR: [{ committee: committeeType }, { committee: "ADMIN" }],
       },
     }),
+    prisma.toolFavorite.findMany({
+      where:  { userId: session.user.id },
+      select: { toolKey: true },
+    }),
   ])
+
+  const favoriteKeys = new Set(favorites.map((f) => f.toolKey))
 
   const canEditTools = session.user.role === "ADMIN" || (!!userRole && userRole.isChair)
 
@@ -184,9 +210,10 @@ export default async function CommitteePage({ params }: { params: { type: string
         <h3 className="text-h3 mb-3" style={{ color: "var(--color-ink-700)" }}>預設工具</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {config.tools.map((tool) => {
+            const starrable = !!tool.href && isRegisteredTool(tool.href)
             const inner = (
               <>
-                <h3 className="text-h3 mb-1">{tool.label}</h3>
+                <h3 className="text-h3 mb-1 pr-6">{tool.label}</h3>
                 <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
                   {tool.description}
                 </p>
@@ -198,20 +225,29 @@ export default async function CommitteePage({ params }: { params: { type: string
                 </p>
               </>
             )
-            return tool.href ? (
-              <Link
-                key={tool.label}
-                href={tool.href}
-                className="card p-5 hover:shadow-card-md transition-shadow block"
-              >
-                {inner}
-              </Link>
-            ) : (
-              <div
-                key={tool.label}
-                className="card p-5 opacity-60 cursor-not-allowed"
-              >
-                {inner}
+            return (
+              <div key={tool.label} className="relative">
+                {tool.href ? (
+                  <Link
+                    href={tool.href}
+                    className="card p-5 hover:shadow-card-md transition-shadow block h-full"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div className="card p-5 opacity-60 cursor-not-allowed h-full">
+                    {inner}
+                  </div>
+                )}
+                {starrable && (
+                  <div className="absolute top-3 right-3">
+                    <FavoriteToolButton
+                      toolKey={tool.href!}
+                      initialFavorited={favoriteKeys.has(tool.href!)}
+                      colorVar={config.colorVar}
+                    />
+                  </div>
+                )}
               </div>
             )
           })}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
-type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
 type Activity = {
   id:          string
@@ -42,6 +42,7 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   DISCIPLINE: "var(--color-discipline)",
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
+  ECA:        "var(--color-eca)",
 }
 
 function formatTime(iso: string) {

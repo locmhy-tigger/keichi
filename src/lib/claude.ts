@@ -3,6 +3,7 @@
 // Quiz generation (Sonnet) + Prompt evaluation (Haiku)
 // ============================================================
 import Anthropic from '@anthropic-ai/sdk'
+import { KEIDA_GREETING, isGreeting } from '@/lib/keida-greeting'
 import type {
   AiQuizMissionContent,
   PromptMissionContent,
@@ -131,7 +132,7 @@ export async function evaluatePrompt(
 // Teacher-facing contextual Q&A over school data
 // ─────────────────────────────────────────
 
-const KEIDA_SYSTEM_PROMPT = `你是「Keida」，香港中學的 AI 校務助理。
+const KEIDA_SYSTEM_PROMPT = `你是「Keida」，基智中學的 AI 校務助理。
 你根據學校公告記錄、學生行為記錄、行事曆事件、待辦事項及活動指派，以繁體中文回答老師的問題。
 
 規則：
@@ -195,6 +196,11 @@ export async function queryKeida(
   todos: KEIDATodo[] = [],
   activities: KEIDAActivity[] = [],
 ): Promise<string> {
+  // Bare greetings get the standard intro — no model call needed
+  if (isGreeting(query)) {
+    return KEIDA_GREETING
+  }
+
   const annLines = announcements.length > 0
     ? announcements.map((a) => {
         const date = new Date(a.createdAt).toLocaleDateString('zh-HK')

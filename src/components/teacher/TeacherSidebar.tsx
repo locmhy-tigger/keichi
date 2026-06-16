@@ -28,6 +28,7 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/discipline", label: "訓育",     icon: ShieldIcon,    color: "var(--color-discipline)" },
   { href: "/teacher/committee/it",         label: "資訊科技", icon: MonitorIcon,   color: "var(--color-it)"         },
   { href: "/teacher/committee/curriculum", label: "課程發展", icon: BookIcon,      color: "var(--color-curriculum)" },
+  { href: "/teacher/committee/eca",        label: "課外活動", icon: ActivityIcon,  color: "var(--color-eca)"        },
 ]
 
 const ADMIN_NAV = [

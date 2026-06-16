@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
-type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "CLASS"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "CLASS"
 type Priority      = "NORMAL" | "IMPORTANT" | "URGENT"
 
 type Announcement = {
@@ -28,6 +28,7 @@ const TARGET_OPTIONS: { label: string; value: Target }[] = [
   { label: "訓育",     value: "DISCIPLINE" },
   { label: "資訊科技", value: "IT"         },
   { label: "課程發展", value: "CURRICULUM" },
+  { label: "課外活動", value: "ECA"        },
 ]
 
 const PRIORITY_OPTIONS: { label: string; value: Priority }[] = [

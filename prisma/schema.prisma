@@ -63,6 +63,7 @@ enum CommitteeType {
   DISCIPLINE
   IT
   CURRICULUM
+  ECA
 }
 
 enum ToolType {
@@ -91,6 +92,7 @@ enum AnnouncementTarget {
   DISCIPLINE
   IT
   CURRICULUM
+  ECA
   CLASS
 }
 
@@ -181,6 +183,27 @@ model User {
   assetsLent        Asset[]             @relation("UserAssets")
   assetLogs         AssetLog[]          @relation("LoggedBy")
   bookings          Booking[]           @relation("UserBookings")
+
+  // Favorited tools (dashboard 常用工具)
+  toolFavorites     ToolFavorite[]
+}
+
+// ─────────────────────────────────────────
+// TOOL FAVORITES — per-user starred tools shown on dashboard
+// toolKey is a stable identifier: a static tool href (e.g. "/teacher/committee/it/ocr")
+// or a CommitteeTool id for DB-backed tools.
+// ─────────────────────────────────────────
+
+model ToolFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  toolKey   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, toolKey])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────

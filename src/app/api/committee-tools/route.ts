@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 
 const createSchema = z.object({
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]),
   label:       z.string().min(1).max(100),
   description: z.string().max(300).optional(),
   type:        z.enum(["LINK", "EMBED", "HTML", "GOOGLE_SHEET"]),
@@ -17,7 +17,7 @@ const createSchema = z.object({
 async function canEdit(userId: string, role: string, committee: string): Promise<boolean> {
   if (role === "ADMIN") return true
   const committeeRole = await prisma.committeeRole.findFirst({
-    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM", isChair: true },
+    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA", isChair: true },
   })
   return !!committeeRole
 }
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   const tools = await prisma.committeeTool.findMany({
     where: {
-      ...(committee ? { committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" } : {}),
+      ...(committee ? { committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" } : {}),
       ...(!isAdmin ? { active: true } : {}),
     },
     orderBy: { order: "asc" },
