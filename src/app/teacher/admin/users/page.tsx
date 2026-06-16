@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
 type CommitteeRole = {
   committee: CommitteeType
@@ -32,6 +32,7 @@ const COMMITTEES: { value: CommitteeType; label: string }[] = [
   { value: "DISCIPLINE", label: "訓育"     },
   { value: "IT",         label: "資訊科技" },
   { value: "CURRICULUM", label: "課程發展" },
+  { value: "ECA",        label: "課外活動" },
 ]
 
 function Avatar({ user, size = 32 }: { user: User; size?: number }) {

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { KEIDA_GREETING } from "@/lib/keida-greeting"
 
 export function AskKeida() {
   const [isOpen,  setIsOpen]  = useState(false)
@@ -100,9 +101,20 @@ export function AskKeida() {
 
               {/* Chat Body */}
               <div className="p-4 space-y-4 overflow-y-auto">
-                <p className="text-caption text-center" style={{ color: "var(--color-ink-400)" }}>
-                  根據公告及行為記錄為您解答
-                </p>
+                {/* Greeting — shown until the first answer arrives */}
+                {!answer && !loading && !error && (
+                  <div
+                    className="rounded-input p-4"
+                    style={{ background: "var(--color-surface-2)" }}
+                  >
+                    <p
+                      className="text-body whitespace-pre-wrap leading-relaxed"
+                      style={{ color: "var(--color-ink-900)" }}
+                    >
+                      {KEIDA_GREETING}
+                    </p>
+                  </div>
+                )}
 
                 {/* Answer */}
                 <AnimatePresence mode="wait">

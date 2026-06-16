@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
 type CalendarEvent = {
   id:          string
@@ -22,6 +22,7 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   DISCIPLINE: "var(--color-discipline)",
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
+  ECA:        "var(--color-eca)",
 }
 
 const COMMITTEE_LABELS: Record<CommitteeType, string> = {
@@ -29,6 +30,7 @@ const COMMITTEE_LABELS: Record<CommitteeType, string> = {
   DISCIPLINE: "訓育",
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
+  ECA:        "課外活動",
 }
 
 const DAYS = ["日", "一", "二", "三", "四", "五", "六"]
@@ -313,6 +315,7 @@ export default function CalendarPage() {
               <option value="DISCIPLINE">訓育</option>
               <option value="IT">資訊科技</option>
               <option value="CURRICULUM">課程發展</option>
+              <option value="ECA">課外活動</option>
             </select>
             <button
               onClick={() => icsInputRef.current?.click()}
@@ -579,6 +582,7 @@ export default function CalendarPage() {
                 <option value="DISCIPLINE">訓育</option>
                 <option value="IT">資訊科技</option>
                 <option value="CURRICULUM">課程發展</option>
+                <option value="ECA">課外活動</option>
               </select>
             </div>
 

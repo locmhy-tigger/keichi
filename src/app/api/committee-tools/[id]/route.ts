@@ -16,7 +16,7 @@ const patchSchema = z.object({
 async function canEdit(userId: string, role: string, committee: string): Promise<boolean> {
   if (role === "ADMIN") return true
   const committeeRole = await prisma.committeeRole.findFirst({
-    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM", isChair: true },
+    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA", isChair: true },
   })
   return !!committeeRole
 }

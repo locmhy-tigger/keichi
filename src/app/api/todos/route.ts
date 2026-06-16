@@ -7,7 +7,7 @@ import { z } from "zod"
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
   dueDate:     z.string().datetime().optional(),
   assigneeIds: z.array(z.string()).default([]),
   classId:     z.string().optional(),
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   
   const { searchParams } = new URL(req.url)
   const status    = searchParams.get("status") as "OPEN" | "IN_PROGRESS" | "DONE" | null
-  const committee = searchParams.get("committee") as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | null
+  const committee = searchParams.get("committee") as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | null
   const view      = searchParams.get("view") // "mine" | "assigned" | null (all)
 
   const statusFilter    = status    ? { status }    : {}

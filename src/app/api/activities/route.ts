@@ -10,7 +10,7 @@ const createSchema = z.object({
   startTime:   z.string().datetime(),
   endTime:     z.string().datetime().optional(),
   location:    z.string().max(200).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
   studentList: z.string().optional(), // Raw text from Excel paste
 })
 

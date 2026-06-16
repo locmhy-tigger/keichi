@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 type TodoStatus    = "OPEN" | "IN_PROGRESS" | "DONE"
 type ViewMode      = "all" | "mine" | "assigned"
 
@@ -37,6 +37,7 @@ const COMMITTEE_FILTER: { label: string; value: CommitteeType | "ALL" }[] = [
   { label: "訓育",     value: "DISCIPLINE" },
   { label: "資訊科技", value: "IT"         },
   { label: "課程發展", value: "CURRICULUM" },
+  { label: "課外活動", value: "ECA"        },
 ]
 
 const STATUS_FILTER: { label: string; value: TodoStatus | "ALL" }[] = [
@@ -57,6 +58,7 @@ const BORDER: Record<CommitteeType, string> = {
   DISCIPLINE: "committee-border-discipline",
   IT:         "committee-border-it",
   CURRICULUM: "committee-border-curriculum",
+  ECA:        "committee-border-eca",
 }
 
 const NEXT_STATUS: Record<TodoStatus, TodoStatus> = {
@@ -347,6 +349,7 @@ export default function TodosPage() {
                 <option value="DISCIPLINE">訓育</option>
                 <option value="IT">資訊科技</option>
                 <option value="CURRICULUM">課程發展</option>
+                <option value="ECA">課外活動</option>
               </select>
             </div>
             <div>

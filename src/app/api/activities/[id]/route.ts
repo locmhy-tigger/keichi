@@ -10,7 +10,7 @@ const patchSchema = z.object({
   startTime:   z.string().datetime().optional(),
   endTime:     z.string().datetime().nullable().optional(),
   location:    z.string().max(200).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).nullable().optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).nullable().optional(),
 })
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

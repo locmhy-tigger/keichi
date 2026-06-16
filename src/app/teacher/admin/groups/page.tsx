@@ -16,13 +16,14 @@ const GROUP_TYPE_COLORS: Record<GroupType, string> = {
   SPECIFIC:      "bg-amber-50 text-amber-700 border-amber-200",
 }
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 const COMMITTEE_LABELS: Record<CommitteeType, string> = {
-  ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展",
+  ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展", ECA: "課外活動",
 }
 const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   ADMIN: "bg-blue-50 text-blue-700", DISCIPLINE: "bg-red-50 text-red-700",
   IT: "bg-green-50 text-green-700", CURRICULUM: "bg-yellow-50 text-yellow-700",
+  ECA: "bg-purple-50 text-purple-700",
 }
 
 type CommitteeRole = { committee: CommitteeType; isChair: boolean }
@@ -278,7 +279,7 @@ export default function AdminGroupsPage() {
   }
 
   const filteredGroups = groups.filter((g) => g.type === activeGroupType)
-  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]
+  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

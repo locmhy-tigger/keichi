@@ -6,7 +6,7 @@ import { z } from "zod"
 
 const schema = z.object({
   userId:    z.string(),
-  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]),
+  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]),
   isChair:   z.boolean().default(false),
 })
 
@@ -44,7 +44,7 @@ export async function DELETE(req: NextRequest) {
   await prisma.committeeRole.deleteMany({
     where: {
       userId,
-      committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM",
+      committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA",
     },
   })
 

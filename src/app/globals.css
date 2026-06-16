@@ -45,6 +45,11 @@
   --color-curriculum-soft:   oklch(94% 0.025 145);
   --color-curriculum-border: oklch(80% 0.04 145);
 
+  /* Committee — 課外活動 (ECA): violet */
+  --color-eca:        oklch(50% 0.12 300);
+  --color-eca-soft:   oklch(95% 0.025 300);
+  --color-eca-border: oklch(82% 0.05 300);
+
   /* Sidebar */
   --sidebar-width: 220px;
 }
@@ -85,6 +90,9 @@
   }
   .committee-border-curriculum {
     border-left: 3px solid var(--color-curriculum);
+  }
+  .committee-border-eca {
+    border-left: 3px solid var(--color-eca);
   }
 
   /* Sidebar nav item */
