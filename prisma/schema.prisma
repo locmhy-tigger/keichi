@@ -186,6 +186,11 @@ model User {
 
   // Favorited tools (dashboard 常用工具)
   toolFavorites     ToolFavorite[]
+
+  // kcagentos agent module
+  agentTasks        AgentTask[]
+  agentDocuments    AgentDocument[]
+  agentAuditLogs    AgentAuditLog[]
 }
 
 // ─────────────────────────────────────────
@@ -656,4 +661,127 @@ model GroupMember {
   @@unique([groupId, userId])
   @@index([groupId])
   @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// KCAGENTOS AGENT MODULE — ported from kcagentos, FK'd to keichi User
+// Model names are prefixed with "Agent" to avoid collisions.
+// ═══════════════════════════════════════════════════════════════════
+
+enum AgentTaskStatus {
+  RUNNING
+  DONE
+  FAILED
+  PENDING_APPROVAL
+}
+
+enum AgentApprovalStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AgentWaStatus {
+  NOT_SENT
+  SENT
+  CONFIRMED
+  DECLINED
+}
+
+// A task corresponds to one agent invocation that produces a document.
+model AgentTask {
+  id        String          @id @default(cuid())
+  userId    String
+  title     String
+  agentId   String
+  status    AgentTaskStatus @default(RUNNING)
+  createdAt DateTime        @default(now())
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document AgentDocument?
+
+  @@index([userId, createdAt])
+}
+
+// A document produced by an agent task.
+model AgentDocument {
+  id              String              @id @default(cuid())
+  taskId          String              @unique
+  userId          String
+  title           String
+  docType         String
+  content         String              @db.Text
+  approvalStatus  AgentApprovalStatus @default(NOT_REQUIRED)
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  driveUrl        String?
+  driveFileId     String?
+  createdAt       DateTime            @default(now())
+
+  task AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([approvalStatus])
+}
+
+// Timetable rows uploaded by admins (one row per teacher/day/period/term).
+model AgentTimetable {
+  id          String  @id @default(cuid())
+  teacherName String
+  dayOfWeek   Int
+  period      Int
+  classCode   String?
+  subject     String?
+  term        String
+
+  @@unique([teacherName, dayOfWeek, period, term])
+  @@index([term])
+}
+
+// Document templates (admin-managed, per docType).
+model AgentTemplate {
+  id        String  @id @default(cuid())
+  docType   String
+  name      String
+  content   String  @db.Text
+  isDefault Boolean @default(false)
+
+  @@index([docType])
+}
+
+// Immutable audit trail of every agent invocation.
+model AgentAuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  agentId   String?
+  engine    String
+  docType   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([agentId])
+}
+
+// Substitution requests created by andy agent.
+model AgentSubstitutionRequest {
+  id              String        @id @default(cuid())
+  requesterName   String
+  date            DateTime
+  periods         Int[]
+  classCode       String
+  subject         String
+  reason          String
+  candidateName   String?
+  candidateEmail  String?
+  waStatus        AgentWaStatus @default(NOT_SENT)
+  calendarEventId String?
+  createdAt       DateTime      @default(now())
+
+  @@index([date])
 }

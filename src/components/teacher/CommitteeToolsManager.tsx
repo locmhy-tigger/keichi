@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { FavoriteToolButton } from "@/components/teacher/FavoriteToolButton"
 
 type ToolType = "LINK" | "EMBED" | "HTML" | "GOOGLE_SHEET"
 
@@ -31,11 +32,19 @@ type Props = {
 }
 
 export function CommitteeToolsManager({ initialTools, committee, slug, canEdit, colorVar }: Props) {
-  const [tools,     setTools]     = useState<DBTool[]>(initialTools)
-  const [showModal, setShowModal] = useState(false)
-  const [editTool,  setEditTool]  = useState<DBTool | null>(null)
-  const [saving,    setSaving]    = useState(false)
-  const [deleting,  setDeleting]  = useState<string | null>(null)
+  const [tools,        setTools]        = useState<DBTool[]>(initialTools)
+  const [showModal,    setShowModal]    = useState(false)
+  const [editTool,     setEditTool]     = useState<DBTool | null>(null)
+  const [saving,       setSaving]       = useState(false)
+  const [deleting,     setDeleting]     = useState<string | null>(null)
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    fetch("/api/tool-favorites")
+      .then((r) => r.ok ? r.json() : { keys: [] })
+      .then((d: { keys: string[] }) => setFavoriteKeys(new Set(d.keys)))
+      .catch(() => {})
+  }, [])
 
   // Form state
   const [label,   setLabel]   = useState("")
@@ -139,7 +148,7 @@ export function CommitteeToolsManager({ initialTools, committee, slug, canEdit, 
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-h3 mb-1">{tool.label}</h3>
+                      <h3 className="text-h3 mb-1 pr-6">{tool.label}</h3>
                       {tool.description && (
                         <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
                           {tool.description}
@@ -158,15 +167,23 @@ export function CommitteeToolsManager({ initialTools, committee, slug, canEdit, 
                     開啟 →
                   </p>
                 </Link>
-                {canEdit && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); openEdit(tool) }}
-                    className="absolute top-3 right-3 text-caption px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}
-                  >
-                    ✎
-                  </button>
-                )}
+                {/* Star button — always visible on hover */}
+                <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <FavoriteToolButton
+                    toolKey={`ct:${tool.id}`}
+                    initialFavorited={favoriteKeys.has(`ct:${tool.id}`)}
+                    colorVar={colorVar}
+                  />
+                  {canEdit && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEdit(tool) }}
+                      className="text-caption px-2 py-0.5 rounded"
+                      style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}
+                    >
+                      ✎
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })}

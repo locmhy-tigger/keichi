@@ -4,22 +4,78 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { TOOL_REGISTRY, type ToolRegistryEntry } from "@/lib/tool-registry"
 
+type CustomToolEntry = {
+  key:      string
+  href:     string
+  label:    string
+  colorVar: string
+}
+
+type FavEntry = ToolRegistryEntry | CustomToolEntry
+
+const COMMITTEE_COLOR: Record<string, string> = {
+  ADMIN:      "admin",
+  DISCIPLINE: "discipline",
+  IT:         "it",
+  CURRICULUM: "curriculum",
+  ECA:        "eca",
+}
+
+const SLUG_MAP: Record<string, string> = {
+  ADMIN:      "admin",
+  DISCIPLINE: "discipline",
+  IT:         "it",
+  CURRICULUM: "curriculum",
+  ECA:        "eca",
+}
+
 export function FavoriteToolsGrid() {
-  const [keys,    setKeys]    = useState<string[] | null>(null)
+  const [keys,        setKeys]        = useState<string[] | null>(null)
+  const [customTools, setCustomTools] = useState<CustomToolEntry[]>([])
 
   useEffect(() => {
     fetch("/api/tool-favorites")
       .then((r) => (r.ok ? r.json() : { keys: [] }))
-      .then((d: { keys: string[] }) => setKeys(d.keys ?? []))
+      .then(async (d: { keys: string[] }) => {
+        const all = d.keys ?? []
+        setKeys(all)
+
+        // Resolve ct: keys from the DB
+        const ctIds = all
+          .filter((k) => k.startsWith("ct:"))
+          .map((k) => k.slice(3))
+
+        if (ctIds.length === 0) return
+
+        const res = await fetch(`/api/committee-tools?ids=${ctIds.join(",")}`)
+        if (!res.ok) return
+        const dbTools: Array<{
+          id: string; label: string; type: string; content: string; committee: string
+        }> = await res.json()
+
+        setCustomTools(
+          dbTools.map((t) => {
+            const slug = SLUG_MAP[t.committee] ?? "admin"
+            const href = t.type === "LINK"
+              ? t.content
+              : `/teacher/committee/${slug}/tools/${t.id}`
+            return {
+              key:      `ct:${t.id}`,
+              href,
+              label:    t.label,
+              colorVar: COMMITTEE_COLOR[t.committee] ?? "admin",
+            }
+          })
+        )
+      })
       .catch(() => setKeys([]))
   }, [])
 
-  // Resolve favorited keys against the static registry, preserving registry order
-  const favTools: ToolRegistryEntry[] =
-    keys === null ? [] : TOOL_REGISTRY.filter((t) => keys.includes(t.key))
-
   async function unstar(toolKey: string) {
     setKeys((prev) => (prev ? prev.filter((k) => k !== toolKey) : prev))
+    if (toolKey.startsWith("ct:")) {
+      setCustomTools((prev) => prev.filter((t) => t.key !== toolKey))
+    }
     await fetch("/api/tool-favorites", {
       method:  "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -27,8 +83,15 @@ export function FavoriteToolsGrid() {
     }).catch(() => {})
   }
 
-  // Still loading — render nothing to avoid layout shift
+  // Still loading
   if (keys === null) return null
+
+  // Build the ordered list: static tools first (registry order), then custom tools
+  const staticFavs: ToolRegistryEntry[] = TOOL_REGISTRY.filter((t) => keys.includes(t.key))
+  const favTools: FavEntry[] = [
+    ...staticFavs,
+    ...customTools.filter((ct) => keys.includes(ct.key)),
+  ]
 
   return (
     <div>
