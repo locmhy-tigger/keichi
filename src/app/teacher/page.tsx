@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { DashboardGreeting } from "@/components/teacher/DashboardGreeting"
 import { MiniCalendar } from "@/components/teacher/MiniCalendar"
 import { CommitteeToolsGrid } from "@/components/teacher/CommitteeToolsGrid"
+import { FavoriteToolsGrid } from "@/components/teacher/FavoriteToolsGrid"
 import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
 import { UnifiedTimeline } from "@/components/UnifiedTimeline"
 
@@ -91,6 +92,8 @@ export default async function TeacherDashboard() {
         <UnifiedTimeline initialItems={timelineItems} />
         <MiniCalendar todos={serializedTodos} calendarEvents={serializedCalendar} />
       </div>
+
+      <FavoriteToolsGrid />
 
       <CommitteeToolsGrid />
     </div>

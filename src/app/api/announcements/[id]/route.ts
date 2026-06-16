@@ -6,8 +6,8 @@ import { z } from "zod"
 const patchSchema = z.object({
   title:     z.string().min(1).max(200).optional(),
   body:      z.string().min(1).max(10000).optional(),
-  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM"]).nullable().optional(),
-  target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "CLASS"]).optional(),
+  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).nullable().optional(),
+  target:    z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "CLASS"]).optional(),
   priority:  z.enum(["NORMAL", "IMPORTANT", "URGENT"]).optional(),
   pinned:    z.boolean().optional(),
   publishAt: z.string().optional().transform(v => v ? new Date(v) : undefined),

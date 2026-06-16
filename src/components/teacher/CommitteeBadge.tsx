@@ -1,10 +1,11 @@
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
 const LABELS: Record<CommitteeType, string> = {
   ADMIN:      "行政",
   DISCIPLINE: "訓育",
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
+  ECA:        "課外活動",
 }
 
 const COLORS: Record<CommitteeType, { bg: string; text: string }> = {
@@ -12,6 +13,7 @@ const COLORS: Record<CommitteeType, { bg: string; text: string }> = {
   DISCIPLINE: { bg: "var(--color-discipline-soft)", text: "var(--color-discipline)" },
   IT:         { bg: "var(--color-it-soft)",         text: "var(--color-it)"         },
   CURRICULUM: { bg: "var(--color-curriculum-soft)", text: "var(--color-curriculum)" },
+  ECA:        { bg: "var(--color-eca-soft)",        text: "var(--color-eca)"        },
 }
 
 export function CommitteeBadge({ committee }: { committee: CommitteeType }) {
