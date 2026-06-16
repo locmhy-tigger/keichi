@@ -64,14 +64,15 @@ export function AskKeida() {
       {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white z-50 transition-transform hover:scale-110 active:scale-95"
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-50 transition-transform hover:scale-110 active:scale-95 overflow-hidden"
         style={{ background: "var(--color-accent)" }}
         title="問 Keida"
       >
         {isOpen ? (
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         ) : (
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/keida-avatar.webp" alt="Keida" className="w-14 h-14 object-cover" />
         )}
       </button>
 
@@ -88,12 +89,8 @@ export function AskKeida() {
               {/* Header */}
               <div className="p-4 border-b flex items-center justify-between" style={{ background: "var(--color-accent-soft)" }}>
                 <div className="flex items-center gap-2">
-                  <div
-                    className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white font-bold"
-                    style={{ background: "var(--color-accent)", fontSize: 10 }}
-                  >
-                    AI
-                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/keida-avatar.webp" alt="Keida" className="w-7 h-7 rounded-full shrink-0 object-cover" />
                   <h2 className="text-h3" style={{ color: "var(--color-accent)" }}>問 Keida</h2>
                 </div>
                 <span className="text-[10px]" style={{ color: "var(--color-ink-400)" }}>
