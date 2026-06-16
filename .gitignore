@@ -1,26 +1,31 @@
 # dependencies
 node_modules/
-.pnpm-store/
+.pnp
+.pnp.js
 
-# next.js
+# build output
 .next/
 out/
-
-# production
 build/
 
-# env
+# env files
+.env
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# typescript
+tsconfig.tsbuildinfo
+next-env.d.ts
 
 # misc
 .DS_Store
 *.pem
-
-# debug
 npm-debug.log*
-pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# prisma
+prisma/*.db
+prisma/*.db-journal
