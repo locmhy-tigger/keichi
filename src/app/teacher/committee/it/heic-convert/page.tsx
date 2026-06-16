@@ -7,7 +7,6 @@ type ConvertedFile = {
   name:     string
   url:      string
   sizeMB:   string
-  thumbUrl: string
 }
 
 export default function HeicConvertPage() {
@@ -26,20 +25,20 @@ export default function HeicConvertPage() {
       const file = files[i]
       setProgress(`轉換中 ${i + 1} / ${files.length}：${file.name}`)
       try {
-        const mod = await import("heic2any")
-        const heic2any = (mod as any).default ?? mod
-        // Force image/heic MIME type — browsers often set it to application/octet-stream
-        const heicBlob = new Blob([await file.arrayBuffer()], { type: "image/heic" })
-        const result   = await heic2any({ blob: heicBlob, toType: "image/jpeg", quality: 0.92 })
-        // heic2any returns Blob[] for burst/multi-image files, Blob for single
-        const blobs    = Array.isArray(result) ? result : [result]
-        for (let j = 0; j < blobs.length; j++) {
-          const blob   = blobs[j] as Blob
-          const url    = URL.createObjectURL(blob)
-          const sizeMB = (blob.size / 1024 / 1024).toFixed(2)
-          const suffix = blobs.length > 1 ? `_${j + 1}` : ""
-          newResults.push({ name: file.name.replace(/\.[^.]+$/, "") + suffix, url, sizeMB, thumbUrl: url })
+        const fd = new FormData()
+        fd.append("file", file)
+
+        const res = await fetch("/api/tools/heic-convert", { method: "POST", body: fd })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error ?? `HTTP ${res.status}`)
         }
+
+        const blob   = await res.blob()
+        const url    = URL.createObjectURL(blob)
+        const sizeMB = (blob.size / 1024 / 1024).toFixed(2)
+        newResults.push({ name: file.name.replace(/\.[^.]+$/, ""), url, sizeMB })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error("HEIC Conversion Error:", err)
@@ -54,15 +53,13 @@ export default function HeicConvertPage() {
   }
 
   function download(item: ConvertedFile) {
-    const a      = document.createElement("a")
-    a.href       = item.url
-    a.download   = item.name + ".jpg"
+    const a    = document.createElement("a")
+    a.href     = item.url
+    a.download = item.name + ".jpg"
     a.click()
   }
 
-  function downloadAll() {
-    results.forEach((item) => download(item))
-  }
+  function downloadAll() { results.forEach(download) }
 
   function clearAll() {
     results.forEach((item) => URL.revokeObjectURL(item.url))
@@ -79,7 +76,7 @@ export default function HeicConvertPage() {
         <h1 className="text-h1">HEIC → JPG 轉換器</h1>
       </div>
       <p className="text-body mb-6" style={{ color: "var(--color-ink-500)" }}>
-        在瀏覽器本地轉換，檔案不會上傳至任何伺服器
+        上傳 HEIC 檔案，伺服器自動轉換為 JPG 後即時下載。
       </p>
 
       {/* Drop zone */}
@@ -98,11 +95,11 @@ export default function HeicConvertPage() {
         <p className="text-body font-medium" style={{ color: "var(--color-ink-700)" }}>
           拖放 HEIC 檔案至此，或點擊選取
         </p>
-        <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>支援批量處理</p>
+        <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>支援批量處理 · 接受 .heic / .heif</p>
         <input
           ref={inputRef}
           type="file"
-          accept=".heic,.HEIC,image/heic,image/heif"
+          accept=".heic,.HEIC,.heif,.HEIF,image/heic,image/heif"
           multiple
           className="hidden"
           onChange={(e) => processFiles(e.target.files)}
@@ -141,31 +138,28 @@ export default function HeicConvertPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="space-y-2">
             {results.map((item) => (
-              <div key={item.url} className="card overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={item.thumbUrl}
-                  alt={item.name}
-                  className="w-full object-cover"
-                  style={{ height: 120 }}
-                />
-                <div className="p-2">
-                  <p className="text-caption font-medium truncate" style={{ color: "var(--color-ink-900)" }}>
+              <div
+                key={item.url}
+                className="card px-4 py-3 flex items-center gap-3"
+              >
+                <div className="text-2xl">🖼️</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>
                     {item.name}.jpg
                   </p>
                   <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
                     {item.sizeMB} MB
                   </p>
-                  <button
-                    onClick={() => download(item)}
-                    className="mt-1.5 w-full text-caption py-1 rounded text-white text-center"
-                    style={{ background: "var(--color-accent)" }}
-                  >
-                    下載
-                  </button>
                 </div>
+                <button
+                  onClick={() => download(item)}
+                  className="shrink-0 text-caption px-3 py-1.5 rounded-input text-white"
+                  style={{ background: "var(--color-accent)" }}
+                >
+                  下載
+                </button>
               </div>
             ))}
           </div>
