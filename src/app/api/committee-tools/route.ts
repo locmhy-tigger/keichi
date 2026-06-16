@@ -26,8 +26,20 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const committee = new URL(req.url).searchParams.get("committee")
+  const params    = new URL(req.url).searchParams
+  const committee = params.get("committee")
+  const ids       = params.get("ids")
   const isAdmin   = session.user.role === "ADMIN" || session.user.role === "TEACHER"
+
+  // Resolve specific IDs (used by favorites grid)
+  if (ids) {
+    const idList = ids.split(",").filter(Boolean)
+    const tools = await prisma.committeeTool.findMany({
+      where: { id: { in: idList }, ...(!isAdmin ? { active: true } : {}) },
+      select: { id: true, label: true, description: true, type: true, content: true, committee: true },
+    })
+    return NextResponse.json(tools)
+  }
 
   const tools = await prisma.committeeTool.findMany({
     where: {
