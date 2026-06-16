@@ -21,6 +21,7 @@ const MAIN_NAV = [
   { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon },
   { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon},
   { href: "/teacher/points",        label: "積點",     icon: StarIcon     },
+  { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon    },
 ]
 
 const COMMITTEE_NAV = [
@@ -385,6 +386,16 @@ function GroupsIcon() {
       <circle cx="17" cy="7" r="3" />
       <path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6" />
       <path d="M22 20c0-3.3-2.1-6-5-6" />
+    </svg>
+  )
+}
+
+function AgentIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/>
+      <circle cx="9" cy="13" r="1" fill="currentColor"/>
+      <circle cx="15" cy="13" r="1" fill="currentColor"/>
     </svg>
   )
 }
