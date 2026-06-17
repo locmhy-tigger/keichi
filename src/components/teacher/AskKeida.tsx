@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { KEIDA_GREETING, isGreeting } from "@/lib/keida-greeting"
 import type { LLMMessage } from "@/lib/llm"
+import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -443,9 +444,7 @@ export function AskKeida() {
                     {display.length === 0 && (
                       <div className="space-y-3">
                         <div className="rounded-input p-4" style={{ background: "var(--color-surface-2)" }}>
-                          <p className="text-body whitespace-pre-wrap leading-relaxed" style={{ color: "var(--color-ink-900)" }}>
-                            {KEIDA_GREETING}
-                          </p>
+                          <AgentMarkdown>{KEIDA_GREETING}</AgentMarkdown>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {SUGGESTIONS.map((s) => (
@@ -472,14 +471,18 @@ export function AskKeida() {
                             </p>
                           )}
                           <div
-                            className="px-3 py-2 text-body whitespace-pre-wrap leading-relaxed"
+                            className="px-3 py-2"
                             style={{
                               background:   msg.role === "user" ? "var(--color-accent)" : "var(--color-surface-2)",
-                              color:        msg.role === "user" ? "white" : "var(--color-ink-900)",
                               borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                             }}
                           >
-                            {msg.text || (loading && i === display.length - 1 ? "⋯" : "")}
+                            {msg.text
+                              ? <AgentMarkdown userBubble={msg.role === "user"}>{msg.text}</AgentMarkdown>
+                              : (loading && i === display.length - 1
+                                  ? <span className="text-body" style={{ color: "var(--color-ink-400)" }}>⋯</span>
+                                  : null)
+                            }
                           </div>
 
                           {/* Doc-ready action */}
