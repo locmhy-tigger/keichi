@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import type { LLMMessage } from "@/lib/llm"
+import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
 
 type AgentId = "A01" | "A02" | "A03" | "A04" | "A05" | "A06"
 
@@ -227,14 +228,18 @@ export default function AgentsPage() {
                 </p>
               )}
               <div
-                className="rounded-[16px] px-4 py-3 text-body whitespace-pre-wrap leading-relaxed"
+                className="px-4 py-3"
                 style={{
-                  background: msg.role === "user" ? "var(--color-accent)" : "var(--color-surface-2)",
-                  color:      msg.role === "user" ? "white" : "var(--color-ink-900)",
+                  background:   msg.role === "user" ? "var(--color-accent)" : "var(--color-surface-2)",
                   borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                 }}
               >
-                {msg.text || (loading && i === display.length - 1 ? "⋯" : "")}
+                {msg.text
+                  ? <AgentMarkdown userBubble={msg.role === "user"}>{msg.text}</AgentMarkdown>
+                  : (loading && i === display.length - 1
+                      ? <span className="text-body" style={{ color: "var(--color-ink-400)" }}>⋯</span>
+                      : null)
+                }
               </div>
               {msg.docReady && msg.documentId && (
                 <div className="mt-2 flex gap-2">
