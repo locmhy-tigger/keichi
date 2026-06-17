@@ -33,8 +33,9 @@ const COMMITTEE_NAV = [
 ]
 
 const ADMIN_NAV = [
-  { href: "/teacher/admin/users",   label: "用戶管理", icon: UsersIcon },
+  { href: "/teacher/admin/users",   label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/groups",  label: "群組管理", icon: GroupsIcon },
+  { href: "/teacher/admin/agents",  label: "AI 助理管理", icon: AgentIcon },
 ]
 
 export function TeacherSidebar({ user }: { user: User }) {
