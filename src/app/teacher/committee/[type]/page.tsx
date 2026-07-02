@@ -3,8 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 import { CommitteeToolsManager } from "@/components/teacher/CommitteeToolsManager"
-import { FavoriteToolButton } from "@/components/teacher/FavoriteToolButton"
-import { isRegisteredTool } from "@/lib/tool-registry"
+import { PresetToolsGrid } from "@/components/teacher/PresetToolsGrid"
 import Link from "next/link"
 
 type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca"
@@ -137,8 +136,8 @@ export default async function CommitteePage({ params }: { params: { type: string
 
   const config = CONFIGS[committeeType]
 
-  // Fetch DB tools + todos + user's committee membership + favorited tools
-  const [dbTools, todos, userRole, favorites] = await Promise.all([
+  // Fetch DB tools + todos + user's committee membership + favorited tools + hidden presets
+  const [dbTools, todos, userRole, favorites, hidden] = await Promise.all([
     prisma.committeeTool.findMany({
       where: { committee: committeeType },
       orderBy: { order: "asc" },
@@ -162,9 +161,14 @@ export default async function CommitteePage({ params }: { params: { type: string
       where:  { userId: session.user.id },
       select: { toolKey: true },
     }),
+    prisma.committeeHiddenTool.findMany({
+      where:  { committee: committeeType },
+      select: { toolKey: true },
+    }),
   ])
 
   const favoriteKeys = new Set(favorites.map((f) => f.toolKey))
+  const hiddenKeys   = hidden.map((h) => h.toolKey)
 
   const canEditTools = session.user.role === "ADMIN" || (!!userRole && userRole.isChair)
 
@@ -206,52 +210,15 @@ export default async function CommitteePage({ params }: { params: { type: string
           colorVar={config.colorVar}
         />
 
-        {/* Hardcoded static tools */}
-        <h3 className="text-h3 mb-3" style={{ color: "var(--color-ink-700)" }}>預設工具</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {config.tools.map((tool) => {
-            const starrable = !!tool.href && isRegisteredTool(tool.href)
-            const inner = (
-              <>
-                <h3 className="text-h3 mb-1 pr-6">{tool.label}</h3>
-                <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
-                  {tool.description}
-                </p>
-                <p
-                  className="text-caption mt-3 font-medium"
-                  style={{ color: tool.href ? `var(--color-${config.colorVar})` : "var(--color-ink-300)" }}
-                >
-                  {tool.href ? "開啟 →" : "即將推出"}
-                </p>
-              </>
-            )
-            return (
-              <div key={tool.label} className="relative">
-                {tool.href ? (
-                  <Link
-                    href={tool.href}
-                    className="card p-5 hover:shadow-card-md transition-shadow block h-full"
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <div className="card p-5 opacity-60 cursor-not-allowed h-full">
-                    {inner}
-                  </div>
-                )}
-                {starrable && (
-                  <div className="absolute top-3 right-3">
-                    <FavoriteToolButton
-                      toolKey={tool.href!}
-                      initialFavorited={favoriteKeys.has(tool.href!)}
-                      colorVar={config.colorVar}
-                    />
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {/* Preset tools — deletable (hide/restore) by admin & committee chairs */}
+        <PresetToolsGrid
+          tools={config.tools}
+          committee={committeeType}
+          canEdit={canEditTools}
+          colorVar={config.colorVar}
+          favoriteKeys={Array.from(favoriteKeys)}
+          hiddenKeys={hiddenKeys}
+        />
       </div>
 
       {/* This committee's todos */}

@@ -592,6 +592,19 @@ model CommitteeTool {
   @@index([committee, order])
 }
 
+// Records which hardcoded preset tools an editor has hidden from a committee page.
+model CommitteeHiddenTool {
+  id        String        @id @default(cuid())
+  committee CommitteeType
+  toolKey   String        // preset tool's label (stable key used in CONFIGS)
+  hiddenBy  String
+  createdAt DateTime      @default(now())
+
+  @@unique([committee, toolKey])
+  @@index([committee])
+}
+
+
 model Activity {
   id          String         @id @default(cuid())
   title       String

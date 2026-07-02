@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isTeacherOrAdmin, canEditCommittee } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -12,14 +12,6 @@ const patchSchema = z.object({
   order:       z.number().int().optional(),
   active:      z.boolean().optional(),
 })
-
-async function canEdit(userId: string, role: string, committee: string): Promise<boolean> {
-  if (role === "ADMIN") return true
-  const committeeRole = await prisma.committeeRole.findFirst({
-    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA", isChair: true },
-  })
-  return !!committeeRole
-}
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -42,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const tool = await prisma.committeeTool.findUnique({ where: { id: params.id } })
   if (!tool) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  if (!(await canEdit(session.user.id, session.user.role, tool.committee))) {
+  if (!(await canEditCommittee(session.user.id, session.user.role, tool.committee))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -64,7 +56,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const tool = await prisma.committeeTool.findUnique({ where: { id: params.id } })
   if (!tool) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  if (!(await canEdit(session.user.id, session.user.role, tool.committee))) {
+  if (!(await canEditCommittee(session.user.id, session.user.role, tool.committee))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
