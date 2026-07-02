@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isTeacherOrAdmin, canEditCommittee } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -13,14 +13,6 @@ const createSchema = z.object({
   order:       z.number().int().default(0),
   active:      z.boolean().default(true),
 })
-
-async function canEdit(userId: string, role: string, committee: string): Promise<boolean> {
-  if (role === "ADMIN") return true
-  const committeeRole = await prisma.committeeRole.findFirst({
-    where: { userId, committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA", isChair: true },
-  })
-  return !!committeeRole
-}
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -60,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const data = createSchema.parse(await req.json())
 
-  if (!(await canEdit(session.user.id, session.user.role, data.committee))) {
+  if (!(await canEditCommittee(session.user.id, session.user.role, data.committee))) {
     return NextResponse.json({ error: "管理員或組長專屬功能" }, { status: 403 })
   }
 
