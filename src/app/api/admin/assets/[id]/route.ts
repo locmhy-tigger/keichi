@@ -18,7 +18,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const session = await auth()
-  if (!session?.user || !isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") {
+  if (!session?.user || !isTeacherOrAdmin(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -51,7 +51,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   const session = await auth()
-  if (!session?.user || !isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") {
+  if (!session?.user || !isTeacherOrAdmin(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -104,7 +104,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const session = await auth()
-  if (!session?.user || !isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") {
+  if (!session?.user || !isTeacherOrAdmin(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

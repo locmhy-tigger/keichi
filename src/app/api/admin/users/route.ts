@@ -1,14 +1,31 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isAdmin, isTeacherOrAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { z } from "zod"
+
+const committeeEnum = z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"])
+const createUserSchema = z.object({
+  email:       z.string().email(),
+  name:        z.string().max(100).optional(),
+  role:        z.enum(["STUDENT", "TEACHER", "ADMIN"]).default("STUDENT"),
+  password:    z.string().min(8).max(200).optional(),
+  committees:  z.array(z.union([
+    committeeEnum,
+    z.object({ committee: committeeEnum, isChair: z.boolean().optional() }),
+  ])).optional(),
+  classCode:   z.union([z.string(), z.array(z.string())]).optional(),
+  classNumber: z.union([z.string(), z.array(z.string())]).optional(),
+})
 
 // GET — list all users with committee memberships and class enrollments
+// Read access is allowed for staff (teachers need the directory for
+// activity/announcement targeting); mutations below are ADMIN-only.
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isTeacherOrAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const users = await prisma.user.findMany({
     select: {
@@ -38,12 +55,14 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   try {
-    const { email, name, role, password, committees, classCode, classNumber } = await req.json()
-
-    if (!email) return NextResponse.json({ error: "Email is required" }, { status: 400 })
+    const parsed = createUserSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 })
+    }
+    const { email, name, role, password, committees, classCode, classNumber } = parsed.data
 
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null
 
@@ -51,13 +70,14 @@ export async function POST(req: NextRequest) {
       data: {
         email,
         name: name || null,
-        role: role || "STUDENT",
+        role,
         password: hashedPassword,
         committeeRoles: committees && committees.length > 0 ? {
-          create: committees.map((c: any) => ({
-            committee: c.committee || c,
-            isChair: c.isChair || false
-          }))
+          create: committees.map((c) =>
+            typeof c === "string"
+              ? { committee: c, isChair: false }
+              : { committee: c.committee, isChair: c.isChair ?? false }
+          )
         } : undefined
       }
     })

@@ -592,6 +592,15 @@ model CommitteeTool {
   @@index([committee, order])
 }
 
+// Fixed-window rate-limit counters (survives serverless cold starts).
+model RateLimit {
+  key         String   @id            // e.g. "login:email@x.com:1.2.3.4" or "ai:userId"
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
+}
+
 // Records which hardcoded preset tools an editor has hidden from a committee page.
 model CommitteeHiddenTool {
   id        String        @id @default(cuid())

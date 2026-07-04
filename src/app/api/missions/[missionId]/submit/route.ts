@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { evaluatePrompt } from "@/lib/claude"
+import { aiRateLimit } from "@/lib/rate-limit"
 import type { PromptMissionContent, PromptSubmissionContent } from "@/types/mission"
 
 type RouteParams = { params: { missionId: string } }
@@ -11,6 +12,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!session?.user || session.user.role !== "STUDENT") {
     return NextResponse.json({ error: "Students only" }, { status: 403 })
   }
+
+  const limited = await aiRateLimit(session.user.id, session.user.role, "submit")
+  if (limited) return NextResponse.json(limited.body, { status: 429, headers: limited.headers })
 
   const mission = await prisma.mission.findUnique({
     where: { id: params.missionId, status: "PUBLISHED" },

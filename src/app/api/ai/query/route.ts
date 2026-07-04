@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { queryKeida } from "@/lib/claude"
+import { aiRateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const schema = z.object({
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
     if (!session?.user || !isTeacherOrAdmin(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
+
+    const limited = await aiRateLimit(session.user.id, session.user.role, "query")
+    if (limited) return NextResponse.json(limited.body, { status: 429, headers: limited.headers })
 
     if (!process.env.ANTHROPIC_API_KEY) {
       console.error('Missing ANTHROPIC_API_KEY')

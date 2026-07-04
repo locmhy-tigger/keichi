@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -12,7 +12,7 @@ const patchSchema = z.object({
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   // Prevent self-demotion
   if (params.id === session.user.id) {
@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   if (params.id === session.user.id) {
     return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 })

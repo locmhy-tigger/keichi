@@ -10,6 +10,7 @@ import {
 import { runAgentTool } from "@/lib/agent-tools"
 import { prisma } from "@/lib/prisma"
 import { pusherServer } from "@/lib/pusher"
+import { aiRateLimit } from "@/lib/rate-limit"
 
 async function pushEvent(userId: string, event: string, data: object) {
   try {
@@ -26,6 +27,9 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return new Response(JSON.stringify({ error: "伺服器未設定 ANTHROPIC_API_KEY，請聯絡 IT 主任。" }), { status: 503 })
   }
+
+  const limited = await aiRateLimit(session.user.id, session.user.role, "agents")
+  if (limited) return new Response(JSON.stringify(limited.body), { status: 429, headers: { ...limited.headers, "Content-Type": "application/json" } })
 
   const { messages } = (await req.json()) as { messages: LLMMessage[] }
 
