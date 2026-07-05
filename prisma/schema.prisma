@@ -195,6 +195,9 @@ model User {
 
   // In-app notifications
   notifications      Notification[]
+
+  // Procurement requests
+  procurementRequests ProcurementRequest[] @relation("ProcurementRequests")
 }
 
 // ─────────────────────────────────────────
@@ -621,6 +624,37 @@ model RateLimit {
   windowStart DateTime @default(now())
 
   @@index([windowStart])
+}
+
+// ─────────────────────────────────────────
+// PROCUREMENT — 採購申請 (ADMIN committee tool)
+// ─────────────────────────────────────────
+enum ProcurementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ORDERED
+}
+
+model ProcurementRequest {
+  id          String            @id @default(cuid())
+  requesterId String
+  department  String
+  items       Json              // [{ name, spec, qty, unitPrice }]
+  totalBudget Int               // HKD, whole dollars
+  reason      String            @db.Text
+  supplier    String?
+  status      ProcurementStatus @default(PENDING)
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  note        String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  requester User @relation("ProcurementRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([requesterId])
 }
 
 // Records which hardcoded preset tools an editor has hidden from a committee page.
