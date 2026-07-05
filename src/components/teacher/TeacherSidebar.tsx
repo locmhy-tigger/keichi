@@ -36,6 +36,7 @@ const ADMIN_NAV = [
   { href: "/teacher/admin/users",   label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/groups",  label: "群組管理", icon: GroupsIcon },
   { href: "/teacher/admin/agents",  label: "AI 助理管理", icon: AgentIcon },
+  { href: "/teacher/admin/audit",   label: "操作紀錄", icon: AuditIcon  },
 ]
 
 export function TeacherSidebar({ user }: { user: User }) {
@@ -397,6 +398,16 @@ function AgentIcon() {
       <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/>
       <circle cx="9" cy="13" r="1" fill="currentColor"/>
       <circle cx="15" cy="13" r="1" fill="currentColor"/>
+    </svg>
+  )
+}
+
+function AuditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <path d="M14 2v6h6"/>
+      <path d="M9 13h6M9 17h4"/>
     </svg>
   )
 }

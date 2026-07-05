@@ -62,8 +62,8 @@ export default function AgentTasksPage() {
           {tasks.map((task) => {
             const sb = STATUS_BADGE[task.status]
             const ab = task.document ? APPROVAL_BADGE[task.document.approvalStatus] : null
-            return (
-              <div key={task.id} className="card p-4 flex items-center gap-4">
+            const inner = (
+              <div className="card p-4 flex items-center gap-4 h-full">
                 <div className="flex-1 min-w-0">
                   <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>{task.title}</p>
                   <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-400)" }}>
@@ -80,8 +80,19 @@ export default function AgentTasksPage() {
                       {ab.label}
                     </span>
                   )}
+                  {task.document && (
+                    <span className="text-caption" style={{ color: "var(--color-accent)" }}>查看 →</span>
+                  )}
                 </div>
               </div>
+            )
+            return task.document ? (
+              <Link key={task.id} href={`/teacher/agents/documents/${task.document.id}`}
+                className="block transition-shadow hover:shadow-card-md rounded-card">
+                {inner}
+              </Link>
+            ) : (
+              <div key={task.id}>{inner}</div>
             )
           })}
         </div>
