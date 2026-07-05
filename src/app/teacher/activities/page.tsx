@@ -101,13 +101,22 @@ export default function TeacherActivitiesPage() {
           <h1 className="text-h1">活動管理</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>為學生指派活動及管理出席</p>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="px-4 py-2 rounded-input text-body font-medium text-white"
-          style={{ background: "var(--color-accent)" }}
-        >
-          + 新增活動
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/api/activities/export"
+            className="text-caption px-3 py-2 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
+          >
+            ⬇ 匯出 CSV
+          </a>
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="px-4 py-2 rounded-input text-body font-medium text-white"
+            style={{ background: "var(--color-accent)" }}
+          >
+            + 新增活動
+          </button>
+        </div>
       </div>
 
       {showForm && (
