@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { isAdmin } from "@/lib/roles"
 import { prisma } from "@/lib/prisma"
 import { pusherServer } from "@/lib/pusher"
+import { notify } from "@/lib/notify"
 import { z } from "zod"
 
 const schema = z.object({
@@ -57,6 +58,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         : `✗「${doc.title}」被退回：${rejectionReason}`,
     })
   } catch {}
+
+  // Persist an in-app notification for the document owner.
+  await notify({
+    userId: doc.userId,
+    type:   "DOC_APPROVAL",
+    title:  action === "approve" ? `文件已批核：${doc.title}` : `文件被退回：${doc.title}`,
+    body:   action === "reject" ? `退回原因：${rejectionReason}` : undefined,
+    link:   `/teacher/agents/documents/${params.id}`,
+  })
 
   return NextResponse.json({ ok: true, id: params.id, status: newStatus })
 }

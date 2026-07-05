@@ -192,6 +192,28 @@ model User {
   agentDocuments     AgentDocument[]
   agentAuditLogs     AgentAuditLog[]
   agentConversations AgentConversation[]
+
+  // In-app notifications
+  notifications      Notification[]
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS — persistent in-app notifications (announcements,
+// doc approvals, behavior records). Complements ephemeral Pusher events.
+// ─────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "ANNOUNCEMENT" | "DOC_APPROVAL" | "BEHAVIOR" | "GENERAL"
+  title     String
+  body      String?
+  link      String?  // in-app path to open when clicked
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
 }
 
 // ─────────────────────────────────────────

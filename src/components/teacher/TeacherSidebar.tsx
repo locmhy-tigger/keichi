@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
+import { NotificationBell } from "@/components/teacher/NotificationBell"
 
 type User = {
   name?: string | null
@@ -167,6 +168,7 @@ export function TeacherSidebar({ user }: { user: User }) {
             {user.role === "ADMIN" ? "管理員" : "老師"}
           </p>
         </div>
+        <NotificationBell />
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           title="登出"

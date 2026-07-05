@@ -2,6 +2,7 @@ import { isTeacherOrAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { notifyMany } from "@/lib/notify"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -73,6 +74,38 @@ export async function POST(req: NextRequest) {
       author: { select: { id: true, name: true, image: true } },
     },
   })
+
+  // Notify recipients based on target (best-effort, non-blocking).
+  try {
+    let recipientIds: string[] = []
+    if (data.target === "CLASS" && data.classId) {
+      const enrolls = await prisma.classEnrollment.findMany({
+        where: { classId: data.classId }, select: { studentId: true },
+      })
+      recipientIds = enrolls.map((e) => e.studentId)
+    } else if (data.target === "ALL") {
+      const staff = await prisma.user.findMany({
+        where: { role: { in: ["TEACHER", "ADMIN"] } }, select: { id: true },
+      })
+      recipientIds = staff.map((u) => u.id)
+    } else {
+      // A committee target — notify that committee's members.
+      const members = await prisma.committeeRole.findMany({
+        where: { committee: data.target as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" },
+        select: { userId: true },
+      })
+      recipientIds = members.map((m) => m.userId)
+    }
+    recipientIds = recipientIds.filter((id) => id !== session.user.id)
+    await notifyMany(recipientIds, {
+      type:  "ANNOUNCEMENT",
+      title: `新公告：${announcement.title}`,
+      body:  announcement.body.slice(0, 120),
+      link:  data.target === "CLASS" ? "/student" : "/teacher/announcements",
+    })
+  } catch (err) {
+    console.error("announcement notify failed:", err)
+  }
 
   // Google Calendar Sync Implementation
   if (syncToGoogle && (session as any).accessToken) {

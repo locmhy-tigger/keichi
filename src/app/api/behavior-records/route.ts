@@ -2,6 +2,7 @@ import { isTeacherOrAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { notifyMany } from "@/lib/notify"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -56,6 +57,28 @@ export async function POST(req: NextRequest) {
     },
     include: { author: { select: { id: true, name: true } } },
   })
+
+  // Notify the discipline committee + admins about misconduct (best-effort).
+  if (data.type === "MISCONDUCT") {
+    try {
+      const [discipline, admins] = await Promise.all([
+        prisma.committeeRole.findMany({ where: { committee: "DISCIPLINE" }, select: { userId: true } }),
+        prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } }),
+      ])
+      const ids = Array.from(new Set([
+        ...discipline.map((d) => d.userId),
+        ...admins.map((a) => a.id),
+      ])).filter((id) => id !== session.user.id)
+      await notifyMany(ids, {
+        type:  "BEHAVIOR",
+        title: `違規記錄：${data.className} ${data.studentName}`,
+        body:  data.description.slice(0, 120),
+        link:  "/teacher/committee/discipline",
+      })
+    } catch (err) {
+      console.error("behavior notify failed:", err)
+    }
+  }
 
   return NextResponse.json(record, { status: 201 })
 }
