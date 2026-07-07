@@ -25,9 +25,9 @@ export const BEHAVIOR_COLOR: Record<BehaviorTypeValue, string> = {
   MISCONDUCT:  "#6b7280",
 }
 
-// Categories shown in dashboards / selects (merit first, legacy last excluded).
+// Categories shown in dashboards / selects (merit first).
 export const BEHAVIOR_ORDER: BehaviorTypeValue[] = [
-  "MERIT", "DEMERIT", "MINOR_FAULT", "MAJOR_FAULT", "LATE", "ABSENT",
+  "MERIT", "DEMERIT", "MINOR_FAULT", "MAJOR_FAULT", "LATE", "ABSENT", "MISCONDUCT",
 ]
 
 // Negative categories that drive discipline notifications + thresholds.
