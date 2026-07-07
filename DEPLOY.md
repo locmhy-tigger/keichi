@@ -33,6 +33,8 @@ Copy every line from `.env.example` and fill in real values in Zeabur → Variab
 | `NEXT_PUBLIC_PUSHER_KEY` | Pusher Dashboard → App Keys |
 | `NEXT_PUBLIC_PUSHER_CLUSTER` | `ap3` |
 | `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
+| `RESEND_API_KEY` | resend.com → API Keys (discipline emails; optional) |
+| `MAIL_FROM` | Verified Resend sender, e.g. `訓育組 <discipline@school.edu.hk>` |
 | `NEXT_PUBLIC_APP_URL` | Same as `AUTH_URL` |
 
 ### 5. Update Google OAuth redirect URI

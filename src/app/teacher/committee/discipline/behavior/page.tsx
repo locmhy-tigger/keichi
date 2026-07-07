@@ -1,16 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
-
-type BehaviorType = "MISCONDUCT" | "MERIT"
+import {
+  BEHAVIOR_LABEL, BEHAVIOR_COLOR, BEHAVIOR_ORDER, type BehaviorTypeValue,
+} from "@/lib/behavior-types"
 
 type BehaviorRecord = {
   id:          string
   date:        string
   className:   string
   studentName: string
-  type:        BehaviorType
+  type:        BehaviorTypeValue
   description: string
   action:      string | null
   resolved:    boolean
@@ -20,31 +21,32 @@ type BehaviorRecord = {
 }
 
 type Filter = "ALL" | "UNRESOLVED" | "RESOLVED"
-type TypeFilter = "ALL" | "MISCONDUCT" | "MERIT"
-
-const TYPE_LABEL: Record<BehaviorType, string> = { MISCONDUCT: "違規", MERIT: "良好表現" }
 
 function formatDate(iso: string) {
   const d = new Date(iso)
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 export default function BehaviorPage() {
-  const [records,      setRecords]      = useState<BehaviorRecord[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [showForm,     setShowForm]     = useState(false)
-  const [filter,       setFilter]       = useState<Filter>("ALL")
-  const [typeFilter,   setTypeFilter]   = useState<TypeFilter>("ALL")
-  const [classFilter,  setClassFilter]  = useState("")
-  const [saving,       setSaving]       = useState(false)
+  const [records,     setRecords]     = useState<BehaviorRecord[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [editingId,   setEditingId]   = useState<string | null>(null)
+  const [filter,      setFilter]      = useState<Filter>("ALL")
+  const [typeFilter,  setTypeFilter]  = useState<BehaviorTypeValue | "ALL">("ALL")
+  const [classFilter, setClassFilter] = useState("")
+  const [saving,      setSaving]      = useState(false)
+  const [importMsg,   setImportMsg]   = useState<string | null>(null)
+  const [emailBusy,   setEmailBusy]   = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   // Form state
-  const [date,         setDate]         = useState(new Date().toISOString().slice(0, 10))
-  const [className,    setClassName]    = useState("")
-  const [studentName,  setStudentName]  = useState("")
-  const [type,         setType]         = useState<BehaviorType>("MISCONDUCT")
-  const [description,  setDescription]  = useState("")
-  const [action,       setAction]       = useState("")
+  const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10))
+  const [className,   setClassName]   = useState("")
+  const [studentName, setStudentName] = useState("")
+  const [type,        setType]        = useState<BehaviorTypeValue>("DEMERIT")
+  const [description, setDescription] = useState("")
+  const [action,      setAction]      = useState("")
 
   async function load() {
     setLoading(true)
@@ -57,29 +59,38 @@ export default function BehaviorPage() {
     if (res.ok) setRecords(await res.json())
     setLoading(false)
   }
-
   useEffect(() => { load() }, [filter, typeFilter, classFilter]) // eslint-disable-line
 
-  async function create(e: React.FormEvent) {
+  function resetForm() {
+    setEditingId(null); setDate(new Date().toISOString().slice(0, 10))
+    setClassName(""); setStudentName(""); setType("DEMERIT"); setDescription(""); setAction("")
+  }
+
+  function openEdit(r: BehaviorRecord) {
+    setEditingId(r.id)
+    setDate(r.date.slice(0, 10)); setClassName(r.className); setStudentName(r.studentName)
+    setType(r.type); setDescription(r.description); setAction(r.action ?? "")
+    setShowForm(true)
+  }
+
+  async function save(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const res = await fetch("/api/behavior-records", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, className, studentName, type, description, action: action || undefined }),
-    })
+    const body = JSON.stringify({ date, className, studentName, type, description, action: action || undefined })
+    const res = editingId
+      ? await fetch(`/api/behavior-records/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body })
+      : await fetch("/api/behavior-records", { method: "POST", headers: { "Content-Type": "application/json" }, body })
     if (res.ok) {
-      const created: BehaviorRecord = await res.json()
-      setRecords((prev) => [created, ...prev])
-      setDescription(""); setAction(""); setShowForm(false)
+      const saved: BehaviorRecord = await res.json()
+      setRecords((prev) => editingId ? prev.map((r) => r.id === saved.id ? saved : r) : [saved, ...prev])
+      resetForm(); setShowForm(false)
     }
     setSaving(false)
   }
 
   async function toggleResolved(record: BehaviorRecord) {
     const res = await fetch(`/api/behavior-records/${record.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resolved: !record.resolved }),
     })
     if (res.ok) {
@@ -93,50 +104,86 @@ export default function BehaviorPage() {
     await fetch(`/api/behavior-records/${id}`, { method: "DELETE" })
   }
 
+  async function emailTeacher(r: BehaviorRecord) {
+    setEmailBusy(r.id)
+    const res = await fetch("/api/behavior-records/email-teacher", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ className: r.className, studentName: r.studentName }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setEmailBusy(null)
+    setImportMsg(res.ok ? `已電郵通知 ${r.className} 班主任（${data.sentTo}）` : `✗ ${data.error ?? "電郵發送失敗"}`)
+    setTimeout(() => setImportMsg(null), 5000)
+  }
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportMsg("匯入中…")
+    const fd = new FormData()
+    fd.append("file", file)
+    const res = await fetch("/api/behavior-records/import", { method: "POST", body: fd })
+    const data = await res.json().catch(() => ({}))
+    if (fileRef.current) fileRef.current.value = ""
+    if (res.ok) {
+      setImportMsg(`✓ 匯入 ${data.created} 筆${data.errors?.length ? `，${data.errors.length} 行有問題` : ""}`)
+      load()
+    } else {
+      setImportMsg(`✗ ${data.error ?? "匯入失敗"}`)
+    }
+    setTimeout(() => setImportMsg(null), 6000)
+  }
+
   const inputCls   = "w-full px-3 py-2 text-body rounded-input border outline-none"
   const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/teacher/committee/discipline" className="text-caption" style={{ color: "var(--color-ink-400)" }}>
-          ← 訓育
-        </Link>
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        <Link href="/teacher/committee/discipline" className="text-caption" style={{ color: "var(--color-ink-400)" }}>← 訓育</Link>
         <span style={{ color: "var(--color-ink-300)" }}>/</span>
         <h1 className="text-h1">行為記錄</h1>
-        <a
-          href="/api/behavior-records/export"
-          className="ml-auto text-caption px-3 py-2 rounded-input border"
-          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
-        >
-          ⬇ 匯出 CSV
-        </a>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="px-4 py-2 rounded-input text-body font-medium text-white"
-          style={{ background: "var(--color-accent)" }}
-        >
-          + 新增記錄
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onImportFile} className="hidden" />
+          <button onClick={() => fileRef.current?.click()}
+            className="text-caption px-3 py-2 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
+            ⬆ 匯入 CSV
+          </button>
+          <a href="/api/behavior-records/export"
+            className="text-caption px-3 py-2 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
+            ⬇ 匯出
+          </a>
+          <button onClick={() => { resetForm(); setShowForm((v) => !v) }}
+            className="px-4 py-2 rounded-input text-body font-medium text-white"
+            style={{ background: "var(--color-accent)" }}>
+            + 新增
+          </button>
+        </div>
       </div>
+
+      {importMsg && (
+        <div className="mb-4 p-2.5 rounded-input text-caption"
+          style={{ background: "var(--color-surface-2)", color: "var(--color-ink-700)" }}>
+          {importMsg}
+        </div>
+      )}
 
       {/* Form */}
       {showForm && (
-        <form onSubmit={create} className="card p-5 mb-6 space-y-4">
-          <h3 className="text-h3">新增行為記錄</h3>
+        <form onSubmit={save} className="card p-5 mb-6 space-y-4">
+          <h3 className="text-h3">{editingId ? "編輯行為記錄" : "新增行為記錄"}</h3>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>日期 *</label>
-              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)}
-                className={inputCls} style={inputStyle} />
+              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} style={inputStyle} />
             </div>
             <div>
-              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>類型 *</label>
-              <select required value={type} onChange={(e) => setType(e.target.value as BehaviorType)}
-                className={inputCls} style={inputStyle}>
-                <option value="MISCONDUCT">違規</option>
-                <option value="MERIT">良好表現</option>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>類別 *</label>
+              <select required value={type} onChange={(e) => setType(e.target.value as BehaviorTypeValue)} className={inputCls} style={inputStyle}>
+                {BEHAVIOR_ORDER.map((t) => <option key={t} value={t}>{BEHAVIOR_LABEL[t]}</option>)}
               </select>
             </div>
           </div>
@@ -144,34 +191,28 @@ export default function BehaviorPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
-              <input required value={className} onChange={(e) => setClassName(e.target.value)}
-                placeholder="如：4A" className={inputCls} style={inputStyle} />
+              <input required value={className} onChange={(e) => setClassName(e.target.value)} placeholder="如：4A" className={inputCls} style={inputStyle} />
             </div>
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>學生姓名 *</label>
-              <input required value={studentName} onChange={(e) => setStudentName(e.target.value)}
-                placeholder="學生全名" className={inputCls} style={inputStyle} />
+              <input required value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="學生全名" className={inputCls} style={inputStyle} />
             </div>
           </div>
 
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>事件描述 *</label>
-            <textarea required rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
-              placeholder="詳細描述事件經過" className={`${inputCls} resize-none`} style={inputStyle} />
+            <textarea required rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="詳細描述事件經過" className={`${inputCls} resize-none`} style={inputStyle} />
           </div>
 
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>跟進行動（選填）</label>
-            <textarea rows={2} value={action} onChange={(e) => setAction(e.target.value)}
-              placeholder="已採取的跟進措施" className={`${inputCls} resize-none`} style={inputStyle} />
+            <textarea rows={2} value={action} onChange={(e) => setAction(e.target.value)} placeholder="已採取的跟進措施" className={`${inputCls} resize-none`} style={inputStyle} />
           </div>
 
           <div className="flex gap-3 justify-end">
-            <button type="button" onClick={() => setShowForm(false)}
+            <button type="button" onClick={() => { setShowForm(false); resetForm() }}
               className="px-4 py-2 text-body rounded-input border"
-              style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
-              取消
-            </button>
+              style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>取消</button>
             <button type="submit" disabled={saving}
               className="px-4 py-2 text-body font-medium rounded-input text-white"
               style={{ background: "var(--color-accent)", opacity: saving ? 0.7 : 1 }}>
@@ -195,27 +236,16 @@ export default function BehaviorPage() {
               {f === "ALL" ? "全部" : f === "UNRESOLVED" ? "未處理" : "已處理"}
             </button>
           ))}
-          {(["ALL", "MISCONDUCT", "MERIT"] as TypeFilter[]).map((f) => (
-            <button key={f} onClick={() => setTypeFilter(f)}
-              className="px-3 py-1.5 rounded-pill text-caption font-medium border transition-colors"
-              style={{
-                background: typeFilter === f
-                  ? f === "MISCONDUCT" ? "var(--color-discipline)" : f === "MERIT" ? "var(--color-curriculum)" : "var(--color-accent)"
-                  : "var(--color-surface)",
-                color:      typeFilter === f ? "white" : "var(--color-ink-700)",
-                border:     "1px solid var(--color-border)",
-              }}>
-              {f === "ALL" ? "全部類型" : TYPE_LABEL[f as BehaviorType]}
-            </button>
-          ))}
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as BehaviorTypeValue | "ALL")}
+            className="px-3 py-1.5 rounded-pill text-caption border"
+            style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-700)" }}>
+            <option value="ALL">全部類別</option>
+            {BEHAVIOR_ORDER.map((t) => <option key={t} value={t}>{BEHAVIOR_LABEL[t]}</option>)}
+          </select>
+          <input value={classFilter} onChange={(e) => setClassFilter(e.target.value)} placeholder="篩選班別…"
+            className="px-3 py-1.5 text-caption rounded-pill border outline-none w-32"
+            style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }} />
         </div>
-        <input
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-          placeholder="篩選班別…"
-          className="px-3 py-2 text-body rounded-input border outline-none w-40"
-          style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
-        />
       </div>
 
       {/* List */}
@@ -225,60 +255,51 @@ export default function BehaviorPage() {
         <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>暫無記錄</div>
       ) : (
         <ul className="space-y-2">
-          {records.map((record) => (
-            <li
-              key={record.id}
-              className={`card pl-4 pr-4 py-3 ${record.type === "MISCONDUCT" ? "committee-border-discipline" : "committee-border-curriculum"}`}
-              style={{ opacity: record.resolved ? 0.65 : 1 }}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <span
-                      className="text-caption px-2 py-0.5 rounded-pill font-medium"
-                      style={{
-                        background: record.type === "MISCONDUCT" ? "var(--color-discipline-soft)" : "var(--color-curriculum-soft)",
-                        color:      record.type === "MISCONDUCT" ? "var(--color-discipline)"      : "var(--color-curriculum)",
-                      }}
-                    >
-                      {TYPE_LABEL[record.type]}
-                    </span>
-                    <span className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
-                      {record.className} · {record.studentName}
-                    </span>
-                    <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>
-                      {formatDate(record.date)}
-                    </span>
-                    {record.resolved && (
-                      <span className="text-caption px-2 py-0.5 rounded-pill"
-                        style={{ background: "var(--color-surface-2)", color: "var(--color-ink-400)" }}>
-                        已處理
+          {records.map((record) => {
+            const color = BEHAVIOR_COLOR[record.type]
+            return (
+              <li key={record.id} className="card pl-4 pr-4 py-3"
+                style={{ borderLeft: `3px solid ${color}`, opacity: record.resolved ? 0.65 : 1 }}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="text-caption px-2 py-0.5 rounded-pill font-medium"
+                        style={{ background: `${color}20`, color }}>
+                        {BEHAVIOR_LABEL[record.type]}
                       </span>
-                    )}
+                      <span className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>
+                        {record.className} · {record.studentName}
+                      </span>
+                      <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>{formatDate(record.date)}</span>
+                      {record.resolved && (
+                        <span className="text-caption px-2 py-0.5 rounded-pill"
+                          style={{ background: "var(--color-surface-2)", color: "var(--color-ink-400)" }}>已處理</span>
+                      )}
+                    </div>
+                    <p className="text-caption" style={{ color: "var(--color-ink-700)" }}>{record.description}</p>
+                    {record.action && <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-500)" }}>跟進：{record.action}</p>}
                   </div>
-                  <p className="text-caption" style={{ color: "var(--color-ink-700)" }}>{record.description}</p>
-                  {record.action && (
-                    <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-500)" }}>跟進：{record.action}</p>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => emailTeacher(record)} disabled={emailBusy === record.id}
+                      className="text-caption px-2 py-1 rounded-input border" title="電郵通知班主任"
+                      style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}>
+                      {emailBusy === record.id ? "…" : "✉ 班主任"}
+                    </button>
+                    <button onClick={() => openEdit(record)}
+                      className="text-caption px-2 py-1 rounded-input border"
+                      style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>編輯</button>
+                    <button onClick={() => toggleResolved(record)}
+                      className="text-caption px-2 py-1 rounded-input border"
+                      style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>
+                      {record.resolved ? "重開" : "已處理"}
+                    </button>
+                    <button onClick={() => deleteRecord(record.id)}
+                      className="text-caption px-1.5 py-1 rounded-input" style={{ color: "var(--color-ink-300)" }} title="刪除">×</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => toggleResolved(record)}
-                    className="text-caption px-2.5 py-1 rounded-input border"
-                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
-                  >
-                    {record.resolved ? "重開" : "已處理"}
-                  </button>
-                  <button
-                    onClick={() => deleteRecord(record.id)}
-                    className="text-caption px-2 py-1 rounded-input"
-                    style={{ color: "var(--color-ink-300)" }}
-                    title="刪除"
-                  >×</button>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
