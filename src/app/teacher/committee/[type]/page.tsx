@@ -58,9 +58,9 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "記錄及跟進學生行為事項，維持校內紀律。",
     colorVar:    "discipline",
     tools: [
-      { label: "行為記錄",   description: "記錄學生違規及跟進情況", href: "/teacher/committee/discipline/behavior" },
-      { label: "警告記錄",   description: "發出及管理學生警告"     },
-      { label: "欠交功課",   description: "追蹤欠交功課記錄"       },
+      { label: "行為記錄",   description: "記錄優點、缺點、小過、大過、遲到、缺席", href: "/teacher/committee/discipline/behavior" },
+      { label: "行為儀表板", description: "按學生統計行為表現、電郵班主任", href: "/teacher/committee/discipline/dashboard" },
+      { label: "訓育設定",   description: "班主任電郵及自動提示門檻", href: "/teacher/committee/discipline/settings" },
     ],
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-discipline)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

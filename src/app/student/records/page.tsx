@@ -1,19 +1,22 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import {
+  BEHAVIOR_LABEL, BEHAVIOR_COLOR, BEHAVIOR_ORDER, type BehaviorTypeValue,
+} from "@/lib/behavior-types"
 
-type Record = {
+type StudentRecord = {
   id:          string
   date:        string
   className:   string
-  type:        "MISCONDUCT" | "MERIT"
+  type:        BehaviorTypeValue
   description: string
   action:      string | null
   resolved:    boolean
 }
 
 export default function StudentRecordsPage() {
-  const [records, setRecords] = useState<Record[]>([])
+  const [records, setRecords] = useState<StudentRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -23,26 +26,24 @@ export default function StudentRecordsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const merits = records.filter((r) => r.type === "MERIT").length
-  const misconducts = records.filter((r) => r.type === "MISCONDUCT").length
+  const counts: Record<string, number> = {}
+  for (const r of records) counts[r.type] = (counts[r.type] ?? 0) + 1
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
       <h1 className="text-h1 mb-1">我的行為記錄</h1>
       <p className="text-caption mb-6" style={{ color: "var(--color-ink-400)" }}>
-        由老師記錄的優點與違規紀錄。
+        由老師記錄的優點、缺點、小過、大過、遲到及缺席紀錄。
       </p>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="card p-4 text-center">
-          <p className="text-h1" style={{ color: "var(--color-curriculum)" }}>{merits}</p>
-          <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>優點</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-h1" style={{ color: "var(--color-discipline)" }}>{misconducts}</p>
-          <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>違規</p>
-        </div>
+      {/* Summary — one tile per category */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-6">
+        {BEHAVIOR_ORDER.map((t) => (
+          <div key={t} className="card p-3 text-center">
+            <p className="text-h2" style={{ color: BEHAVIOR_COLOR[t] }}>{counts[t] ?? 0}</p>
+            <p className="text-[11px]" style={{ color: "var(--color-ink-500)" }}>{BEHAVIOR_LABEL[t]}</p>
+          </div>
+        ))}
       </div>
 
       {loading ? (
@@ -54,13 +55,12 @@ export default function StudentRecordsPage() {
       ) : (
         <div className="space-y-3">
           {records.map((r) => {
-            const isMerit = r.type === "MERIT"
-            const color = isMerit ? "var(--color-curriculum)" : "var(--color-discipline)"
+            const color = BEHAVIOR_COLOR[r.type]
             return (
               <div key={r.id} className="card p-4" style={{ borderLeft: `3px solid ${color}` }}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-caption px-2 py-0.5 rounded-pill" style={{ background: `${color}20`, color }}>
-                    {isMerit ? "優點" : "違規"}
+                    {BEHAVIOR_LABEL[r.type]}
                   </span>
                   <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>
                     {r.className} · {new Date(r.date).toLocaleDateString("zh-HK")}

@@ -1,28 +1,15 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email"
 import { notify } from "@/lib/notify"
+import { BEHAVIOR_LABEL, BEHAVIOR_ORDER, isNegativeType } from "@/lib/behavior-types"
 import type { BehaviorType } from "@prisma/client"
 
-// ─── Category metadata (single source of truth) ──────────────────────────────
-
-export const BEHAVIOR_LABEL: Record<BehaviorType, string> = {
-  MERIT:       "優點",
-  DEMERIT:     "缺點",
-  MINOR_FAULT: "小過",
-  MAJOR_FAULT: "大過",
-  LATE:        "遲到",
-  ABSENT:      "缺席",
-  MISCONDUCT:  "違規",
-}
-
-// Ordered list used for dashboards / selects (legacy MISCONDUCT last).
-export const BEHAVIOR_ORDER: BehaviorType[] = [
-  "MERIT", "DEMERIT", "MINOR_FAULT", "MAJOR_FAULT", "LATE", "ABSENT",
-]
+// Re-export shared constants so existing importers keep working.
+export { BEHAVIOR_LABEL, BEHAVIOR_ORDER }
 
 // Everything except a merit is a negative record (drives notify + thresholds).
 export function isNegative(type: BehaviorType): boolean {
-  return type !== "MERIT"
+  return isNegativeType(type)
 }
 
 /** Normalize a class name for grouping / homeroom lookup. */
