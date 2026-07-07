@@ -563,6 +563,7 @@ model BehaviorRecord {
   date        DateTime
   className   String
   studentName String
+  classKey    String?      // normalized (trim+upper) className for grouping/joins
   type        BehaviorType
   description String       @db.Text
   action      String?      @db.Text
@@ -574,11 +575,57 @@ model BehaviorRecord {
 
   @@index([authorId])
   @@index([resolved, date])
+  @@index([className, studentName])
 }
 
 enum BehaviorType {
-  MISCONDUCT
-  MERIT
+  MERIT        // 優點
+  MISCONDUCT   // legacy 違規 (kept for existing rows)
+  DEMERIT      // 缺點
+  MINOR_FAULT  // 小過
+  MAJOR_FAULT  // 大過
+  LATE         // 遲到
+  ABSENT       // 缺席
+}
+
+// ─────────────────────────────────────────
+// DISCIPLINE (訓育) — homeroom teachers, thresholds, alert dedupe
+// ─────────────────────────────────────────
+
+// 班主任 registry — decoupled from the dazhi Class code-enrollment model so
+// every physical class can have a form teacher + follow-up email.
+model HomeroomClass {
+  id            String   @id @default(cuid())
+  className     String   @unique
+  teacherName   String
+  teacherEmail  String
+  teacherUserId String?  // optional link to a User for in-app notify
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@index([teacherUserId])
+}
+
+// Global per-category alert threshold (one row per BehaviorType).
+model DisciplineThreshold {
+  id        String       @id @default(cuid())
+  category  BehaviorType @unique
+  threshold Int          @default(5)
+  enabled   Boolean      @default(false)
+  updatedAt DateTime     @updatedAt
+}
+
+// Dedupe auto-emails: one row per (class, student, category) recording the
+// count at which the class teacher was last alerted.
+model DisciplineAlertLog {
+  id            String       @id @default(cuid())
+  className     String
+  studentName   String
+  category      BehaviorType
+  notifiedCount Int
+  sentAt        DateTime     @default(now())
+
+  @@unique([className, studentName, category])
 }
 
 model CalendarEvent {
