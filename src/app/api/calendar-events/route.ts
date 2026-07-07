@@ -1,8 +1,8 @@
-import { exec } from 'child_process'
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
+import { logToObsidian } from "@/lib/obsidian-log"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -64,10 +64,10 @@ export async function POST(req: NextRequest) {
     include: { author: { select: { id: true, name: true } } },
   })
 
-  const logTitle = "Calendar Event Created"
-  const logContent = `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
-  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js")
-  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`)
+  logToObsidian(
+    "Calendar Event Created",
+    `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
+  )
 
   return NextResponse.json(event, { status: 201 })
 }

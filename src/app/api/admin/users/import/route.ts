@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -18,7 +18,7 @@ function parseCommittees(raw: string): CommitteeType[] {
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!isTeacherOrAdmin(session.user.role) && session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const formData = await req.formData()
   const file = formData.get("file")
@@ -35,6 +35,12 @@ export async function POST(req: NextRequest) {
 
   // Skip header row
   const dataLines = lines.slice(1)
+
+  // Cap import size to prevent a huge upload from tying up the DB.
+  const MAX_ROWS = 1000
+  if (dataLines.length > MAX_ROWS) {
+    return NextResponse.json({ error: `一次最多匯入 ${MAX_ROWS} 行，請分批上載。` }, { status: 400 })
+  }
 
   let created = 0
   let updated = 0
@@ -65,6 +71,11 @@ export async function POST(req: NextRequest) {
 
     if (!VALID_ROLES.has(role)) {
       errors.push({ row: i + 2, email: trimmedEmail, reason: `Invalid role "${roleRaw}" — must be TEACHER or STUDENT` })
+      continue
+    }
+
+    if (password && password.length < 8) {
+      errors.push({ row: i + 2, email: trimmedEmail, reason: "密碼至少需 8 個字元" })
       continue
     }
 

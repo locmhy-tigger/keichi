@@ -41,7 +41,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "管理學校日常行政事務，包括採購申請及活動文件管理。",
     colorVar:    "admin",
     tools: [
-      { label: "採購申請",   description: "填寫及追蹤採購申請表" },
+      { label: "採購申請",   description: "填寫及追蹤採購申請表", href: "/teacher/committee/admin/procurement" },
       { label: "活動文件",   description: "管理活動策劃及報告文件" },
       { label: "設施預約",   description: "電腦室、特別室及禮堂預約", href: "/teacher/committee/admin/booking" },
       { label: "費用結算",   description: "班費及活動費用記錄"   },

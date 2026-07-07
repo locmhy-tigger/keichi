@@ -104,9 +104,16 @@ export default function BehaviorPage() {
         </Link>
         <span style={{ color: "var(--color-ink-300)" }}>/</span>
         <h1 className="text-h1">行為記錄</h1>
+        <a
+          href="/api/behavior-records/export"
+          className="ml-auto text-caption px-3 py-2 rounded-input border"
+          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
+        >
+          ⬇ 匯出 CSV
+        </a>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="ml-auto px-4 py-2 rounded-input text-body font-medium text-white"
+          className="px-4 py-2 rounded-input text-body font-medium text-white"
           style={{ background: "var(--color-accent)" }}
         >
           + 新增記錄

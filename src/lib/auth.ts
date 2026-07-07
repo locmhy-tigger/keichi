@@ -3,6 +3,7 @@ import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 import type { Role } from "@prisma/client"
 import type { Adapter } from "next-auth/adapters"
@@ -29,9 +30,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
+        const email = credentials.email as string
+
+        // Throttle credential brute-force: max 10 attempts per email / 15 min.
+        const rl = await checkRateLimit(`login:${email.toLowerCase()}`, 10, 15 * 60 * 1000)
+        if (!rl.allowed) return null
+
+        const user = await prisma.user.findUnique({ where: { email } })
         if (!user?.password) return null
 
         const valid = await bcrypt.compare(

@@ -1,8 +1,8 @@
-import { exec } from 'child_process'
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
+import { logToObsidian } from "@/lib/obsidian-log"
 import { z } from "zod"
 
 const patchSchema = z.object({
@@ -39,10 +39,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     include: { author: { select: { id: true, name: true } } },
   })
 
-  const logTitle = "Calendar Event Updated"
-  const logContent = `Event "${updated.title}" (${updated.id}) updated by ${session.user.name}`
-  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js")
-  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`)
+  logToObsidian(
+    "Calendar Event Updated",
+    `Event "${updated.title}" (${updated.id}) updated by ${session.user.name}`
+  )
 
   return NextResponse.json(updated)
 }
@@ -61,10 +61,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   await prisma.calendarEvent.delete({ where: { id: params.id } })
 
-  const logTitle = "Calendar Event Deleted"
-  const logContent = `Event "${event.title}" (${event.id}) deleted by ${session.user.name}`
-  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js")
-  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`)
+  logToObsidian(
+    "Calendar Event Deleted",
+    `Event "${event.title}" (${event.id}) deleted by ${session.user.name}`
+  )
 
   return NextResponse.json({ deleted: true })
 }

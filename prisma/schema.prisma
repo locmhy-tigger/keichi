@@ -192,6 +192,31 @@ model User {
   agentDocuments     AgentDocument[]
   agentAuditLogs     AgentAuditLog[]
   agentConversations AgentConversation[]
+
+  // In-app notifications
+  notifications      Notification[]
+
+  // Procurement requests
+  procurementRequests ProcurementRequest[] @relation("ProcurementRequests")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS — persistent in-app notifications (announcements,
+// doc approvals, behavior records). Complements ephemeral Pusher events.
+// ─────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "ANNOUNCEMENT" | "DOC_APPROVAL" | "BEHAVIOR" | "GENERAL"
+  title     String
+  body      String?
+  link      String?  // in-app path to open when clicked
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
 }
 
 // ─────────────────────────────────────────
@@ -590,6 +615,46 @@ model CommitteeTool {
   createdBy   User          @relation("CommitteeTools", fields: [createdById], references: [id])
 
   @@index([committee, order])
+}
+
+// Fixed-window rate-limit counters (survives serverless cold starts).
+model RateLimit {
+  key         String   @id            // e.g. "login:email@x.com:1.2.3.4" or "ai:userId"
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
+}
+
+// ─────────────────────────────────────────
+// PROCUREMENT — 採購申請 (ADMIN committee tool)
+// ─────────────────────────────────────────
+enum ProcurementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ORDERED
+}
+
+model ProcurementRequest {
+  id          String            @id @default(cuid())
+  requesterId String
+  department  String
+  items       Json              // [{ name, spec, qty, unitPrice }]
+  totalBudget Int               // HKD, whole dollars
+  reason      String            @db.Text
+  supplier    String?
+  status      ProcurementStatus @default(PENDING)
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  note        String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  requester User @relation("ProcurementRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([requesterId])
 }
 
 // Records which hardcoded preset tools an editor has hidden from a committee page.
