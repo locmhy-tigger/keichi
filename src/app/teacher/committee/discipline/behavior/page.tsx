@@ -20,6 +20,11 @@ type BehaviorRecord = {
   author:      { id: string; name: string | null }
 }
 
+type HomeroomClass = {
+  className: string
+  students: { studentName: string; classNumber: string | null }[]
+}
+
 type Filter = "ALL" | "UNRESOLVED" | "RESOLVED"
 
 function formatDate(iso: string) {
@@ -40,13 +45,27 @@ export default function BehaviorPage() {
   const [emailBusy,   setEmailBusy]   = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Homeroom classes + rosters (for the dropdown + student multi-select)
+  const [hrClasses, setHrClasses] = useState<HomeroomClass[]>([])
+  const [manual,    setManual]    = useState(false)
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([])
+
   // Form state
   const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10))
   const [className,   setClassName]   = useState("")
-  const [studentName, setStudentName] = useState("")
+  const [studentName, setStudentName] = useState("")   // used in edit / manual mode
   const [type,        setType]        = useState<BehaviorTypeValue>("DEMERIT")
   const [description, setDescription] = useState("")
   const [action,      setAction]      = useState("")
+
+  useEffect(() => {
+    fetch("/api/homeroom")
+      .then((r) => r.ok ? r.json() : { classes: [] })
+      .then((d) => setHrClasses(d.classes ?? []))
+      .catch(() => {})
+  }, [])
+
+  const roster = hrClasses.find((c) => c.className === className)?.students ?? []
 
   async function load() {
     setLoading(true)
@@ -63,26 +82,54 @@ export default function BehaviorPage() {
 
   function resetForm() {
     setEditingId(null); setDate(new Date().toISOString().slice(0, 10))
-    setClassName(""); setStudentName(""); setType("DEMERIT"); setDescription(""); setAction("")
+    setClassName(""); setStudentName(""); setSelectedStudents([]); setManual(false)
+    setType("DEMERIT"); setDescription(""); setAction("")
   }
 
   function openEdit(r: BehaviorRecord) {
     setEditingId(r.id)
     setDate(r.date.slice(0, 10)); setClassName(r.className); setStudentName(r.studentName)
+    setSelectedStudents([]); setManual(true) // edit is single-student
     setType(r.type); setDescription(r.description); setAction(r.action ?? "")
     setShowForm(true)
+  }
+
+  function toggleStudent(name: string) {
+    setSelectedStudents((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name])
   }
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const body = JSON.stringify({ date, className, studentName, type, description, action: action || undefined })
-    const res = editingId
-      ? await fetch(`/api/behavior-records/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body })
-      : await fetch("/api/behavior-records", { method: "POST", headers: { "Content-Type": "application/json" }, body })
-    if (res.ok) {
-      const saved: BehaviorRecord = await res.json()
-      setRecords((prev) => editingId ? prev.map((r) => r.id === saved.id ? saved : r) : [saved, ...prev])
+
+    if (editingId) {
+      const body = JSON.stringify({ date, className, studentName, type, description, action: action || undefined })
+      const res = await fetch(`/api/behavior-records/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body })
+      if (res.ok) {
+        const saved: BehaviorRecord = await res.json()
+        setRecords((prev) => prev.map((r) => r.id === saved.id ? saved : r))
+        resetForm(); setShowForm(false)
+      }
+      setSaving(false)
+      return
+    }
+
+    // Create: one record per selected student (roster) or the single manual name.
+    const names = manual ? (studentName.trim() ? [studentName.trim()] : []) : selectedStudents
+    if (!className || names.length === 0) { setSaving(false); return }
+
+    const created: BehaviorRecord[] = []
+    for (const name of names) {
+      const res = await fetch("/api/behavior-records", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, className, studentName: name, type, description, action: action || undefined }),
+      })
+      if (res.ok) created.push(await res.json())
+    }
+    if (created.length) {
+      setRecords((prev) => [...created, ...prev])
+      setImportMsg(`已新增 ${created.length} 筆記錄`)
+      setTimeout(() => setImportMsg(null), 4000)
       resetForm(); setShowForm(false)
     }
     setSaving(false)
@@ -188,16 +235,68 @@ export default function BehaviorPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
-              <input required value={className} onChange={(e) => setClassName(e.target.value)} placeholder="如：4A" className={inputCls} style={inputStyle} />
+          {/* Class + students */}
+          {editingId || manual ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
+                <input required value={className} onChange={(e) => setClassName(e.target.value)} placeholder="如：4A" className={inputCls} style={inputStyle} />
+              </div>
+              <div>
+                <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>學生姓名 *</label>
+                <input required value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="學生全名" className={inputCls} style={inputStyle} />
+              </div>
             </div>
+          ) : (
             <div>
-              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>學生姓名 *</label>
-              <input required value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="學生全名" className={inputCls} style={inputStyle} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
+                  <select required value={className} onChange={(e) => { setClassName(e.target.value); setSelectedStudents([]) }} className={inputCls} style={inputStyle}>
+                    <option value="">選擇班別…</option>
+                    {hrClasses.map((c) => <option key={c.className} value={c.className}>{c.className}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button type="button" onClick={() => { setManual(true); setSelectedStudents([]) }}
+                    className="text-caption px-3 py-2 rounded-input border w-full"
+                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
+                    手動輸入班別/學生
+                  </button>
+                </div>
+              </div>
+
+              {className && (
+                <div className="mt-3">
+                  <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>
+                    學生 *（可多選，已選 {selectedStudents.length}）
+                  </label>
+                  {roster.length === 0 ? (
+                    <p className="text-caption p-2 rounded-input" style={{ background: "var(--color-surface-2)", color: "var(--color-ink-400)" }}>
+                      此班尚無學生名單。請管理員到「班級管理」加入，或按「手動輸入」。
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1">
+                      {roster.map((s) => {
+                        const on = selectedStudents.includes(s.studentName)
+                        return (
+                          <button type="button" key={s.studentName} onClick={() => toggleStudent(s.studentName)}
+                            className="text-caption px-2.5 py-1 rounded-input border transition-colors"
+                            style={{
+                              background: on ? "var(--color-accent)" : "var(--color-surface)",
+                              color:      on ? "white" : "var(--color-ink-700)",
+                              border:     `1px solid ${on ? "var(--color-accent)" : "var(--color-border)"}`,
+                            }}>
+                            {s.classNumber ? `${s.classNumber}. ` : ""}{s.studentName}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>事件描述 *</label>

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { notifyMany } from "@/lib/notify"
-import { classKey, isNegative, checkThresholdAndEmail, BEHAVIOR_LABEL } from "@/lib/discipline"
+import { classKey, isNegative, checkThresholdAndEmail, checkClassAlert, BEHAVIOR_LABEL } from "@/lib/discipline"
 import type { Role } from "@prisma/client"
 import { z } from "zod"
 
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
       console.error("behavior notify failed:", err)
     }
     await checkThresholdAndEmail(data.className, data.studentName, data.type)
+    await checkClassAlert(data.className)
   }
 
   return NextResponse.json(record, { status: 201 })

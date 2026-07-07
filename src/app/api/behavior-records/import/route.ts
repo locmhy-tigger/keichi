@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { isTeacherOrAdmin, canEditCommittee } from "@/lib/roles"
 import { prisma } from "@/lib/prisma"
-import { classKey, labelToType, isNegative, checkThresholdAndEmail } from "@/lib/discipline"
+import { classKey, labelToType, isNegative, checkThresholdAndEmail, checkClassAlert } from "@/lib/discipline"
 
 const MAX_ROWS = 2000
 
@@ -78,12 +78,18 @@ export async function POST(req: NextRequest) {
 
   // Run threshold checks for affected (class, student, negative category) combos.
   const seen = new Set<string>()
+  const affectedClasses = new Set<string>()
   for (const r of toCreate) {
     if (!r.type || !isNegative(r.type)) continue
+    affectedClasses.add(r.className)
     const k = `${r.className}|${r.studentName}|${r.type}`
     if (seen.has(k)) continue
     seen.add(k)
     await checkThresholdAndEmail(r.className, r.studentName, r.type)
+  }
+  // Class-level alert once per affected class.
+  for (const className of Array.from(affectedClasses)) {
+    await checkClassAlert(className)
   }
 
   return NextResponse.json({ created, errors })
