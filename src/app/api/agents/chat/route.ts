@@ -5,7 +5,8 @@ import { streamLLM, completeLLM, type LLMMessage } from "@/lib/llm"
 import {
   loadCharter, parseRoute, parseDocReady, parseDocType,
   parseNeedsApproval, parseDocTitle, agentId, inferTitleFromContent,
-  parseNeedTool, stripToolMarkers, AGENT_DOC_TYPES, type AgentKey,
+  parseNeedTool, stripToolMarkers, parseDraft, stripDraftMarkers,
+  AGENT_DOC_TYPES, type AgentKey,
 } from "@/lib/agents"
 import { runAgentTool } from "@/lib/agent-tools"
 import { prisma } from "@/lib/prisma"
@@ -123,14 +124,15 @@ export async function POST(req: NextRequest) {
         const docType       = parseDocType(fullText)
         const needsApproval = parseNeedsApproval(fullText)
         const docTitleTag   = parseDocTitle(fullText)
+        const draft         = parseDraft(fullText)   // proposed quick-create record (no DB write here)
 
-        const cleanContent = stripToolMarkers(
+        const cleanContent = stripDraftMarkers(stripToolMarkers(
           fullText
             .replace(/\[DOCREADY\]/g, "")
             .replace(/\[DOCTYPE:[^\]]+\]/g, "")
             .replace(/\[TITLE:[^\]]+\]/g, "")
             .replace(/\[NEEDS_APPROVAL\]/g, ""),
-        ).trim()
+        )).trim()
 
         const docTitle = docTitleTag ?? inferTitleFromContent(docType, cleanContent)
 
@@ -163,7 +165,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        send({ agentId: specId, status: "done", docReady, documentId, docType, needsApproval, final: true })
+        send({ agentId: specId, status: "done", docReady, documentId, docType, needsApproval, draft, final: true })
         controller.close()
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
