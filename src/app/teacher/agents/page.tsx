@@ -4,6 +4,17 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import type { LLMMessage } from "@/lib/llm"
 import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
+import { DraftActionCard, type Draft } from "@/components/teacher/DraftActionCard"
+
+const MARKERS = ["[DRAFT:", "[DOCREADY]", "[DOCTYPE:", "[TITLE:", "[NEEDS_APPROVAL]", "[NEED_TOOL:", "[ROUTE:"]
+function visibleText(raw: string): string {
+  let cut = raw.length
+  for (const m of MARKERS) {
+    const i = raw.indexOf(m)
+    if (i >= 0 && i < cut) cut = i
+  }
+  return raw.slice(0, cut).trim()
+}
 
 type AgentId = "A01" | "A02" | "A03" | "A04" | "A05" | "A06"
 
@@ -27,6 +38,7 @@ type StreamEvent = {
   documentId?: string
   docType?:   string
   needsApproval?: boolean
+  draft?:     Draft | null
   error?:     string
   route?:     string
 }
@@ -39,6 +51,7 @@ type DisplayMessage = {
   documentId?: string
   docType?: string
   needsApproval?: boolean
+  draft?:   Draft | null
 }
 
 export default function AgentsPage() {
@@ -124,7 +137,7 @@ export default function AgentsPage() {
               accumulated += ev.text
               setDisplay((prev) => {
                 const next = [...prev]
-                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: accumulated }
+                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: visibleText(accumulated) }
                 return next
               })
             }
@@ -135,17 +148,19 @@ export default function AgentsPage() {
       }
 
       if (finalEvent) {
-        setMessages((prev) => [...prev, { role: "assistant", content: accumulated }])
+        const cleanText = visibleText(accumulated)
+        setMessages((prev) => [...prev, { role: "assistant", content: cleanText }])
         setDisplay((prev) => {
           const next = [...prev]
           next[next.length - 1] = {
             role:          "agent",
             agentId:       lastAgentId ?? undefined,
-            text:          accumulated,
+            text:          cleanText,
             docReady:      finalEvent!.docReady,
             documentId:    finalEvent!.documentId,
             docType:       finalEvent!.docType,
             needsApproval: finalEvent!.needsApproval,
+            draft:         finalEvent!.draft ?? null,
           }
           return next
         })
@@ -250,6 +265,7 @@ export default function AgentsPage() {
                   </Link>
                 </div>
               )}
+              {msg.draft && <DraftActionCard draft={msg.draft} />}
             </div>
           </div>
         ))}

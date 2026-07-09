@@ -92,6 +92,38 @@ export function stripToolMarkers(text: string): string {
   return text.replace(/\[NEED_TOOL:\w+\](\s*\{[\s\S]*?\})?/g, "").trim();
 }
 
+// ─── Quick-create drafts ─────────────────────────────────────────────────────
+// Specialists emit [DRAFT:kind]{json} to propose a record for the teacher to
+// confirm on a UI card. The LLM NEVER writes to the DB — the card does an
+// authenticated POST only after the teacher clicks 確認.
+
+export const DRAFT_KINDS = [
+  "todo", "announcement", "calendar", "activity", "flashcard_deck", "behavior",
+] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+export interface Draft {
+  kind: DraftKind;
+  data: Record<string, unknown>;
+}
+
+// Parse [DRAFT:kind]{...}. Returns null unless kind is in the allowlist.
+export function parseDraft(text: string): Draft | null {
+  const match = text.match(/\[DRAFT:(\w+)\](\s*\{[\s\S]*?\})?/);
+  if (!match) return null;
+  const kind = match[1] as DraftKind;
+  if (!DRAFT_KINDS.includes(kind)) return null;
+  let data: Record<string, unknown> = {};
+  if (match[2]) {
+    try { data = JSON.parse(match[2].trim()); } catch {}
+  }
+  return { kind, data };
+}
+
+export function stripDraftMarkers(text: string): string {
+  return text.replace(/\[DRAFT:\w+\](\s*\{[\s\S]*?\})?/g, "").trim();
+}
+
 // Maps each specialist agent to the docTypes it typically produces
 export const AGENT_DOC_TYPES: Partial<Record<AgentKey, string[]>> = {
   ada:   ["unit-plan", "notes", "study-plan", "event-plan"],
