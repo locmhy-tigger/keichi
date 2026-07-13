@@ -40,6 +40,7 @@ export default function TeacherActivitiesPage() {
   const [start,   setStart]   = useState("")
   const [end,     setEnd]     = useState("")
   const [location, setLocation] = useState("")
+  const [activityType, setActivityType] = useState<"" | "ECA" | "ACADEMIC">("")
   const [studentList, setStudentList] = useState("")
 
   async function load() {
@@ -69,16 +70,17 @@ export default function TeacherActivitiesPage() {
         body: JSON.stringify({
           title,
           description: desc || undefined,
-          startTime:   new Date(start).toISOString(),
-          endTime:     end ? new Date(end).toISOString() : undefined,
-          location:    location || undefined,
-          studentList: studentList || undefined,
+          startTime:    new Date(start).toISOString(),
+          endTime:      end ? new Date(end).toISOString() : undefined,
+          location:     location || undefined,
+          activityType: activityType || undefined,
+          studentList:  studentList || undefined,
         }),
       })
       if (res.ok) {
         const created: Activity = await res.json()
         setActivities((prev) => [created, ...prev])
-        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setStudentList("")
+        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType(""); setStudentList("")
         setShowForm(false)
       } else {
         const body = await res.json().catch(() => ({}))
@@ -139,11 +141,33 @@ export default function TeacherActivitiesPage() {
                 className={inputCls} style={inputStyle} />
             </div>
           </div>
-          <div>
-            <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>地點（選填）</label>
-            <input value={location} onChange={(e) => setLocation(e.target.value)}
-              placeholder="課室、禮堂…" className={inputCls} style={inputStyle} />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>活動類型（選填）</label>
+              <select value={activityType} onChange={(e) => setActivityType(e.target.value as "" | "ECA" | "ACADEMIC")}
+                className={inputCls} style={inputStyle}>
+                <option value="">不指定</option>
+                <option value="ECA">課外活動（星期一、二）</option>
+                <option value="ACADEMIC">學科活動（星期三至五）</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>地點（選填）</label>
+              <input value={location} onChange={(e) => setLocation(e.target.value)}
+                placeholder="課室、禮堂…" className={inputCls} style={inputStyle} />
+            </div>
           </div>
+          {(() => {
+            if (!activityType || !start) return null
+            const wd = new Date(start).getDay()
+            const ok = activityType === "ECA" ? [1, 2].includes(wd) : [3, 4, 5].includes(wd)
+            if (ok) return null
+            return (
+              <p className="text-caption px-3 py-2 rounded-input" style={{ background: "var(--color-admin-soft, #fff7ed)", color: "var(--color-admin, #b45309)" }}>
+                ⚠ {activityType === "ECA" ? "課外活動建議於星期一、二舉辦" : "學科活動建議於星期三至五舉辦"}，你選的日期不在建議範圍內。
+              </p>
+            )
+          })()}
           <div>
             <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>備注（選填）</label>
             <textarea rows={2} value={desc} onChange={(e) => setDesc(e.target.value)}

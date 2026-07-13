@@ -722,17 +722,24 @@ model CommitteeHiddenTool {
 }
 
 
+// 課外活動（星期一、二）／ 學科活動（星期三至五）—— 決定可舉辦的星期
+enum ActivityType {
+  ECA        // 課外活動
+  ACADEMIC   // 學科活動
+}
+
 model Activity {
-  id          String         @id @default(cuid())
-  title       String
-  description String?        @db.Text
-  startTime   DateTime
-  endTime     DateTime?
-  location    String?
-  committee   CommitteeType?
-  createdById String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  title        String
+  description  String?        @db.Text
+  startTime    DateTime
+  endTime      DateTime?
+  location     String?
+  committee    CommitteeType?
+  activityType ActivityType?
+  createdById  String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   createdBy   User                @relation("ActivitiesCreated", fields: [createdById], references: [id])
   assignments ActivityAssignment[]

@@ -11,6 +11,7 @@ const createSchema = z.object({
   endTime:     z.string().datetime().optional(),
   location:    z.string().max(200).optional(),
   committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  activityType: z.enum(["ECA", "ACADEMIC"]).optional(),
   studentList: z.string().optional(), // Raw text from Excel paste
 })
 
@@ -71,9 +72,10 @@ export async function POST(req: NextRequest) {
       description: data.description,
       startTime:   new Date(data.startTime),
       endTime:     data.endTime ? new Date(data.endTime) : undefined,
-      location:    data.location,
-      committee:   data.committee,
-      createdById: session.user.id,
+      location:     data.location,
+      committee:    data.committee,
+      activityType: data.activityType,
+      createdById:  session.user.id,
     },
     include: {
       _count:      { select: { assignments: true } },

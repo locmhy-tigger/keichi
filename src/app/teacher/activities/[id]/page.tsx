@@ -26,6 +26,8 @@ type Assignment = {
   student:    Student
 }
 
+type ActivityType = "ECA" | "ACADEMIC"
+
 type Activity = {
   id:          string
   title:       string
@@ -33,8 +35,14 @@ type Activity = {
   startTime:   string
   endTime:     string | null
   location:    string | null
+  activityType: ActivityType | null
   assignments: Assignment[]
 }
+
+type DateSuggestion = { startTime: string; endTime: string | null; weekday: number }
+
+const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = { ECA: "課外活動", ACADEMIC: "學科活動" }
+const WEEKDAY_LABEL = ["日", "一", "二", "三", "四", "五", "六"]
 
 type Clash = {
   studentId:   string
@@ -280,6 +288,14 @@ export default function ActivityDetailPage() {
   const [alertDone, setAlertDone] = useState(false)
   const [showBulk,  setShowBulk]  = useState(false)
 
+  // Date suggestions (改期)
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestType, setSuggestType] = useState<ActivityType | "">("")
+  const [suggestions, setSuggestions] = useState<DateSuggestion[] | null>(null)
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [suggestMsg, setSuggestMsg] = useState<string | null>(null)
+  const [rescheduling, setRescheduling] = useState<string | null>(null)
+
   async function load() {
     const res = await fetch(`/api/activities/${id}`)
     if (res.ok) setActivity(await res.json())
@@ -316,6 +332,84 @@ export default function ActivityDetailPage() {
     setShowBulk(false)
   }
 
+  async function fetchSuggestions(typeOverride?: ActivityType) {
+    setSuggestLoading(true)
+    setSuggestMsg(null)
+    setSuggestions(null)
+    const qs = typeOverride ? `?type=${typeOverride}` : ""
+    const res = await fetch(`/api/activities/${id}/suggest-dates${qs}`)
+    setSuggestLoading(false)
+    if (res.status === 400) {
+      // Activity has no type set yet — ask the user to pick one.
+      setSuggestMsg("請先選擇活動類型，系統會依「課外→星期一二／學科→星期三至五」建議日期。")
+      return
+    }
+    if (!res.ok) { setSuggestMsg("暫時無法取得建議，請稍後再試。"); return }
+    const data = await res.json()
+    setSuggestions(data.suggestions ?? [])
+    if ((data.suggestions ?? []).length === 0) {
+      setSuggestMsg("未來 12 週內找不到「全部學生都有空」的合適日期，可嘗試調整名單或手動選日期。")
+    }
+  }
+
+  function openSuggest() {
+    setSuggestOpen(true)
+    setSuggestions(null)
+    setSuggestMsg(null)
+    if (activity?.activityType) {
+      setSuggestType(activity.activityType)
+      fetchSuggestions()
+    } else {
+      setSuggestType("")
+    }
+  }
+
+  async function rescheduleTo(s: DateSuggestion) {
+    if (!activity) return
+    setRescheduling(s.startTime)
+    // 1) Move the activity to the suggested date (keep time-of-day).
+    const patch = await fetch(`/api/activities/${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ startTime: s.startTime, endTime: s.endTime }),
+    })
+    if (!patch.ok) {
+      setRescheduling(null)
+      setSuggestMsg("改期失敗（可能非活動建立者）。")
+      return
+    }
+    // 2) Re-run clash detection for the existing roster at the new time.
+    const studentIds = activity.assignments.map((a) => a.studentId)
+    if (studentIds.length > 0) {
+      const res = await fetch(`/api/activities/${id}/assign`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ studentIds }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setClashes(data.clashes ?? [])
+      }
+    } else {
+      setClashes([])
+    }
+    setRescheduling(null)
+    setSuggestOpen(false)
+    setSuggestions(null)
+    load()
+  }
+
+  function formatSuggestion(s: DateSuggestion) {
+    const d = new Date(s.startTime)
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    let out = `${d.getMonth() + 1}月${d.getDate()}日（星期${WEEKDAY_LABEL[s.weekday]}）${time}`
+    if (s.endTime) {
+      const e = new Date(s.endTime)
+      out += `–${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}`
+    }
+    return out
+  }
+
   if (loading) return <div className="p-6 text-center text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
   if (!activity) return <div className="p-6 text-center text-body" style={{ color: "var(--color-ink-300)" }}>找不到活動</div>
 
@@ -327,8 +421,16 @@ export default function ActivityDetailPage() {
       <div>
         <Link href="/teacher/activities" className="text-caption mb-2 inline-block"
           style={{ color: "var(--color-ink-400)" }}>← 活動管理</Link>
-        <h1 className="text-h1">{activity.title}</h1>
-        <div className="flex gap-4 mt-1 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-h1">{activity.title}</h1>
+          {activity.activityType && (
+            <span className="text-caption px-2 py-0.5 rounded-pill"
+              style={{ background: "var(--color-accent-soft, #eff6ff)", color: "var(--color-accent)" }}>
+              {ACTIVITY_TYPE_LABEL[activity.activityType]}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-4 mt-1 flex-wrap items-center">
           <p className="text-body" style={{ color: "var(--color-ink-500)" }}>
             📅 {formatDateTime(activity.startTime)}
             {activity.endTime && ` — ${formatDateTime(activity.endTime)}`}
@@ -336,6 +438,11 @@ export default function ActivityDetailPage() {
           {activity.location && (
             <p className="text-body" style={{ color: "var(--color-ink-500)" }}>📍 {activity.location}</p>
           )}
+          <button onClick={openSuggest}
+            className="text-caption px-3 py-1 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}>
+            🗓 建議改期
+          </button>
         </div>
         {activity.description && (
           <p className="text-body mt-2" style={{ color: "var(--color-ink-700)" }}>{activity.description}</p>
@@ -353,7 +460,63 @@ export default function ActivityDetailPage() {
               {c.studentName} — 與「{c.activity.title}」衝突
             </p>
           ))}
-          <button onClick={() => setClashes([])} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          <div className="flex gap-3 pt-1">
+            <button onClick={openSuggest} className="text-caption font-medium px-3 py-1 rounded-input text-white"
+              style={{ background: "var(--color-admin)" }}>
+              🗓 建議其他日期
+            </button>
+            <button onClick={() => setClashes([])} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          </div>
+        </div>
+      )}
+
+      {/* Date suggestion panel */}
+      {suggestOpen && (
+        <div className="card p-4 space-y-3" style={{ borderLeft: "4px solid var(--color-accent)" }}>
+          <div className="flex items-center justify-between">
+            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>建議舉行日期</p>
+            <button onClick={() => setSuggestOpen(false)} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          </div>
+
+          {/* If the activity has no type, ask the teacher to pick one first. */}
+          {!activity.activityType && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>活動類型：</span>
+              {(["ECA", "ACADEMIC"] as ActivityType[]).map((t) => (
+                <button key={t}
+                  onClick={() => { setSuggestType(t); fetchSuggestions(t) }}
+                  className="text-caption px-3 py-1 rounded-input border"
+                  style={{
+                    border: `1px solid ${suggestType === t ? "var(--color-accent)" : "var(--color-border)"}`,
+                    color:  suggestType === t ? "var(--color-accent)" : "var(--color-ink-700)",
+                  }}>
+                  {ACTIVITY_TYPE_LABEL[t]}（星期{t === "ECA" ? "一、二" : "三至五"}）
+                </button>
+              ))}
+            </div>
+          )}
+
+          {suggestLoading && <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>計算中…</p>}
+          {suggestMsg && <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>{suggestMsg}</p>}
+
+          {suggestions && suggestions.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
+                以下日期全部學生都有空（保持原時間），撳一下即改期：
+              </p>
+              {suggestions.map((s) => (
+                <div key={s.startTime} className="flex items-center justify-between gap-3 p-2 rounded-input"
+                  style={{ background: "var(--color-surface-2)" }}>
+                  <span className="text-body" style={{ color: "var(--color-ink-900)" }}>{formatSuggestion(s)}</span>
+                  <button onClick={() => rescheduleTo(s)} disabled={rescheduling === s.startTime}
+                    className="text-caption font-medium px-3 py-1 rounded-input text-white shrink-0"
+                    style={{ background: "var(--color-accent)", opacity: rescheduling === s.startTime ? 0.6 : 1 }}>
+                    {rescheduling === s.startTime ? "改期中…" : "改到此日期"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
