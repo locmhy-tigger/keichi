@@ -594,38 +594,8 @@ enum BehaviorType {
 }
 
 // ─────────────────────────────────────────
-// DISCIPLINE (訓育) — homeroom teachers, thresholds, alert dedupe
+// DISCIPLINE (訓育) — thresholds, alert dedupe. 班主任 is Class.homeroomTeacherId (see admin/groups).
 // ─────────────────────────────────────────
-
-// 班主任 registry — decoupled from the dazhi Class code-enrollment model so
-// every physical class can have a form teacher + follow-up email.
-model HomeroomClass {
-  id            String            @id @default(cuid())
-  className     String            @unique
-  teacherName   String
-  teacherEmail  String
-  teacherUserId String?           // optional link to a User for in-app notify
-  updatedAt     DateTime          @updatedAt
-  createdAt     DateTime          @default(now())
-
-  students      HomeroomStudent[]
-
-  @@index([teacherUserId])
-}
-
-// Admin-managed student roster for a class (name-based, no login account needed).
-model HomeroomStudent {
-  id              String   @id @default(cuid())
-  homeroomClassId String
-  studentName     String
-  classNumber     String?
-  createdAt       DateTime @default(now())
-
-  homeroomClass HomeroomClass @relation(fields: [homeroomClassId], references: [id], onDelete: Cascade)
-
-  @@unique([homeroomClassId, studentName])
-  @@index([homeroomClassId])
-}
 
 // Simple key/value store for school-wide settings (e.g. class alert threshold).
 model SchoolSetting {

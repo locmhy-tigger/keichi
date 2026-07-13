@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   if (!isEmailConfigured()) {
-    return NextResponse.json({ error: "系統尚未設定電郵服務（RESEND_API_KEY / MAIL_FROM）" }, { status: 503 })
+    return NextResponse.json({ error: "系統尚未設定電郵服務（RESEND_API_KEY）" }, { status: 503 })
   }
 
   const { className, studentName, note } = schema.parse(await req.json())

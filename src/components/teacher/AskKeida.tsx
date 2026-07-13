@@ -8,15 +8,20 @@ import type { LLMMessage } from "@/lib/llm"
 import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
 import { DraftActionCard, type Draft } from "@/components/teacher/DraftActionCard"
 
-// Strip trailing agent metadata markers from text shown to the user.
-const MARKERS = ["[DRAFT:", "[DOCREADY]", "[DOCTYPE:", "[TITLE:", "[NEEDS_APPROVAL]", "[NEED_TOOL:", "[ROUTE:"]
+// Strip agent metadata markers from text shown to the user. Markers can
+// appear mid-stream (e.g. [NEED_TOOL:...] before a tool result and more
+// reply text follow) so each occurrence must be removed in place — cutting
+// at the first marker would discard everything the agent says afterward.
 function visibleText(raw: string): string {
-  let cut = raw.length
-  for (const m of MARKERS) {
-    const i = raw.indexOf(m)
-    if (i >= 0 && i < cut) cut = i
-  }
-  return raw.slice(0, cut).trim()
+  return raw
+    .replace(/\[DRAFT:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[NEED_TOOL:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[DOCREADY\]/g, "")
+    .replace(/\[DOCTYPE:[^\]]+\]/g, "")
+    .replace(/\[TITLE:[^\]]+\]/g, "")
+    .replace(/\[NEEDS_APPROVAL\]/g, "")
+    .replace(/\[ROUTE:\w+\]/g, "")
+    .trim()
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -103,7 +103,7 @@ export function NotificationBell() {
 
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-2 w-72 max-h-96 overflow-y-auto card shadow-2xl z-50"
+          className="absolute bottom-full left-0 mb-2 w-72 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto card shadow-2xl z-50"
           style={{ background: "var(--color-surface)" }}
         >
           <div className="px-3 py-2 border-b" style={{ borderColor: "var(--color-border)" }}>
