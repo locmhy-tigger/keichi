@@ -43,6 +43,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     tools: [
       { label: "採購申請",   description: "填寫及追蹤採購申請表", href: "/teacher/committee/admin/procurement" },
       { label: "活動文件",   description: "管理活動策劃及報告文件" },
+      { label: "KCquotation 報價", description: "採購報價管理與 OCR 識別", href: "/teacher/committee/it/quotation" },
       { label: "設施預約",   description: "電腦室、特別室及禮堂預約", href: "/teacher/committee/admin/booking" },
       { label: "費用結算",   description: "班費及活動費用記錄"   },
     ],
@@ -78,7 +79,6 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "隨機點名器",     description: "隨機抽選學生，支援記錄名單",   href: "/teacher/committee/it/random-picker"  },
       { label: "HEIC 轉 JPG",   description: "本地轉換 iPhone 相片格式",     href: "/teacher/committee/it/heic-convert"   },
       { label: "KCnotice 通知書", description: "從 DOCX 模板快速生成通知書", href: "/teacher/committee/it/notice-gen" },
-      { label: "KCquotation 報價", description: "採購報價管理與 OCR 識別", href: "/teacher/committee/it/quotation" },
       { label: "IT 設備管理",     description: "追蹤及管理校內 IT 設施",   href: "/teacher/committee/it/inventory" },
       { label: "圖片壓縮器",     description: "本地壓縮 JPG/PNG/WebP，不上傳伺服器",  href: "/teacher/committee/it/image-compress" },
       { label: "PDF 壓縮器",     description: "縮小 PDF 大小，方便電郵傳送",           href: "/teacher/committee/it/pdf-compress"   },
