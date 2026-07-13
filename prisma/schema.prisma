@@ -160,6 +160,7 @@ model User {
 
   // App relations
   taughtClasses  Class[]            @relation("TeacherClasses")
+  homeroomForClasses Class[]        @relation("HomeroomTeacher")
   enrollments    ClassEnrollment[]
   submissions    MissionSubmission[]
   pointsReceived PointTransaction[] @relation("ReceivedPoints")
@@ -178,6 +179,7 @@ model User {
   activitiesCreated Activity[]          @relation("ActivitiesCreated")
   activityAssignments ActivityAssignment[] @relation("ActivityAssignments")
   groupMemberships    GroupMember[]
+  taughtGroups        StudentGroup[]   @relation("GroupTeacher")
 
   // Inventory & Assets
   assetsLent        Asset[]             @relation("UserAssets")
@@ -328,20 +330,23 @@ model Booking {
 // ─────────────────────────────────────────
 
 model Class {
-  id        String   @id @default(cuid())
-  teacherId String
-  name      String
-  classCode String   @unique // 6-char alphanumeric
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  teacherId         String
+  homeroomTeacherId String?  // 班主任（學務角色；與 teacherId「擁有權」語意不同）
+  name              String
+  classCode         String   @unique // 6-char alphanumeric
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id])
-  enrollments ClassEnrollment[]
-  missions    Mission[]
-  points      PointTransaction[]
-  announcements Announcement[]
+  teacher         User              @relation("TeacherClasses", fields: [teacherId], references: [id])
+  homeroomTeacher User?             @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
+  enrollments     ClassEnrollment[]
+  missions        Mission[]
+  points          PointTransaction[]
+  announcements   Announcement[]
 
   @@index([teacherId])
+  @@index([homeroomTeacherId])
 }
 
 model ClassEnrollment {
@@ -798,9 +803,11 @@ model StudentGroup {
   name        String
   type        GroupType
   description String?       @db.Text
+  teacherId   String?       // 負責老師
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   members     GroupMember[]
+  teacher     User?         @relation("GroupTeacher", fields: [teacherId], references: [id])
 
   @@index([type])
 }
