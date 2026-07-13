@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
 
@@ -12,14 +12,17 @@ type User = {
   image?: string | null
 }
 
-const NAV = [
-  { href: "/student",            label: "主頁",     icon: HomeIcon     },
-  { href: "/student/activities", label: "我的活動", icon: CalendarIcon },
-  { href: "/student/calendar",   label: "行事曆",   icon: GridIcon     },
-  { href: "/student/missions",   label: "任務",     icon: MapIcon      },
-  { href: "/student/flashcards", label: "閃卡",     icon: CardIcon     },
-  { href: "/student/points",     label: "積點",     icon: StarIcon     },
-  { href: "/student/records",    label: "行為記錄", icon: RecordIcon   },
+type NavItem = { href: string; label: string; icon: ComponentType<{ color?: string }>; hidden?: boolean }
+
+const NAV: NavItem[] = [
+  { href: "/student",            label: "主頁",     icon: HomeIcon      },
+  { href: "/student/activities", label: "我的活動", icon: CalendarIcon, hidden: true },
+  { href: "/student/calendar",   label: "行事曆",   icon: GridIcon      },
+  { href: "/student/missions",   label: "任務",     icon: MapIcon,      hidden: true },
+  { href: "/student/flashcards", label: "閃卡",     icon: CardIcon      },
+  { href: "/student/points",     label: "積點",     icon: StarIcon,     hidden: true },
+  { href: "/student/records",    label: "行為記錄", icon: RecordIcon    },
+]
 ]
 
 export function StudentSidebar({ user }: { user: User }) {
@@ -41,13 +44,10 @@ export function StudentSidebar({ user }: { user: User }) {
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
-        <Image src="/logo-placeholder.svg" alt="ICHI Logo" width={32} height={32} priority />
+        <Image src="/logo-placeholder.svg" alt="基智若愚 Logo" width={32} height={32} priority />
         <div className="flex items-end gap-1.5">
           <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
             基智若愚
-          </span>
-          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-            ICHI
           </span>
         </div>
       </div>
@@ -57,7 +57,7 @@ export function StudentSidebar({ user }: { user: User }) {
           導覽 · MENU
         </p>
         <ul className="space-y-0.5">
-          {NAV.map(({ href, label, icon: Icon }) => (
+          {NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -123,7 +123,7 @@ export function StudentSidebar({ user }: { user: User }) {
             <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <Image src="/logo.png" alt="ICHI Logo" width={24} height={24} />
+        <Image src="/logo.png" alt="基智若愚 Logo" width={24} height={24} />
         <span className="text-body font-semibold" style={{ color: "var(--color-ink-900)" }}>基智若愚</span>
       </div>
 
