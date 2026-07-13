@@ -35,10 +35,10 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/eca",        label: "課外活動", icon: ActivityIcon,  color: "var(--color-eca)"        },
 ]
 
-const ADMIN_NAV = [
+const ADMIN_NAV: NavItem[] = [
   { href: "/teacher/admin/users",    label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/groups",   label: "群組管理", icon: GroupsIcon },
-  { href: "/teacher/admin/homeroom", label: "班級管理", icon: ClassIcon  },
+  { href: "/teacher/admin/homeroom", label: "班級管理", icon: ClassIcon, hidden: true },
   { href: "/teacher/admin/agents",   label: "AI 助理管理", icon: AgentIcon },
   { href: "/teacher/admin/audit",    label: "操作紀錄", icon: AuditIcon  },
 ]
@@ -123,7 +123,7 @@ export function TeacherSidebar({ user }: { user: User }) {
               管理 · ADMIN
             </p>
             <ul className="space-y-0.5">
-              {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+              {ADMIN_NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
                 <li key={href}>
                   <Link
                     href={href}

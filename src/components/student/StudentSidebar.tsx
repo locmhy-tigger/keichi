@@ -23,7 +23,6 @@ const NAV: NavItem[] = [
   { href: "/student/points",     label: "積點",     icon: StarIcon,     hidden: true },
   { href: "/student/records",    label: "行為記錄", icon: RecordIcon    },
 ]
-]
 
 export function StudentSidebar({ user }: { user: User }) {
   const pathname = usePathname()

@@ -57,8 +57,15 @@
   ![行政委員頁：活動文件與 KCquotation 改為預設工具](img/quotation_in_admin.png)
 
 ## 訓育
-- ⬜ 新增：「行為記錄」新增記錄時，判斷是否符合「訓育設定」的發送電郵觸發條件。
-- ✅ 補充：班主任電郵將於「群組管理 - 班級分組」中進行綁定（已透過 `Class.homeroomTeacherId` 實作；電郵「觸發發送」尚待做）。
+- ✅ 新增：「行為記錄」新增記錄時，依「訓育設定」自動觸發電郵通知班主任。
+
+  **交付**：`src/lib/discipline.ts` 的 `checkThresholdAndEmail()`（每類別 × 每學生，**每達門檻倍數通知一次**：門檻 5 → 5/10/15…各一封）與 `checkClassAlert()`（全班違規總數，每達班級門檻倍數通知一次）。班主任 email 取自「群組管理 - 班級分組」的 `Class.homeroomTeacher`（`findHomeroom()`）。
+
+  **可靠度**：採「**先寄信、成功後才標記 `notifiedCount`**」——寄信失敗不會被誤標為已通知，下次新增記錄會重試，避免靜默漏發（門檻以 `Math.floor(count/threshold)*threshold` 計算已達最高倍數，即使一次跳多筆也能抓到節點）。
+
+  ![訓育門檻通知信送達](img/discipline_alert.png)
+
+- ✅ 補充：班主任電郵已於「群組管理 - 班級分組」綁定（`Class.homeroomTeacherId`），並已接入上述電郵觸發發送。
 
 ## 資訊科技
 - ✅ 移除：「Quotation」及「KCquotation 報價」入口。
@@ -92,7 +99,7 @@
 | 行事曆（同步外部 Google Calendar） | ⬜ 待做 |
 | 行政（活動文件 / KCquotation 轉預設工具） | ✅ 完成 |
 | 訓育（班主任電郵綁定） | ✅ 完成（欄位 + UI）* |
-| 訓育（行為記錄電郵觸發發送） | ⬜ 待做 |
+| 訓育（行為記錄電郵觸發發送） | ✅ 完成（每門檻倍數通知 · 先寄後標記） |
 | 資訊科技（移除 Quotation 入口） | ✅ 完成 |
 | 群組管理（改名「班級分組」） | ✅ 完成 |
 | 群組管理（成員管理綁定教職員／班主任） | ✅ 完成* |
