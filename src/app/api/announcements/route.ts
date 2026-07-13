@@ -25,10 +25,8 @@ export async function GET(req: NextRequest) {
 
   let whereClause: any = {}
 
-  if (session.user.role === "TEACHER") {
-    if (target) whereClause.target = target
-  } else {
-    // STUDENT: can only see ALL, or their specific CLASS, and only if publishAt <= now
+  if (session.user.role === "STUDENT") {
+    // STUDENT：只看 ALL 或自己班、且已發佈
     const studentEnrollments = await prisma.classEnrollment.findMany({
       where: { studentId: session.user.id },
       select: { classId: true }
@@ -42,6 +40,9 @@ export async function GET(req: NextRequest) {
         { target: "CLASS", classId: { in: classIds } }
       ]
     }
+  } else {
+    // TEACHER / ADMIN：看全部（可選 target 過濾）
+    if (target) whereClause.target = target
   }
 
   const announcements = await prisma.announcement.findMany({

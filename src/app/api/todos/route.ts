@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
 
   let whereClause: any = {}
 
-  if (session.user.role === "TEACHER") {
+  // STUDENT 只能看見分配給自己的待辦；TEACHER / ADMIN（教職員）則看自己建立或分配給自己的
+  const isStaff = isTeacherOrAdmin(session.user.role)
+
+  if (isStaff) {
     if (view === "mine") {
       whereClause = { createdById: session.user.id, ...statusFilter, ...committeeFilter }
     } else if (view === "assigned") {

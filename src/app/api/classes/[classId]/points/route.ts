@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         classId: params.classId,
         amount: data.amount,
         reason: data.reason,
-        awardedBy: session.user.role === "TEACHER" ? session.user.id : null,
+        awardedBy: (session.user.role === "TEACHER" || session.user.role === "ADMIN") ? session.user.id : null,
         note: data.note,
       },
     }),

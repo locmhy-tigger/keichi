@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
 import { NotificationBell } from "@/components/teacher/NotificationBell"
@@ -14,15 +14,17 @@ type User = {
   role?: string | null
 }
 
-const MAIN_NAV = [
-  { href: "/teacher",               label: "主頁",     icon: HomeIcon     },
-  { href: "/teacher/todos",         label: "待辦事項", icon: CheckIcon    },
-  { href: "/teacher/announcements", label: "公告",     icon: MegaphoneIcon},
-  { href: "/teacher/calendar",      label: "行事曆",   icon: CalendarIcon },
-  { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon },
-  { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon},
-  { href: "/teacher/points",        label: "積點",     icon: StarIcon     },
-  { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon    },
+type NavItem = { href: string; label: string; icon: ComponentType<{ color?: string }>; hidden?: boolean }
+
+const MAIN_NAV: NavItem[] = [
+  { href: "/teacher",               label: "主頁",     icon: HomeIcon       },
+  { href: "/teacher/todos",         label: "待辦事項", icon: CheckIcon      },
+  { href: "/teacher/announcements", label: "公告",     icon: MegaphoneIcon, hidden: true },
+  { href: "/teacher/calendar",      label: "行事曆",   icon: CalendarIcon   },
+  { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon,  hidden: true },
+  { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon, hidden: true },
+  { href: "/teacher/points",        label: "積點",     icon: StarIcon,      hidden: true },
+  { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon      },
 ]
 
 const COMMITTEE_NAV = [
@@ -33,10 +35,9 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/eca",        label: "課外活動", icon: ActivityIcon,  color: "var(--color-eca)"        },
 ]
 
-const ADMIN_NAV = [
+const ADMIN_NAV: NavItem[] = [
   { href: "/teacher/admin/users",    label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/groups",   label: "群組管理", icon: GroupsIcon },
-  { href: "/teacher/admin/homeroom", label: "班級管理", icon: ClassIcon  },
   { href: "/teacher/admin/agents",   label: "AI 助理管理", icon: AgentIcon },
   { href: "/teacher/admin/audit",    label: "操作紀錄", icon: AuditIcon  },
 ]
@@ -63,7 +64,7 @@ export function TeacherSidebar({ user }: { user: User }) {
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
         <Image
           src="/logo.png"
-          alt="ICHI Logo"
+          alt="基智若愚 Logo"
           width={32}
           height={32}
           priority
@@ -71,9 +72,6 @@ export function TeacherSidebar({ user }: { user: User }) {
         <div className="flex items-end gap-1.5">
           <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
             基智若愚
-          </span>
-          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-            ICHI
           </span>
         </div>
       </div>
@@ -84,7 +82,7 @@ export function TeacherSidebar({ user }: { user: User }) {
           導覽 · MENU
         </p>
         <ul className="space-y-0.5">
-          {MAIN_NAV.map(({ href, label, icon: Icon }) => (
+          {MAIN_NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -124,7 +122,7 @@ export function TeacherSidebar({ user }: { user: User }) {
               管理 · ADMIN
             </p>
             <ul className="space-y-0.5">
-              {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+              {ADMIN_NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
                 <li key={href}>
                   <Link
                     href={href}
@@ -204,15 +202,12 @@ export function TeacherSidebar({ user }: { user: User }) {
         </button>
         <Image
           src="/logo-placeholder.svg"
-          alt="ICHI Logo"
+          alt="基智若愚 Logo"
           width={24}
           height={24}
         />
         <span className="font-semibold text-base" style={{ color: "var(--color-ink-900)" }}>
           基智若愚
-        </span>
-        <span className="text-xs font-semibold" style={{ color: "var(--color-accent)" }}>
-          ICHI
         </span>
       </div>
 
@@ -415,13 +410,3 @@ function AuditIcon() {
   )
 }
 
-function ClassIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-    </svg>
-  )
-}

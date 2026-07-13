@@ -10,7 +10,15 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f db",
+    "db:push:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/keichi?schema=public DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@localhost:5433/keichi?schema=public prisma db push",
+    "db:seed:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/keichi?schema=public DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@localhost:5433/keichi?schema=public prisma db seed",
+    "db:reset:local": "docker compose down -v && docker compose up -d --wait && npm run db:push:local && npm run db:seed:local",
+    "db:studio:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/keichi?schema=public DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@localhost:5433/keichi?schema=public prisma studio",
+    "email:test": "node --env-file=.env --env-file-if-exists=.env.local --import tsx scripts/test-email.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -19,6 +27,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^6.2.1",
+    "@react-email/components": "^1.0.11",
     "@types/bcryptjs": "^3.0.0",
     "@types/jszip": "^3.4.1",
     "@types/qrcode": "^1.5.6",
@@ -41,6 +50,7 @@
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "resend": "^6.17.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {

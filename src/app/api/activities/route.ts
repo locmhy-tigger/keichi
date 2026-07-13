@@ -18,33 +18,35 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  if (session.user.role === "TEACHER") {
-    const activities = await prisma.activity.findMany({
-      where: { createdById: session.user.id },
+  // STUDENT：只看分配給自己的活動
+  if (session.user.role === "STUDENT") {
+    const studentActivities = await prisma.activity.findMany({
+      where: {
+        assignments: { some: { studentId: session.user.id } }
+      },
       include: {
-        _count: { select: { assignments: true } },
-        assignments: { where: { status: "CONFIRMED" }, select: { id: true } },
+        assignments: {
+          where: { studentId: session.user.id },
+          select: { status: true, note: true }
+        },
+        createdBy: { select: { id: true, name: true } }
       },
       orderBy: { startTime: "asc" },
     })
-    return NextResponse.json(activities)
+    return NextResponse.json(studentActivities)
   }
 
-  // Student: see assigned activities
-  const studentActivities = await prisma.activity.findMany({
-    where: {
-      assignments: { some: { studentId: session.user.id } }
-    },
+  // TEACHER：自己建立的活動；ADMIN：全部活動
+  const where = session.user.role === "ADMIN" ? {} : { createdById: session.user.id }
+  const activities = await prisma.activity.findMany({
+    where,
     include: {
-      assignments: {
-        where: { studentId: session.user.id },
-        select: { status: true, note: true }
-      },
-      createdBy: { select: { id: true, name: true } }
+      _count: { select: { assignments: true } },
+      assignments: { where: { status: "CONFIRMED" }, select: { id: true } },
     },
     orderBy: { startTime: "asc" },
   })
-  return NextResponse.json(studentActivities)
+  return NextResponse.json(activities)
 }
 
 export async function POST(req: NextRequest) {

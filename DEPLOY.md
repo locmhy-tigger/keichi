@@ -33,8 +33,8 @@ Copy every line from `.env.example` and fill in real values in Zeabur → Variab
 | `NEXT_PUBLIC_PUSHER_KEY` | Pusher Dashboard → App Keys |
 | `NEXT_PUBLIC_PUSHER_CLUSTER` | `ap3` |
 | `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
-| `RESEND_API_KEY` | resend.com → API Keys (discipline emails; optional) |
-| `MAIL_FROM` | Verified Resend sender, e.g. `訓育組 <discipline@school.edu.hk>` |
+| `RESEND_API_KEY` | resend.com → API Keys (discipline emails; optional — no-ops without it) |
+| `RESEND_FROM` | Verified Resend sender, e.g. `訓育組 <discipline@school.edu.hk>` (unset → onboarding@resend.dev for testing) |
 | `NEXT_PUBLIC_APP_URL` | Same as `AUTH_URL` |
 
 ### 5. Update Google OAuth redirect URI
@@ -53,14 +53,46 @@ pnpm db:seed
 
 ---
 
-## Ongoing Deployments
+## Ongoing Deployments — with schema changes
 
 Zeabur auto-deploys on every push to `main`.
 
-After schema changes (new Prisma models), run:
+If the push includes Prisma schema changes (new models, new fields), you need to sync the **production database** after deployment. Zeabur runs `prisma generate` during build, but does **not** run `prisma db push` automatically.
+
+### Option A: Zeabur Terminal (easiest)
+
+1. Go to Zeabur Dashboard → your service → **Terminal**
+2. Run:
+   ```bash
+   npx prisma db push
+   ```
+3. Confirm the output shows `Your database is now in sync`
+
+### Option B: From local machine (if Zeabur Terminal unavailable)
+
 ```bash
-pnpm db:push
+# Set production DATABASE_URL temporarily (copy from Zeabur Dashboard → Variables)
+export DATABASE_URL="postgresql://root:...@service-xxx:5432/zeabur?schema=public"
+export DATABASE_URL_UNPOOLED="$DATABASE_URL"
+
+npx prisma db push
+
+# Unset after done
+unset DATABASE_URL DATABASE_URL_UNPOOLED
 ```
+
+### Safe schema changes
+
+| Change | Safe? | Note |
+|--------|-------|------|
+| Add nullable field | ✅ | Zero downtime, no data loss |
+| Add field with default | ✅ | Existing rows get the default |
+| Add model | ✅ | Old clients ignore new tables |
+| Rename field | ⚠️ | Deploy client + push schema **together** |
+| Remove field | ⚠️ | Remove client usage first, push later |
+| Remove model | ⚠️ | Drops table and all its data |
+
+When in doubt, add the field as nullable first, push, then fill data, then make it required in a second deploy.
 
 ---
 

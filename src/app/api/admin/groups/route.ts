@@ -8,6 +8,7 @@ const createSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(["FORM_CLASS", "SUBJECT_CLASS", "SPECIFIC"]),
   description: z.string().optional(),
+  teacherId: z.string().nullable().optional(),
 })
 
 export async function GET() {
@@ -17,7 +18,10 @@ export async function GET() {
   }
 
   const groups = await prisma.studentGroup.findMany({
-    include: { _count: { select: { members: true } } },
+    include: {
+      _count: { select: { members: true } },
+      teacher: { select: { id: true, name: true, image: true, email: true } },
+    },
     orderBy: [{ type: "asc" }, { name: "asc" }],
   })
 
@@ -31,7 +35,12 @@ export async function POST(req: NextRequest) {
   }
 
   const data = createSchema.parse(await req.json())
-  const group = await prisma.studentGroup.create({ data })
+  const group = await prisma.studentGroup.create({
+    data,
+    include: {
+      teacher: { select: { id: true, name: true, image: true, email: true } },
+    },
+  })
 
   return NextResponse.json(group, { status: 201 })
 }
