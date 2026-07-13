@@ -71,19 +71,25 @@ export async function POST(req: NextRequest) {
       ${rows ? `<p style="margin-top:8px"><strong>違規次數較多的學生：</strong></p><table style="border-collapse:collapse"><thead><tr>${cell("學生")}${cell("違規次數")}</tr></thead><tbody>${rows}</tbody></table>` : ""}`
   }
 
-  const result = await sendEmail({
-    to:      homeroom.teacherEmail,
-    subject,
-    html: `<div style="font-family:sans-serif;line-height:1.6">
+  let result
+  try {
+    result = await sendEmail({
+      to:      homeroom.teacherEmail,
+      subject,
+      html: `<div style="font-family:sans-serif;line-height:1.6">
         <p>${homeroom.teacherName} 老師：</p>
         ${bodyInner}
         <p style="margin-top:12px"><a href="${appUrl}/teacher/committee/discipline/dashboard">開啟訓育行為儀表板</a></p>
         <p style="color:#888;font-size:12px">由 ${senderNm} 透過基智中學校務系統發送。</p>
       </div>`,
-  })
+    })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: "電郵發送失敗，請稍後再試。", detail }, { status: 502 })
+  }
 
-  if (!result.ok) {
-    return NextResponse.json({ error: "電郵發送失敗，請稍後再試。", detail: result.error }, { status: 502 })
+  if (result.skipped) {
+    return NextResponse.json({ error: "RESEND_API_KEY 未設定，無法發送電郵。", detail: "EMAIL_SKIPPED" }, { status: 503 })
   }
 
   if (homeroom.teacherUserId) {

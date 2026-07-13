@@ -89,24 +89,11 @@ async function main() {
     skipDuplicates: true,
   })
 
-  // Seed "活動文件" EMBED tool for ADMIN committee
-  const existingTool = await prisma.committeeTool.findFirst({
-    where: { committee: "ADMIN", label: "活動文件" },
+  // 「活動文件」與「Quotation」已遷移為站內預設工具，移除舊的嵌入式 (EMBED) DB row。
+  // 註：「Quotation」僅存在執行期資料庫（不在程式碼中），此處一併清理。
+  await prisma.committeeTool.deleteMany({
+    where: { label: { in: ["活動文件", "Quotation"] } },
   })
-  if (!existingTool) {
-    await prisma.committeeTool.create({
-      data: {
-        committee:   "ADMIN",
-        label:       "活動文件",
-        description: "活動通知書生成系統 (KCnotice)",
-        type:        "EMBED",
-        content:     "https://kcnotice.zeabur.app/",
-        order:       1,
-        active:      true,
-        createdById: admin.id,
-      },
-    })
-  }
 
   // ── Agent document templates ────────────────────────────────────────────────
   const TEMPLATES = [

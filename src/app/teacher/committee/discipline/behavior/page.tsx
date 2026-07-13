@@ -47,13 +47,13 @@ export default function BehaviorPage() {
 
   // Homeroom classes + rosters (for the dropdown + student multi-select)
   const [hrClasses, setHrClasses] = useState<HomeroomClass[]>([])
-  const [manual,    setManual]    = useState(false)
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
+  const [studentQuery, setStudentQuery] = useState("")
 
   // Form state
   const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10))
   const [className,   setClassName]   = useState("")
-  const [studentName, setStudentName] = useState("")   // used in edit / manual mode
+  const [studentName, setStudentName] = useState("")   // used in edit mode only
   const [type,        setType]        = useState<BehaviorTypeValue>("DEMERIT")
   const [description, setDescription] = useState("")
   const [action,      setAction]      = useState("")
@@ -82,14 +82,14 @@ export default function BehaviorPage() {
 
   function resetForm() {
     setEditingId(null); setDate(new Date().toISOString().slice(0, 10))
-    setClassName(""); setStudentName(""); setSelectedStudents([]); setManual(false)
+    setClassName(""); setStudentName(""); setSelectedStudents([]); setStudentQuery("")
     setType("DEMERIT"); setDescription(""); setAction("")
   }
 
   function openEdit(r: BehaviorRecord) {
     setEditingId(r.id)
     setDate(r.date.slice(0, 10)); setClassName(r.className); setStudentName(r.studentName)
-    setSelectedStudents([]); setManual(true) // edit is single-student
+    setSelectedStudents([])
     setType(r.type); setDescription(r.description); setAction(r.action ?? "")
     setShowForm(true)
   }
@@ -114,8 +114,8 @@ export default function BehaviorPage() {
       return
     }
 
-    // Create: one record per selected student (roster) or the single manual name.
-    const names = manual ? (studentName.trim() ? [studentName.trim()] : []) : selectedStudents
+    // Create: one record per selected student from the roster.
+    const names = selectedStudents
     if (!className || names.length === 0) { setSaving(false); return }
 
     const created: BehaviorRecord[] = []
@@ -236,7 +236,7 @@ export default function BehaviorPage() {
           </div>
 
           {/* Class + students */}
-          {editingId || manual ? (
+          {editingId ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
@@ -249,22 +249,11 @@ export default function BehaviorPage() {
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
-                  <select required value={className} onChange={(e) => { setClassName(e.target.value); setSelectedStudents([]) }} className={inputCls} style={inputStyle}>
-                    <option value="">選擇班別…</option>
-                    {hrClasses.map((c) => <option key={c.className} value={c.className}>{c.className}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <button type="button" onClick={() => { setManual(true); setSelectedStudents([]) }}
-                    className="text-caption px-3 py-2 rounded-input border w-full"
-                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
-                    手動輸入班別/學生
-                  </button>
-                </div>
-              </div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>班別 *</label>
+              <select required value={className} onChange={(e) => { setClassName(e.target.value); setSelectedStudents([]); setStudentQuery("") }} className={inputCls} style={inputStyle}>
+                <option value="">選擇班別…</option>
+                {hrClasses.map((c) => <option key={c.className} value={c.className}>{c.className}</option>)}
+              </select>
 
               {className && (
                 <div className="mt-3">
@@ -273,25 +262,48 @@ export default function BehaviorPage() {
                   </label>
                   {roster.length === 0 ? (
                     <p className="text-caption p-2 rounded-input" style={{ background: "var(--color-surface-2)", color: "var(--color-ink-400)" }}>
-                      此班尚無學生名單。請管理員到「班級管理」加入，或按「手動輸入」。
+                      此班尚無學生名單。請先讓學生透過班級代碼加入此班。
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1">
-                      {roster.map((s) => {
-                        const on = selectedStudents.includes(s.studentName)
-                        return (
-                          <button type="button" key={s.studentName} onClick={() => toggleStudent(s.studentName)}
-                            className="text-caption px-2.5 py-1 rounded-input border transition-colors"
-                            style={{
-                              background: on ? "var(--color-accent)" : "var(--color-surface)",
-                              color:      on ? "white" : "var(--color-ink-700)",
-                              border:     `1px solid ${on ? "var(--color-accent)" : "var(--color-border)"}`,
-                            }}>
-                            {s.classNumber ? `${s.classNumber}. ` : ""}{s.studentName}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <>
+                      {selectedStudents.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {selectedStudents.map((name) => (
+                            <button type="button" key={name} onClick={() => toggleStudent(name)}
+                              className="text-caption px-2.5 py-1 rounded-input border flex items-center gap-1"
+                              style={{ background: "var(--color-accent)", color: "white", border: "1px solid var(--color-accent)" }}>
+                              {name} <span style={{ opacity: 0.8 }}>✕</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={studentQuery}
+                        onChange={(e) => setStudentQuery(e.target.value)}
+                        placeholder={`搜尋 ${roster.length} 位學生…`}
+                        className={`${inputCls} mb-2`}
+                        style={inputStyle}
+                      />
+                      <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1">
+                        {roster
+                          .filter((s) => s.studentName.toLowerCase().includes(studentQuery.trim().toLowerCase()))
+                          .map((s) => {
+                            const on = selectedStudents.includes(s.studentName)
+                            return (
+                              <button type="button" key={s.studentName} onClick={() => toggleStudent(s.studentName)}
+                                className="text-caption px-2.5 py-1 rounded-input border transition-colors"
+                                style={{
+                                  background: on ? "var(--color-accent)" : "var(--color-surface)",
+                                  color:      on ? "white" : "var(--color-ink-700)",
+                                  border:     `1px solid ${on ? "var(--color-accent)" : "var(--color-border)"}`,
+                                }}>
+                                {s.classNumber ? `${s.classNumber}. ` : ""}{s.studentName}
+                              </button>
+                            )
+                          })}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
