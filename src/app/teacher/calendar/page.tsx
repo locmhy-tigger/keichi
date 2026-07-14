@@ -1,7 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, Suspense } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
+
+const GoogleCalendarSettings = dynamic(
+  () => import("@/components/GoogleCalendarSettings"),
+  { ssr: false, loading: () => null }
+)
 
 type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
 
@@ -110,6 +116,7 @@ export default function CalendarPage() {
   const [importResult, setImportResult] = useState<IcsImportResult | null>(null)
 
   // Modal state
+  const [showGCalPanel, setShowGCalPanel] = useState(false)
   const [showCreate, setShowCreate]   = useState(false)
   const [selectedDay, setSelectedDay] = useState("")
   const [editEvent,   setEditEvent]   = useState<CalendarEvent | null>(null)
@@ -296,7 +303,7 @@ export default function CalendarPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-h1">全校行事曆</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>共 {events.length} 個活動</p>
@@ -341,6 +348,27 @@ export default function CalendarPage() {
             匯出 .ics
           </button>
           <button
+            onClick={() => setShowGCalPanel((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-input text-body border transition-colors"
+            style={{
+              border: "1px solid var(--color-border)",
+              color: showGCalPanel ? "var(--color-accent)" : "var(--color-ink-700)",
+              background: showGCalPanel ? "var(--color-accent-soft)" : "var(--color-surface)",
+            }}
+            title="Google Calendar 同步設定"
+          >
+            {/* Google Calendar icon */}
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="3" fill="#1a73e8"/>
+              <rect x="3.5" y="5.5" width="17" height="15" rx="1" fill="white"/>
+              <rect x="3.5" y="5.5" width="17" height="4.5" rx="1" fill="#1a73e8"/>
+              <rect x="7" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <rect x="15" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <text x="12" y="18" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#1a73e8">{new Date().getDate()}</text>
+            </svg>
+            <span className="hidden sm:inline">Google 同步</span>
+          </button>
+          <button
             onClick={() => openCreate()}
             className="px-4 py-2 rounded-input text-body font-medium text-white"
             style={{ background: "var(--color-accent)" }}
@@ -349,6 +377,15 @@ export default function CalendarPage() {
           </button>
         </div>
       </div>
+
+      {/* Google Calendar settings panel — slides in under header */}
+      {showGCalPanel && (
+        <div className="mb-6">
+          <Suspense fallback={null}>
+            <GoogleCalendarSettings />
+          </Suspense>
+        </div>
+      )}
 
       {/* Import result */}
       {importResult && (
