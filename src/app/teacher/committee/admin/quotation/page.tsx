@@ -296,12 +296,17 @@ export default function QuotationPage() {
   const recSup = recommended === "A" ? supA : supB
   const recPrices = recommended === "A" ? supAPrices : supBPrices
 
+  const PREVIEW_W = 496 // px — preview panel width incl gap
+
   return (
-    <div className="p-6 pb-28">
-    {/* Outer: centres when preview closed, stretches to two-col when open */}
-    <div className={`flex gap-6 items-start transition-all duration-300 ${showPreview ? "max-w-[1400px] mx-auto" : "max-w-4xl mx-auto"}`}>
-    {/* ── Left: form ── */}
-    <div className="flex-1 min-w-0">
+    <div className="p-6 pb-28 overflow-x-hidden">
+    {/* Outer: relative so preview can be absolute; fills viewport */}
+    <div className="relative">
+    {/* ── Form col: always centred by mx-auto, shifts left via translateX ── */}
+    <div
+      className="max-w-3xl mx-auto transition-transform duration-300 ease-in-out"
+      style={{ transform: showPreview ? `translateX(-${PREVIEW_W / 2}px)` : "translateX(0)" }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 mb-1">
         <Link href="/teacher/committee/admin" className="text-caption" style={{ color: "var(--color-ink-400)" }}>← 行政</Link>
@@ -673,8 +678,16 @@ export default function QuotationPage() {
       </div>
     </div>{/* end form col */}
 
-    {/* ── Right: Word preview ── */}
-    <div className={`${showPreview ? "xl:block" : "hidden"} w-[480px] shrink-0 sticky top-6`}>
+    {/* ── Right: Word preview — slides in from right via translateX ── */}
+    <div
+      className="hidden xl:block absolute top-0 right-0 w-[480px] sticky-preview transition-transform duration-300 ease-in-out"
+      style={{
+        transform: showPreview ? "translateX(0)" : "translateX(calc(100% + 24px))",
+        opacity: showPreview ? 1 : 0,
+        transition: "transform 300ms ease-in-out, opacity 300ms ease-in-out",
+        pointerEvents: showPreview ? "auto" : "none",
+      }}
+    >
       <p className="text-caption mb-2 flex items-center gap-1.5" style={{ color: "var(--color-ink-400)" }}>
         <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
         即時預覽 — 反映目前填寫內容
