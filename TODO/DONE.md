@@ -51,28 +51,21 @@
 ## 行政
 - ✅ 新增：將「活動文件」嵌入式網站轉換為站內預設工具「活動文件」。
 
-  僅完成「嵌入式網站 → 預設工具入口」的轉換（`[type]/page.tsx` 的 `CONFIGS.ADMIN.tools` 登錄為 preset 工具）。工具入口已顯示，但**功能頁本身尚未構建**——見下方 ⬜。
-
 - ✅ 新增：將「Quotation」嵌入式網站轉換為站內預設工具「KCquotation 報價」。
 
   「行政委員」頁現以「預設工具」呈現（不再為 EMBED 自定工具）：採購申請、活動文件、KCquotation 報價、設施預約、費用結算。
 
   ![行政委員頁：活動文件與 KCquotation 改為預設工具](img/quotation_in_admin.png)
 
-- ⬜ 構建：「活動文件」預設工具之實際功能頁。
+- ✅ 構建：「活動文件」預設工具之實際功能頁。
 
-  現況：`CONFIGS.ADMIN.tools` 的「活動文件」無 `href`，`PresetToolsGrid` 對無 `href` 工具顯示「即將推出」+ `cursor-not-allowed`；`src/app/teacher/committee/admin/` 下僅有 `procurement/` 與 `booking/`，無活動文件路由。需建置活動策劃及報告文件管理頁面。
+  ![活動通告文件生成頁面](img/notice_page.png)
 
 - ✅ 構建：「KCquotation」預設工具之實際功能頁。
 
-  將獨立的 Python Flask 工具（KCquotation）完整搬遷為站內原生頁面，不再是 iframe 嵌入。
+  ![KCquotation 報價生成頁面](img/quotation_page.png)
 
-  - 路由搬到 `/teacher/committee/admin/quotation`（語意正確，行政工具），刪除舊 stub `committee/it/quotation`；同步更新 `TOOL_REGISTRY` 與 `CONFIGS.ADMIN.tools` 的 `href`。
-  - 無狀態搬遷：填表 → 伺服器生成官方「按口頭報價採購表格」DOCX 下載，不存 DB、無列表/審批流程。
-  - DOCX 生成走伺服器端 docxtemplater（`src/app/api/quotation/generate/route.ts`）；官方 Word 模板改造成 docxtemplater 模板（`public/templates/quotation.docx`），Wingdings 2 checkbox 以變數字元保留視覺，物品說明/數量欄垂直合併。模板產生器留存於 `scripts/make-quotation-template.py`（可重現）。
-  - AI OCR 預填（`src/app/api/quotation/ocr/route.ts` + `lib/claude.ts` 的 `extractQuotationFromImage`）：上傳供應商報價單圖片/PDF，Claude vision（`claude-sonnet-4-5`）辨識並預填供應商/項目/單價/總價；prompt 完全照搬原工具。
-  - 表單頁（`committee/admin/quotation/page.tsx`）完整移植原工具表單，套用 keichi design tokens（`var(--color-admin)`、`.card`、`inputCls/inputStyle`）。
-  - 驗證：`next build` 通過、無型別錯誤；模板渲染 41 個佔位符全正確（24/24 欄位核對、無殘留）；新頁 auth gate 307→登入、generate/ocr API 無 auth 回 403、舊路徑 404。
+  將獨立的 Python Flask 工具（KCquotation）完整搬遷為站內原生頁面，不再是 iframe 嵌入。docxtemplater 伺服器端生成官方採購報價表 DOCX + Claude OCR 預填，無狀態、不存 DB。
 
 ## 訓育
 - ✅ 新增：「行為記錄」新增記錄時，依「訓育設定」自動觸發電郵通知班主任。
@@ -126,11 +119,11 @@
 | 公告 / 活動管理 / 任務管理 / 績點（隱藏入口） | ✅ 完成 |
 | 行事曆（同步外部 Google Calendar） | ⬜ 待做 |
 | 行政（活動文件 / KCquotation 轉預設工具） | ✅ 完成（入口轉換） |
-| 行政（活動文件功能頁構建） | ⬜ 待做 |
+| 行政（活動文件功能頁構建） | ✅ 完成 |
 | 行政（KCquotation 功能頁構建） | ✅ 完成 |
-| 訓育（班主任電郵綁定） | ✅ 完成（欄位 + UI）* |
-| 訓育（行為記錄電郵觸發發送） | ✅ 完成（每門檻倍數通知 · 先寄後標記） |
+| 訓育（班主任電郵綁定） | ✅ 完成 |
+| 訓育（行為記錄電郵觸發發送） | ✅ 完成 |
 | 資訊科技（移除 Quotation 入口） | ✅ 完成 |
 | 群組管理（改名「班級分組」） | ✅ 完成 |
-| 群組管理（成員管理綁定教職員／班主任） | ✅ 完成* |
+| 群組管理（成員管理綁定教職員／班主任） | ✅ 完成 |
 | 群組管理（管理員身份下班級列表渲染修復） | ✅ 完成 |
