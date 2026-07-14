@@ -25,7 +25,7 @@ export const TOOL_REGISTRY: ToolRegistryEntry[] = [
   { key: "/teacher/committee/it/random-picker",     href: "/teacher/committee/it/random-picker",     label: "隨機點名器",     committee: "IT", colorVar: "it" },
   { key: "/teacher/committee/it/heic-convert",      href: "/teacher/committee/it/heic-convert",      label: "HEIC 轉 JPG",   committee: "IT", colorVar: "it" },
   { key: "/teacher/committee/it/notice-gen",        href: "/teacher/committee/it/notice-gen",        label: "KCnotice 通知書", committee: "IT", colorVar: "it" },
-  { key: "/teacher/committee/it/quotation",         href: "/teacher/committee/it/quotation",         label: "KCquotation 報價", committee: "ADMIN", colorVar: "admin" },
+  { key: "/teacher/committee/admin/quotation", href: "/teacher/committee/admin/quotation", label: "KCquotation 報價", committee: "ADMIN", colorVar: "admin" },
   { key: "/teacher/committee/it/inventory",         href: "/teacher/committee/it/inventory",         label: "IT 設備管理",    committee: "IT", colorVar: "it" },
   { key: "/teacher/committee/it/image-compress",    href: "/teacher/committee/it/image-compress",    label: "圖片壓縮器",     committee: "IT", colorVar: "it" },
   { key: "/teacher/committee/it/pdf-compress",      href: "/teacher/committee/it/pdf-compress",      label: "PDF 壓縮器",     committee: "IT", colorVar: "it" },
