@@ -106,8 +106,10 @@ async function* streamOpenAICompat(messages: LLMMessage[], opts: LLMOptions, cfg
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
   if (cfg.provider === "openrouter") {
+    // Header VALUES must be ASCII (ByteString) — non-ASCII throws at fetch()
+    // time ("Cannot convert argument to a ByteString..."). Keep this Latin-1.
     headers["HTTP-Referer"] = process.env.NEXT_PUBLIC_APP_URL || "https://keichi.edu.hk"
-    headers["X-Title"]      = "AI 大智若愚"
+    headers["X-Title"]      = "EduPortal Keida"
   }
 
   const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
