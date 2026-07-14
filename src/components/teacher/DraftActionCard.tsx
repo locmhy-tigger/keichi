@@ -28,6 +28,40 @@ function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback
 }
 
+// Normalize a draft date into a value a <input type="datetime-local"> accepts
+// (YYYY-MM-DDTHH:mm). Andy may emit date-only (YYYY-MM-DD) or a full ISO —
+// a bare date silently blanks the input, so give it a default time.
+function toDateTimeLocal(v: unknown): string {
+  const s = str(v).trim()
+  if (!s) return ""
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T09:00`
+  const d = new Date(s)
+  if (!isNaN(d.getTime())) {
+    const p = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+  return s.slice(0, 16)
+}
+
+// Normalize a draft date into a value a <input type="date"> accepts (YYYY-MM-DD).
+function toDateInput(v: unknown): string {
+  const s = str(v).trim()
+  if (!s) return ""
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const d = new Date(s)
+  if (!isNaN(d.getTime())) {
+    const p = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+  return ""
+}
+
+// Strip honorifics so "陳大文老師" / "Chan sir" resolve to a real user name.
+function coreName(s: string): string {
+  return s.trim().replace(/\s+/g, "")
+    .replace(/(老師|先生|小姐|女士|同事|主任|sir|miss|mrs|mr|ms)\.?$/i, "")
+}
+
 const inputCls = "w-full px-2.5 py-1.5 text-caption rounded-input border outline-none"
 const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
@@ -40,9 +74,9 @@ export function DraftActionCard({ draft }: { draft: Draft }) {
   const [description, setDescription] = useState(str(d.description) || str(d.body))
   const [committee,   setCommittee]   = useState(str(d.committee))
   const [target,      setTarget]      = useState(str(d.target, "ALL"))
-  const [dueDate,     setDueDate]     = useState(str(d.dueDate).slice(0, 16))
-  const [startAt,     setStartAt]     = useState((str(d.startDate) || str(d.startTime)).slice(0, 16))
-  const [endAt,       setEndAt]       = useState(str(d.endDate).slice(0, 16))
+  const [dueDate,     setDueDate]     = useState(toDateInput(d.dueDate))
+  const [startAt,     setStartAt]     = useState(toDateTimeLocal(d.startDate ?? d.startTime))
+  const [endAt,       setEndAt]       = useState(toDateTimeLocal(d.endDate))
   const [location,    setLocation]    = useState(str(d.location))
   const [isPublic,    setIsPublic]    = useState(Boolean(d.isPublic))
 
@@ -68,7 +102,14 @@ export function DraftActionCard({ draft }: { draft: Draft }) {
         .then((users: Teacher[]) => {
           const staff = users.filter((u) => u.role === "TEACHER" || u.role === "ADMIN")
           setTeachers(staff)
-          const match = staff.find((u) => (u.name ?? "").includes(assigneeName) || assigneeName.includes(u.name ?? ""))
+          const want = coreName(assigneeName)
+          const wantLc = assigneeName.trim().toLowerCase()
+          const match = staff.find((u) => {
+            const n = coreName(u.name ?? "")
+            const email = (u.email ?? "").toLowerCase()
+            if (!want || !n) return email !== "" && email === wantLc
+            return n === want || n.includes(want) || want.includes(n) || email === wantLc
+          })
           if (match) setAssigneeId(match.id)
         })
         .catch(() => {})
@@ -174,7 +215,7 @@ export function DraftActionCard({ draft }: { draft: Draft }) {
       {draft.kind === "todo" && (
         <div className="space-y-2">
           <div className="flex gap-2">
-            <input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} style={inputStyle} />
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} style={inputStyle} title="截止日期" />
             <select value={committee} onChange={(e) => setCommittee(e.target.value)} className={inputCls} style={inputStyle}>
               <option value="">不指定委員會</option>
               {COMMITTEES.map((c) => <option key={c} value={c}>{COMMITTEE_LABEL[c]}</option>)}
