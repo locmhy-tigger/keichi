@@ -8,6 +8,19 @@ import bcrypt from "bcryptjs"
 import type { Role } from "@prisma/client"
 import type { Adapter } from "next-auth/adapters"
 
+// Bootstrap admins: these emails are always granted ADMIN on login (handy for
+// Google Workspace SSO where accounts are created on first sign-in). Add more
+// via the ADMIN_EMAILS env var (comma-separated); the default is always kept.
+const ADMIN_EMAILS = new Set(
+  ["test2020@ga.keichi.edu.hk", ...(process.env.ADMIN_EMAILS ?? "").split(",")]
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+)
+
+function isBootstrapAdmin(email?: string | null): boolean {
+  return !!email && ADMIN_EMAILS.has(email.toLowerCase())
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
   trustHost: true,
@@ -113,10 +126,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true
     },
-    jwt({ token, user, account }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id   = user.id
-        token.role = (user as { role: Role }).role
+        let role   = (user as { role: Role }).role
+        // Bootstrap allowlist wins — force ADMIN and promote the DB row so
+        // other queries (which read User.role) see it too.
+        if (isBootstrapAdmin((user as { email?: string | null }).email)) {
+          role = "ADMIN"
+          if ((user as { role: Role }).role !== "ADMIN" && user.id) {
+            await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } }).catch(() => {})
+          }
+        }
+        token.role = role
       }
       if (account?.provider === "google") {
         token.accessToken = account.access_token
