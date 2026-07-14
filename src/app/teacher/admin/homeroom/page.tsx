@@ -1,3 +1,6 @@
+// @deprecated 舊版「班級管理」頁面（已自側欄隱藏）。
+// 班級 / 班主任 / 學生成員的管理已移至「群組管理 → 班級分組」（Class + ClassEnrollment）。
+// 此頁及其 API（/api/admin/homeroom/*）保留僅供舊資料查閱。請勿擴充。
 "use client"
 
 import { useEffect, useState, useRef } from "react"

@@ -1,3 +1,6 @@
+// @deprecated 舊版「班級管理」學生名單 API（HomeroomStudent）。
+// 班級學生成員已改用 ClassEnrollment（透過 classCode 加入的 User）。
+// 本 API 僅被已隱藏的 /teacher/admin/homeroom page 使用。請勿擴充。
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { isAdmin } from "@/lib/roles"

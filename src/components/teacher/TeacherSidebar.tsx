@@ -38,7 +38,7 @@ const COMMITTEE_NAV = [
 const ADMIN_NAV: NavItem[] = [
   { href: "/teacher/admin/users",    label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/groups",   label: "群組管理", icon: GroupsIcon },
-  { href: "/teacher/admin/homeroom", label: "班級管理", icon: ClassIcon, hidden: true },
+  { href: "/teacher/admin/homeroom", label: "班級管理", icon: ClassIcon, hidden: true }, // @deprecated 見 schema CLASS MANAGEMENT 區；管理移至「群組管理-班級分組」
   { href: "/teacher/admin/agents",   label: "AI 助理管理", icon: AgentIcon },
   { href: "/teacher/admin/audit",    label: "操作紀錄", icon: AuditIcon  },
 ]

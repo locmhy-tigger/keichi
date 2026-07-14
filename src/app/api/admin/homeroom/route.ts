@@ -1,3 +1,6 @@
+// @deprecated 舊版「班級管理」API（HomeroomClass / HomeroomStudent）。
+// 班級 / 班主任 / 學生成員已改用 Class + ClassEnrollment（CLASS MANAGEMENT schema 區）。
+// 本 API 僅被已隱藏的 /teacher/admin/homeroom page 使用。請勿擴充。
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { isAdmin } from "@/lib/roles"

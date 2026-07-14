@@ -28,6 +28,8 @@
 ## 行政
 - 新增：將「活動文件」嵌入式網站轉換為站內預設工具「活動文件」。
 - 新增：將「Quotation」嵌入式網站轉換為站內預設工具「KCquotation 報價」。
+- 構建：「KCquotation」預設工具之實際功能頁（已完成）——路由 `/teacher/committee/admin/quotation`，伺服器端 docxtemplater 生成官方採購報價表 DOCX + Claude OCR 預填，無狀態、不存 DB。模板 `public/templates/quotation.docx`，產生器 `scripts/make-quotation-template.py`。
+- 構建：「活動文件」預設工具之實際功能頁（目前僅為「即將推出」入口，`PresetToolsGrid` 對無 `href` 工具顯示 `cursor-not-allowed`，尚無 `page.tsx`）。
 
 ## 訓育
 - 新增：「行為記錄」新增記錄時，判斷是否符合「訓育設定」的發送電郵觸發條件。

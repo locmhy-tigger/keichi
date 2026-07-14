@@ -326,7 +326,13 @@ model Booking {
 }
 
 // ─────────────────────────────────────────
-// CLASS MANAGEMENT
+// CLASS MANAGEMENT — 班級概念的唯一正規來源（canonical）
+//
+// 「班級 / 班主任 / 班級學生成員」一律以本區為準，對應 UI「群組管理 → 班級分組」：
+//   • 班級      = Class
+//   • 班主任    = Class.homeroomTeacherId → User（與 teacherId「擁有權」語意不同）
+//   • 學生成員  = ClassEnrollment（透過 classCode 加入的 User）
+// ⚠️ 請勿使用下方 DISCIPLINE 區的 HomeroomClass / HomeroomStudent（舊版「班級管理」，已棄用）。
 // ─────────────────────────────────────────
 
 model Class {
@@ -568,7 +574,7 @@ model BehaviorRecord {
   date        DateTime
   className   String
   studentName String
-  classKey    String?      // normalized (trim+upper) className for grouping/joins
+  classKey    String?      // ⚠️ 形同虛設：create/update/import 會寫入 classKey(classKey(className))，但無任何查詢讀取（訓育查詢一律用 className）。保留以免 migration 問題，勿再依賴。
   type        BehaviorType
   description String       @db.Text
   action      String?      @db.Text
@@ -597,8 +603,10 @@ enum BehaviorType {
 // DISCIPLINE (訓育) — homeroom teachers, thresholds, alert dedupe
 // ─────────────────────────────────────────
 
-// 班主任 registry — decoupled from the dazhi Class code-enrollment model so
-// every physical class can have a form teacher + follow-up email.
+/// @deprecated 舊版「班級管理」（已隱藏）的班主任登錄名冊。
+/// 班級 / 班主任 / 學生成員一律改用 Class + ClassEnrollment（CLASS MANAGEMENT 區，
+/// 對應 UI：群組管理 → 班級分組）。本 model 僅被隱藏的 /api/admin/homeroom/* 與
+/// /teacher/admin/homeroom 引用，請勿再用於新功能；班級概念請從 Class 模型出發。
 model HomeroomClass {
   id            String            @id @default(cuid())
   className     String            @unique
@@ -613,7 +621,8 @@ model HomeroomClass {
   @@index([teacherUserId])
 }
 
-// Admin-managed student roster for a class (name-based, no login account needed).
+/// @deprecated 舊版「班級管理」的學生名單（HomeroomClass 的子表，name-based 無登入帳號）。
+/// 班級學生成員改用 ClassEnrollment（透過 classCode 加入的 User）。請勿再用。
 model HomeroomStudent {
   id              String   @id @default(cuid())
   homeroomClassId String
