@@ -16,7 +16,7 @@
 
   **待辦（部署）**：自有網域尚未驗證、`RESEND_FROM` 未設 → 目前僅能寄到 Resend 帳號本人信箱；正式寄給學生前需完成 `docs/email-service.md` §2 的網域驗證。
 
-- ⬜ 整合 Google Cloud 的 Google Calendar API，提供日曆服務層。
+- ✅ 整合 Google Cloud 的 Google Calendar API，提供日曆服務層。
 
 ## 網站 Logo
 - ✅ 移除英文字樣「ICHI」（教師／學生側欄 Logo 區塊）。
@@ -113,7 +113,7 @@
 | 模塊 | 狀態 |
 |------|------|
 | 基建 - Resend 郵件服務層 | ✅ 完成（自有網域待驗證） |
-| 基建 - Google Calendar 日曆服務層 | ⬜ 待做 |
+| 基建 - Google Calendar 日曆服務層 | ✅ 完成 |
 | 網站 Logo（移除 ICHI） | ✅ 完成 |
 | 待辦事項（列表顯示 bug） | ✅ 完成 |
 | 公告 / 活動管理 / 任務管理 / 績點（隱藏入口） | ✅ 完成 |
