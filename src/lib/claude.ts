@@ -80,12 +80,16 @@ export async function generateQuiz(
 // Student-triggered, speed is critical
 // ─────────────────────────────────────────
 
-function buildEvaluationSystemPrompt(rubric: string): string {
+function buildEvaluationSystemPrompt(rubric: string, studentProfileSummary?: string): string {
+  const profileBlock = studentProfileSummary
+    ? `\n\n該學生嘅學習概況（供你調整反饋深淺，唔好喺 feedback 度直接提及呢個概況本身）：\n${studentProfileSummary}\n`
+    : "";
+
   return `你是一位評估學生 Prompt Engineering 技巧的 AI 評分員。
 
 評分標準（由老師設定）：
 ${rubric}
-
+${profileBlock}
 評分維度（每項 0-25 分，共 100 分）：
 - clarity（清晰度）：指令是否明確無歧義
 - completeness（完整性）：是否包含必要的背景和限制條件
@@ -109,11 +113,12 @@ ${rubric}
 export async function evaluatePrompt(
   studentPrompt: string,
   missionContent: PromptMissionContent,
+  studentProfileSummary?: string,
 ): Promise<PromptEvaluationResponse> {
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 512,
-    system: buildEvaluationSystemPrompt(missionContent.rubric),
+    system: buildEvaluationSystemPrompt(missionContent.rubric, studentProfileSummary),
     messages: [
       {
         role: "user",

@@ -13,7 +13,7 @@ datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   directUrl  = env("DATABASE_URL_UNPOOLED")  // ← 新增這一行
-  extensions = [pg_trgm]
+  extensions = [pg_trgm, vector]
 }
 
 
@@ -196,6 +196,13 @@ model User {
   agentDocuments     AgentDocument[]
   agentAuditLogs     AgentAuditLog[]
   agentConversations AgentConversation[]
+
+  // Knowledge base (Phase 2b RAG)
+  knowledgeDocuments KnowledgeDocument[]
+
+  // Cross-conversation memory (Phase 2c RAG)
+  agentMemories      AgentMemory[]
+  learningProfile    StudentLearningProfile?
 
   // In-app notifications
   notifications      Notification[]
@@ -920,6 +927,54 @@ model AgentDocument {
   @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
+// ─────────────────────────────────────────
+// KNOWLEDGE BASE — RAG corpus for quiz generation + agent retrieval
+// (Phase 2b). Embeddings are written/read via raw SQL ($executeRaw /
+// $queryRaw) since Prisma has no native vector type — `embedding` is
+// declared Unsupported so `prisma generate` skips it in the typed client.
+// No vector index (HNSW/IVFFlat) is declared here — school-scale corpora
+// don't need one for correctness, only for scale; add one manually via
+// `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` once this
+// has been verified against a real database and the corpus size warrants it.
+// ─────────────────────────────────────────
+
+enum KnowledgeSourceType {
+  AGENT_DOCUMENT // auto-indexed from AgentDocument on creation
+  UPLOAD         // teacher-uploaded material
+  SOP            // school SOP / reference notes
+}
+
+model KnowledgeDocument {
+  id            String              @id @default(cuid())
+  title         String
+  sourceType    KnowledgeSourceType
+  sourceId      String?             // e.g. AgentDocument.id when sourceType = AGENT_DOCUMENT
+  ownerId       String
+  isStudentData Boolean             @default(false) // true → embeddings MUST use the local provider (私隱條例)
+  createdAt     DateTime            @default(now())
+
+  owner  User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  chunks KnowledgeChunk[]
+
+  @@index([ownerId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model KnowledgeChunk {
+  id         String                   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  content    String                   @db.Text
+  tokenCount Int
+  embedding  Unsupported("vector(1024)")?
+  createdAt  DateTime                 @default(now())
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
 // Timetable rows uploaded by admins (one row per teacher/day/period/term).
 model AgentTimetable {
   id          String  @id @default(cuid())
@@ -970,7 +1025,8 @@ model AgentConversation {
   updatedAt DateTime       @updatedAt
   messages  AgentMessage[]
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory AgentMemory?
 
   @@index([userId, updatedAt])
 }
@@ -987,6 +1043,47 @@ model AgentMessage {
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// CROSS-CONVERSATION MEMORY (Phase 2c)
+// One rolling summary per conversation, updated whenever a new assistant
+// message is appended (see /api/agents/conversations/[id]/messages).
+// Recent summaries across a teacher's OTHER conversations get injected into
+// a new conversation's system prompt so Keida "remembers" past requests.
+// ─────────────────────────────────────────
+model AgentMemory {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String   @unique
+  summary        String   @db.Text
+  updatedAt      DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+// ─────────────────────────────────────────
+// STUDENT LEARNING PROFILE (Phase 2c)
+// Rebuilt by POST /api/cron/build-student-profiles (external scheduler
+// hits this — no in-process job runner exists in this codebase). Computed
+// deterministically from aiScore/easeFactor/points, NOT via an LLM call,
+// so it's cheap to rebuild often and has no hallucination risk. Injected
+// into evaluatePrompt's grading context and available to Donna via the
+// get_student_profile tool.
+// ─────────────────────────────────────────
+model StudentLearningProfile {
+  id           String   @id @default(cuid())
+  studentId    String   @unique
+  summary      String   @db.Text
+  averageScore Float?
+  weakTopics   String[] // Mission/deck titles where performance trended low
+  strongTopics String[] // Mission/deck titles where performance trended high
+  updatedAt    DateTime @updatedAt
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 // Substitution requests created by andy agent.
