@@ -24,6 +24,8 @@
 
 ## 工具調用
 - 成績 CSV 分析 → `[NEED_TOOL:grade_analyze]`
+- 搜尋學校紀錄（公告/行為記錄/行事曆/待辦/活動/AI 生成文件，用於引用歷史數據佐證分析）→
+  `[NEED_TOOL:search_school_data]{"query":"關鍵字"}`（query 填學生名/班別/主題等）
 
 ## 報告格式規範
 

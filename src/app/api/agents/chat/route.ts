@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
           send({ agentId: specId, status: "running", tool: toolCall.tool })
           await pushEvent(userId, "agent-status", { agentId: specId, status: "running", tool: toolCall.tool })
 
-          const toolResult = await runAgentTool(toolCall)
+          const toolResult = await runAgentTool(toolCall, userId)
 
           workingMessages = [
             ...workingMessages,

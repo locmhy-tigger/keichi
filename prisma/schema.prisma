@@ -5,13 +5,15 @@
 // ============================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")  // ← 新增這一行
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DATABASE_URL_UNPOOLED")  // ← 新增這一行
+  extensions = [pg_trgm]
 }
 
 
@@ -517,6 +519,8 @@ model Todo {
   @@index([committee])
   @@index([createdById])
   @@index([status, dueDate])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model TodoAssignee {
@@ -557,6 +561,8 @@ model Announcement {
   @@index([pinned, createdAt])
   @@index([classId])
   @@index([priority])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model CommitteeRole {
@@ -590,6 +596,8 @@ model BehaviorRecord {
   @@index([authorId])
   @@index([resolved, date])
   @@index([className, studentName])
+  @@index([studentName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 enum BehaviorType {
@@ -663,6 +671,8 @@ model CalendarEvent {
   @@index([startDate])
   @@index([committee])
   @@index([googleEventId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ─────────────────────────────────────────
@@ -785,6 +795,8 @@ model Activity {
 
   @@index([startTime])
   @@index([createdById])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model ActivityAssignment {
@@ -904,6 +916,8 @@ model AgentDocument {
 
   @@index([userId, createdAt])
   @@index([approvalStatus])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // Timetable rows uploaded by admins (one row per teacher/day/period/term).

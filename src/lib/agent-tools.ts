@@ -10,19 +10,29 @@ import {
   MAX_DAY,
   MAX_PERIOD,
 } from "@/lib/agent-timetable"
+import { searchSchoolData, formatSearchResults } from "@/lib/agent-search"
 
-export async function runAgentTool(call: ToolCall): Promise<string> {
+export async function runAgentTool(call: ToolCall, userId: string): Promise<string> {
   try {
     switch (call.tool) {
-      case "timetable_query": return await runTimetableQuery(call.params)
-      case "free_teachers":   return await runFreeTeachers(call.params)
+      case "timetable_query":     return await runTimetableQuery(call.params)
+      case "free_teachers":       return await runFreeTeachers(call.params)
+      case "search_school_data":  return await runSearchSchoolData(call.params, userId)
       default:
-        return `工具「${call.tool}」不存在。可用工具：timetable_query（夾空堂）、free_teachers（找空堂老師）。`
+        return `工具「${call.tool}」不存在。可用工具：timetable_query（夾空堂）、free_teachers（找空堂老師）、search_school_data（搜尋學校紀錄：公告/行為記錄/行事曆/待辦/活動/AI 生成文件）。`
     }
   } catch (err) {
     console.error("[agent-tools]", call.tool, err)
     return "工具執行失敗（系統錯誤），請向用戶道歉並建議稍後再試。"
   }
+}
+
+async function runSearchSchoolData(params: Record<string, unknown>, userId: string): Promise<string> {
+  const query = typeof params.query === "string" ? params.query.trim() : ""
+  if (!query) return "缺少 query 參數。請先問清楚用戶想搜尋咩，再重新調用（例如學生姓名、活動名稱、關鍵字）。"
+
+  const results = await searchSchoolData(query, userId)
+  return formatSearchResults(query, results)
 }
 
 async function runTimetableQuery(params: Record<string, unknown>): Promise<string> {
