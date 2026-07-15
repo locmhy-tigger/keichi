@@ -33,7 +33,7 @@ export default async function TeacherDashboard() {
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  
+
   const [calEvents, allEvents] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: { startDate: { gte: monthStart, lt: monthEnd } },
