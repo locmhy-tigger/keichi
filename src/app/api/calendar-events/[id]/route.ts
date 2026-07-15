@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
 import { logToObsidian } from "@/lib/obsidian-log"
+import { updateGoogleEvent, deleteGoogleEvent, isConnected } from "@/lib/google-calendar"
 import { z } from "zod"
 
 const patchSchema = z.object({
@@ -44,6 +45,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     `Event "${updated.title}" (${updated.id}) updated by ${session.user.name}`
   )
 
+  // Google Calendar sync — best-effort, non-blocking
+  isConnected(session.user.id)
+    .then((connected) => {
+      if (connected) return updateGoogleEvent(session.user.id, updated)
+    })
+    .catch((err) => console.error("[GCal] updateGoogleEvent error:", err))
+
   return NextResponse.json(updated)
 }
 
@@ -59,12 +67,32 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  // Capture Google sync fields before deletion
+  const { googleEventId } = event
+
   await prisma.calendarEvent.delete({ where: { id: params.id } })
 
   logToObsidian(
     "Calendar Event Deleted",
     `Event "${event.title}" (${event.id}) deleted by ${session.user.name}`
   )
+
+  // Google Calendar sync — best-effort, non-blocking
+  if (googleEventId) {
+    isConnected(session.user.id)
+      .then(async (connected) => {
+        if (!connected) return
+        const { prisma: db } = await import("@/lib/prisma")
+        const conn = await db.googleCalendarConnection.findUnique({
+          where:  { userId: session.user.id },
+          select: { googleCalendarId: true },
+        })
+        if (conn) {
+          await deleteGoogleEvent(session.user.id, googleEventId, conn.googleCalendarId)
+        }
+      })
+      .catch((err) => console.error("[GCal] deleteGoogleEvent error:", err))
+  }
 
   return NextResponse.json({ deleted: true })
 }

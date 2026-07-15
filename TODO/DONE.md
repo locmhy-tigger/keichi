@@ -16,7 +16,7 @@
 
   **待辦（部署）**：自有網域尚未驗證、`RESEND_FROM` 未設 → 目前僅能寄到 Resend 帳號本人信箱；正式寄給學生前需完成 `docs/email-service.md` §2 的網域驗證。
 
-- ⬜ 整合 Google Cloud 的 Google Calendar API，提供日曆服務層。
+- ✅ 整合 Google Cloud 的 Google Calendar API，提供日曆服務層。
 
 ## 網站 Logo
 - ✅ 移除英文字樣「ICHI」（教師／學生側欄 Logo 區塊）。
@@ -50,11 +50,22 @@
 
 ## 行政
 - ✅ 新增：將「活動文件」嵌入式網站轉換為站內預設工具「活動文件」。
+
 - ✅ 新增：將「Quotation」嵌入式網站轉換為站內預設工具「KCquotation 報價」。
 
   「行政委員」頁現以「預設工具」呈現（不再為 EMBED 自定工具）：採購申請、活動文件、KCquotation 報價、設施預約、費用結算。
 
   ![行政委員頁：活動文件與 KCquotation 改為預設工具](img/quotation_in_admin.png)
+
+- ✅ 構建：「活動文件」預設工具之實際功能頁。
+
+  ![活動通告文件生成頁面](img/notice_page.png)
+
+- ✅ 構建：「KCquotation」預設工具之實際功能頁。
+
+  ![KCquotation 報價生成頁面](img/quotation_page.png)
+
+  將獨立的 Python Flask 工具（KCquotation）完整搬遷為站內原生頁面，不再是 iframe 嵌入。docxtemplater 伺服器端生成官方採購報價表 DOCX + Claude OCR 預填，無狀態、不存 DB。
 
 ## 訓育
 - ✅ 新增：「行為記錄」新增記錄時，依「訓育設定」自動觸發電郵通知班主任。
@@ -85,6 +96,16 @@
 
   ![班級分組標籤頁於管理員身份下成功渲染班級列表](img/classroom_grp_fix.png)
 
+## 班級概念資料來源（deprecation 備註）
+
+- ✅ `HomeroomClass` / `HomeroomStudent`（Prisma models）與入口「班級管理」（`/teacher/admin/homeroom`）已棄用（sidebar `hidden: true` + schema `/// @deprecated`）。
+- ✅ 訓育系統的全部三條路徑（threshold 自動信、class alert、手動 email-teacher）已從 HomeroomClass 改接 **Class 模型**（班主任 = `Class.homeroomTeacherId`，學生 = `ClassEnrollment`），對應 UI「群組管理 → 班級分組」。
+- ✅ 行為記錄表單的班別下拉 + 學生多選已從 HomeroomClass 改接 **Class 模型**（`/api/homeroom` 已重寫）。
+- ✅ 舊版行為記錄表單的本地 `type HomeroomClass` 已更名為 `ClassRoster`（避免與已棄用 Prisma model 命名混淆）。
+- ✅ `BehaviorRecord.classKey` 標記為形同虛設（寫入但不被讀取，保留以免 migration 問題）。
+
+→ **開發任何班級概念新功能時，一律以 `prisma/` 中 CLASS MANAGEMENT 區（Class + ClassEnrollment）為正規來源。**
+
 ---
 
 ## 進度總覽
@@ -92,15 +113,17 @@
 | 模塊 | 狀態 |
 |------|------|
 | 基建 - Resend 郵件服務層 | ✅ 完成（自有網域待驗證） |
-| 基建 - Google Calendar 日曆服務層 | ⬜ 待做 |
+| 基建 - Google Calendar 日曆服務層 | ✅ 完成 |
 | 網站 Logo（移除 ICHI） | ✅ 完成 |
 | 待辦事項（列表顯示 bug） | ✅ 完成 |
 | 公告 / 活動管理 / 任務管理 / 績點（隱藏入口） | ✅ 完成 |
 | 行事曆（同步外部 Google Calendar） | ⬜ 待做 |
-| 行政（活動文件 / KCquotation 轉預設工具） | ✅ 完成 |
-| 訓育（班主任電郵綁定） | ✅ 完成（欄位 + UI）* |
-| 訓育（行為記錄電郵觸發發送） | ✅ 完成（每門檻倍數通知 · 先寄後標記） |
+| 行政（活動文件 / KCquotation 轉預設工具） | ✅ 完成（入口轉換） |
+| 行政（活動文件功能頁構建） | ✅ 完成 |
+| 行政（KCquotation 功能頁構建） | ✅ 完成 |
+| 訓育（班主任電郵綁定） | ✅ 完成 |
+| 訓育（行為記錄電郵觸發發送） | ✅ 完成 |
 | 資訊科技（移除 Quotation 入口） | ✅ 完成 |
 | 群組管理（改名「班級分組」） | ✅ 完成 |
-| 群組管理（成員管理綁定教職員／班主任） | ✅ 完成* |
+| 群組管理（成員管理綁定教職員／班主任） | ✅ 完成 |
 | 群組管理（管理員身份下班級列表渲染修復） | ✅ 完成 |

@@ -42,8 +42,8 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     colorVar:    "admin",
     tools: [
       { label: "採購申請",   description: "填寫及追蹤採購申請表", href: "/teacher/committee/admin/procurement" },
-      { label: "活動文件",   description: "管理活動策劃及報告文件" },
-      { label: "KCquotation 報價", description: "採購報價管理與 OCR 識別", href: "/teacher/committee/it/quotation" },
+      { label: "活動文件",   description: "一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP)", href: "/teacher/committee/admin/activity-docs" },
+      { label: "KCquotation 報價", description: "填寫按口頭報價採購表格、生成 DOCX，支援 AI OCR 預填", href: "/teacher/committee/admin/quotation" },
       { label: "設施預約",   description: "電腦室、特別室及禮堂預約", href: "/teacher/committee/admin/booking" },
       { label: "費用結算",   description: "班費及活動費用記錄"   },
     ],

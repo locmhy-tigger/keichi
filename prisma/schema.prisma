@@ -200,6 +200,9 @@ model User {
 
   // Procurement requests
   procurementRequests ProcurementRequest[] @relation("ProcurementRequests")
+
+  // Google Calendar sync
+  googleCalendarConnection GoogleCalendarConnection?
 }
 
 // ─────────────────────────────────────────
@@ -326,7 +329,13 @@ model Booking {
 }
 
 // ─────────────────────────────────────────
-// CLASS MANAGEMENT
+// CLASS MANAGEMENT — 班級概念的唯一正規來源（canonical）
+//
+// 「班級 / 班主任 / 班級學生成員」一律以本區為準，對應 UI「群組管理 → 班級分組」：
+//   • 班級      = Class
+//   • 班主任    = Class.homeroomTeacherId → User（與 teacherId「擁有權」語意不同）
+//   • 學生成員  = ClassEnrollment（透過 classCode 加入的 User）
+// ⚠️ 請勿使用下方 DISCIPLINE 區的 HomeroomClass / HomeroomStudent（舊版「班級管理」，已棄用）。
 // ─────────────────────────────────────────
 
 model Class {
@@ -568,7 +577,7 @@ model BehaviorRecord {
   date        DateTime
   className   String
   studentName String
-  classKey    String?      // normalized (trim+upper) className for grouping/joins
+  classKey    String?      // ⚠️ 形同虛設：create/update/import 會寫入 classKey(classKey(className))，但無任何查詢讀取（訓育查詢一律用 className）。保留以免 migration 問題，勿再依賴。
   type        BehaviorType
   description String       @db.Text
   action      String?      @db.Text
@@ -634,21 +643,51 @@ model DisciplineAlertLog {
 }
 
 model CalendarEvent {
-  id          String         @id @default(cuid())
-  title       String
-  startDate   DateTime
-  endDate     DateTime?
-  allDay      Boolean        @default(true)
-  description String?        @db.Text
-  committee   CommitteeType?
-  authorId    String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  title          String
+  startDate      DateTime
+  endDate        DateTime?
+  allDay         Boolean        @default(true)
+  description    String?        @db.Text
+  committee      CommitteeType?
+  authorId       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  author      User           @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
+  // Google Calendar sync fields
+  googleEventId  String?        // Google Calendar event ID after sync
+  syncedAt       DateTime?      // Last successful sync timestamp
+
+  author         User           @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([startDate])
   @@index([committee])
+  @@index([googleEventId])
+}
+
+// ─────────────────────────────────────────
+// GOOGLE CALENDAR SYNC — per-user connection & token store
+// Supports both Google OAuth users and password users
+// (password users connect via a separate OAuth flow in settings)
+// ─────────────────────────────────────────
+
+model GoogleCalendarConnection {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  googleCalendarId String    // ID of the dedicated "AI 大智若愚" calendar we created
+  accessToken      String    @db.Text
+  refreshToken     String    @db.Text
+  tokenExpiresAt   DateTime  // When the access_token expires
+  syncToken        String?   @db.Text  // Google incremental sync token (for webhook pulls)
+  watchChannelId   String?   @unique   // Google Watch channel ID (for push notifications)
+  watchResourceId  String?   // Google Watch resource ID (needed to stop the watch)
+  watchExpiry      DateTime? // When the Watch channel expires (max 7 days from creation)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([watchChannelId])
 }
 
 model CommitteeTool {
