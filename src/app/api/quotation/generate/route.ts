@@ -8,7 +8,7 @@ import PizZip from "pizzip"
 import Docxtemplater from "docxtemplater"
 
 // Wingdings 2 checkbox glyphs (must match template's checkbox run font).
-const CHECKED = "" // ■ checked
+const CHECKED = "" // ■ checked
 const UNCHECKED = "" // □ empty
 const box = (on: boolean) => (on ? CHECKED : UNCHECKED)
 
