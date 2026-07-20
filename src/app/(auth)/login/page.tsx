@@ -86,6 +86,9 @@ export default function LoginPage() {
             <p className="mt-6 text-center text-xs text-gray-400">
               遇到問題？請聯繫學校 IT 支援部門
             </p>
+            <p className="mt-2 text-center text-xs text-gray-300">
+              v0.1.0
+            </p>
           </div>
         </motion.div>
       </div>

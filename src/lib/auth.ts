@@ -33,6 +33,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId:  process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Request offline access so Google issues a refresh_token
+          access_type: "offline",
+          prompt: "consent",
+          scope: [
+            "openid",
+            "email",
+            "profile",
+          ].join(" "),
+        },
+      },
     }),
     Credentials({
       name: "帳號密碼",
@@ -119,6 +131,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 scope:             account.scope,
                 id_token:          account.id_token,
                 refresh_token:     account.refresh_token ?? null,
+              },
+            })
+          } else if (account.refresh_token) {
+            // Update tokens on re-sign-in so we always have a fresh refresh_token
+            await prisma.account.update({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              data: {
+                access_token:  account.access_token,
+                expires_at:    account.expires_at,
+                refresh_token: account.refresh_token,
               },
             })
           }

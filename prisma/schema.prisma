@@ -5,13 +5,15 @@
 // ============================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")  // ← 新增這一行
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DATABASE_URL_UNPOOLED")  // ← 新增這一行
+  extensions = [pg_trgm, vector]
 }
 
 
@@ -195,11 +197,21 @@ model User {
   agentAuditLogs     AgentAuditLog[]
   agentConversations AgentConversation[]
 
+  // Knowledge base (Phase 2b RAG)
+  knowledgeDocuments KnowledgeDocument[]
+
+  // Cross-conversation memory (Phase 2c RAG)
+  agentMemories      AgentMemory[]
+  learningProfile    StudentLearningProfile?
+
   // In-app notifications
   notifications      Notification[]
 
   // Procurement requests
   procurementRequests ProcurementRequest[] @relation("ProcurementRequests")
+
+  // Google Calendar sync
+  googleCalendarConnection GoogleCalendarConnection?
 }
 
 // ─────────────────────────────────────────
@@ -326,7 +338,13 @@ model Booking {
 }
 
 // ─────────────────────────────────────────
-// CLASS MANAGEMENT
+// CLASS MANAGEMENT — 班級概念的唯一正規來源（canonical）
+//
+// 「班級 / 班主任 / 班級學生成員」一律以本區為準，對應 UI「群組管理 → 班級分組」：
+//   • 班級      = Class
+//   • 班主任    = Class.homeroomTeacherId → User（與 teacherId「擁有權」語意不同）
+//   • 學生成員  = ClassEnrollment（透過 classCode 加入的 User）
+// ⚠️ 請勿使用下方 DISCIPLINE 區的 HomeroomClass / HomeroomStudent（舊版「班級管理」，已棄用）。
 // ─────────────────────────────────────────
 
 model Class {
@@ -508,6 +526,8 @@ model Todo {
   @@index([committee])
   @@index([createdById])
   @@index([status, dueDate])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model TodoAssignee {
@@ -548,6 +568,8 @@ model Announcement {
   @@index([pinned, createdAt])
   @@index([classId])
   @@index([priority])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model CommitteeRole {
@@ -568,7 +590,7 @@ model BehaviorRecord {
   date        DateTime
   className   String
   studentName String
-  classKey    String?      // normalized (trim+upper) className for grouping/joins
+  classKey    String?      // ⚠️ 形同虛設：create/update/import 會寫入 classKey(classKey(className))，但無任何查詢讀取（訓育查詢一律用 className）。保留以免 migration 問題，勿再依賴。
   type        BehaviorType
   description String       @db.Text
   action      String?      @db.Text
@@ -581,6 +603,8 @@ model BehaviorRecord {
   @@index([authorId])
   @@index([resolved, date])
   @@index([className, studentName])
+  @@index([studentName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 enum BehaviorType {
@@ -634,21 +658,53 @@ model DisciplineAlertLog {
 }
 
 model CalendarEvent {
-  id          String         @id @default(cuid())
-  title       String
-  startDate   DateTime
-  endDate     DateTime?
-  allDay      Boolean        @default(true)
-  description String?        @db.Text
-  committee   CommitteeType?
-  authorId    String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  title          String
+  startDate      DateTime
+  endDate        DateTime?
+  allDay         Boolean        @default(true)
+  description    String?        @db.Text
+  committee      CommitteeType?
+  authorId       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  author      User           @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
+  // Google Calendar sync fields
+  googleEventId  String?        // Google Calendar event ID after sync
+  syncedAt       DateTime?      // Last successful sync timestamp
+
+  author         User           @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([startDate])
   @@index([committee])
+  @@index([googleEventId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// ─────────────────────────────────────────
+// GOOGLE CALENDAR SYNC — per-user connection & token store
+// Supports both Google OAuth users and password users
+// (password users connect via a separate OAuth flow in settings)
+// ─────────────────────────────────────────
+
+model GoogleCalendarConnection {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  googleCalendarId String    // ID of the dedicated "AI 大智若愚" calendar we created
+  accessToken      String    @db.Text
+  refreshToken     String    @db.Text
+  tokenExpiresAt   DateTime  // When the access_token expires
+  syncToken        String?   @db.Text  // Google incremental sync token (for webhook pulls)
+  watchChannelId   String?   @unique   // Google Watch channel ID (for push notifications)
+  watchResourceId  String?   // Google Watch resource ID (needed to stop the watch)
+  watchExpiry      DateTime? // When the Watch channel expires (max 7 days from creation)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([watchChannelId])
 }
 
 model CommitteeTool {
@@ -746,6 +802,8 @@ model Activity {
 
   @@index([startTime])
   @@index([createdById])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model ActivityAssignment {
@@ -865,6 +923,56 @@ model AgentDocument {
 
   @@index([userId, createdAt])
   @@index([approvalStatus])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// ─────────────────────────────────────────
+// KNOWLEDGE BASE — RAG corpus for quiz generation + agent retrieval
+// (Phase 2b). Embeddings are written/read via raw SQL ($executeRaw /
+// $queryRaw) since Prisma has no native vector type — `embedding` is
+// declared Unsupported so `prisma generate` skips it in the typed client.
+// No vector index (HNSW/IVFFlat) is declared here — school-scale corpora
+// don't need one for correctness, only for scale; add one manually via
+// `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` once this
+// has been verified against a real database and the corpus size warrants it.
+// ─────────────────────────────────────────
+
+enum KnowledgeSourceType {
+  AGENT_DOCUMENT // auto-indexed from AgentDocument on creation
+  UPLOAD         // teacher-uploaded material
+  SOP            // school SOP / reference notes
+}
+
+model KnowledgeDocument {
+  id            String              @id @default(cuid())
+  title         String
+  sourceType    KnowledgeSourceType
+  sourceId      String?             // e.g. AgentDocument.id when sourceType = AGENT_DOCUMENT
+  ownerId       String
+  isStudentData Boolean             @default(false) // true → embeddings MUST use the local provider (私隱條例)
+  createdAt     DateTime            @default(now())
+
+  owner  User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  chunks KnowledgeChunk[]
+
+  @@index([ownerId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model KnowledgeChunk {
+  id         String                   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  content    String                   @db.Text
+  tokenCount Int
+  embedding  Unsupported("vector(1024)")?
+  createdAt  DateTime                 @default(now())
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // Timetable rows uploaded by admins (one row per teacher/day/period/term).
@@ -917,7 +1025,8 @@ model AgentConversation {
   updatedAt DateTime       @updatedAt
   messages  AgentMessage[]
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory AgentMemory?
 
   @@index([userId, updatedAt])
 }
@@ -934,6 +1043,47 @@ model AgentMessage {
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// CROSS-CONVERSATION MEMORY (Phase 2c)
+// One rolling summary per conversation, updated whenever a new assistant
+// message is appended (see /api/agents/conversations/[id]/messages).
+// Recent summaries across a teacher's OTHER conversations get injected into
+// a new conversation's system prompt so Keida "remembers" past requests.
+// ─────────────────────────────────────────
+model AgentMemory {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String   @unique
+  summary        String   @db.Text
+  updatedAt      DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+// ─────────────────────────────────────────
+// STUDENT LEARNING PROFILE (Phase 2c)
+// Rebuilt by POST /api/cron/build-student-profiles (external scheduler
+// hits this — no in-process job runner exists in this codebase). Computed
+// deterministically from aiScore/easeFactor/points, NOT via an LLM call,
+// so it's cheap to rebuild often and has no hallucination risk. Injected
+// into evaluatePrompt's grading context and available to Donna via the
+// get_student_profile tool.
+// ─────────────────────────────────────────
+model StudentLearningProfile {
+  id           String   @id @default(cuid())
+  studentId    String   @unique
+  summary      String   @db.Text
+  averageScore Float?
+  weakTopics   String[] // Mission/deck titles where performance trended low
+  strongTopics String[] // Mission/deck titles where performance trended high
+  updatedAt    DateTime @updatedAt
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 // Substitution requests created by andy agent.
