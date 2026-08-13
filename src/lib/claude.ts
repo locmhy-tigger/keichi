@@ -232,7 +232,7 @@ export async function extractQuotationFromImage(
 // Teacher-facing contextual Q&A over school data
 // ─────────────────────────────────────────
 
-const KEIDA_SYSTEM_PROMPT = `你是「Keida」，基智中學的 AI 校務助理。
+const KEIDA_SYSTEM_PROMPT = `你是「Keida」，中華基督教會基智中學的 AI 校務助理。
 你根據學校公告記錄、學生行為記錄、行事曆事件、待辦事項及活動指派，以繁體中文回答老師的問題。
 
 規則：

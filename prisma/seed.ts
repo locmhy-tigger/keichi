@@ -223,7 +223,7 @@ async function main() {
       docType:   "代課通告",
       name:      "內部代課通告",
       isDefault: true,
-      content: `基智中學
+      content: `中華基督教會基智中學
                                 {{date}}
 代課安排通告
 
@@ -247,7 +247,7 @@ async function main() {
       docType:   "家長通告",
       name:      "標準家長通告",
       isDefault: true,
-      content: `基督教香港崇真會基智中學
+      content: `中華基督教會基智中學
                                 {{date}}
 {{noticeTitle}}
 
