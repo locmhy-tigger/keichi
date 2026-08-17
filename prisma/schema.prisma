@@ -65,6 +65,7 @@ enum CommitteeType {
   IT
   CURRICULUM
   ECA
+  SCHOOL // 校曆及假期 — school-wide events & holidays (calendar category)
 }
 
 enum ToolType {
@@ -717,7 +718,7 @@ model CalendarEvent {
 model GoogleCalendarConnection {
   id               String    @id @default(cuid())
   userId           String    @unique
-  googleCalendarId String // ID of the dedicated "AI 大智若愚" calendar we created
+  googleCalendarId String // ID of the dedicated "基智行政平台" calendar we created
   accessToken      String    @db.Text
   refreshToken     String    @db.Text
   tokenExpiresAt   DateTime // When the access_token expires
