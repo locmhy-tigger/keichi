@@ -66,6 +66,24 @@ enum CommitteeType {
   ECA
 }
 
+enum PromptSubject {
+  LESSON      // 備課設計
+  MATERIAL    // 教材製作
+  ASSESSMENT  // 評估工具
+  FEEDBACK    // 學生反饋
+  PARENT      // 家長溝通
+  CLASSROOM   // 課堂管理
+  ADMIN       // 行政文書
+  PD          // 專業發展
+}
+
+enum PromptType {
+  PLAN         // 規劃
+  CREATE       // 創作
+  ASSESS       // 評估
+  COMMUNICATE  // 溝通
+}
+
 enum ToolType {
   LINK
   EMBED
@@ -200,6 +218,9 @@ model User {
 
   // Procurement requests
   procurementRequests ProcurementRequest[] @relation("ProcurementRequests")
+
+  // 提示詞庫 (Prompt Library)
+  promptsCreated Prompt[] @relation("PromptsCreated")
 }
 
 // ─────────────────────────────────────────
@@ -667,6 +688,26 @@ model CommitteeTool {
   createdBy   User          @relation("CommitteeTools", fields: [createdById], references: [id])
 
   @@index([committee, order])
+}
+
+// 提示詞庫 — shared AI prompt library for teachers. Seeded prompts have
+// createdById=null ("system" prompts, ADMIN-only edit); teacher-added ones
+// are editable by their creator or an ADMIN.
+model Prompt {
+  id          String        @id @default(cuid())
+  subject     PromptSubject
+  type        PromptType
+  title       String
+  tags        String[]
+  promptText  String        @db.Text
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  createdBy   User?         @relation("PromptsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([subject])
+  @@index([type])
 }
 
 // Fixed-window rate-limit counters (survives serverless cold starts).
