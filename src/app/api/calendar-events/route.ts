@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
 import { logToObsidian } from "@/lib/obsidian-log"
-import { createGoogleEvent, isConnected } from "@/lib/google-calendar"
+import { createGoogleEvent, isConnected, fanOutCommitteeEvent } from "@/lib/google-calendar"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -76,6 +76,12 @@ export async function POST(req: NextRequest) {
       if (connected) return createGoogleEvent(session.user.id, event)
     })
     .catch((err) => console.error("[GCal] createGoogleEvent error:", err))
+
+  // Committee events also fan out to every other relevant connected teacher
+  // (SCHOOL → everyone; other committees → that committee's members)
+  if (event.committee) {
+    fanOutCommitteeEvent(event).catch((err) => console.error("[GCal] fanOutCommitteeEvent error:", err))
+  }
 
   return NextResponse.json(event, { status: 201 })
 }
