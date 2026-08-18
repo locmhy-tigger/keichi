@@ -24,6 +24,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon,  hidden: true },
   { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon, hidden: true },
   { href: "/teacher/points",        label: "積點",     icon: StarIcon,      hidden: true },
+  { href: "/teacher/prompts",       label: "提示詞庫", icon: PromptIcon     },
   { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon      },
 ]
 
@@ -407,6 +408,16 @@ function AuditIcon() {
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <path d="M14 2v6h6"/>
       <path d="M9 13h6M9 17h4"/>
+    </svg>
+  )
+}
+
+function PromptIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6"/>
+      <path d="M10 22h4"/>
+      <path d="M12 2a6 6 0 0 0-4 10.47c.42.4.68.94.75 1.53H15.25c.07-.6.33-1.13.75-1.53A6 6 0 0 0 12 2z"/>
     </svg>
   )
 }
