@@ -30,10 +30,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const event = await prisma.calendarEvent.findUnique({ where: { id: params.id } })
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // Only a global ADMIN or the president (chair) of the event's committee may
-  // edit it. Events with no committee (全校) are ADMIN-only.
+  // The event's own author may always edit it. Otherwise, a global ADMIN or
+  // the president (chair) of the event's committee may; events with no
+  // committee (全校) are author-or-ADMIN only.
   const allowed =
     isAdmin(session.user.role) ||
+    event.authorId === session.user.id ||
     (event.committee
       ? await canEditCommittee(session.user.id, session.user.role, event.committee)
       : false)
@@ -59,27 +61,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     `Event "${updated.title}" (${updated.id}) updated by ${session.user.name}`
   )
 
-  // Google Calendar sync — best-effort, non-blocking. Uses the event's
+  // Google Calendar sync — best-effort, but AWAITED (a fire-and-forget promise
+  // is dropped when the response ends the request context). Uses the event's
   // AUTHOR's own calendar (not the editor's) — a committee chair or admin
   // other than the author may be the one making this edit.
-  isConnected(event.authorId)
-    .then((connected) => {
-      if (connected) return updateGoogleEvent(event.authorId, updated)
-    })
-    .catch((err) => console.error("[GCal] updateGoogleEvent error:", err))
+  try {
+    if (await isConnected(event.authorId)) {
+      await updateGoogleEvent(event.authorId, updated)
+    }
 
-  // Committee events fan out to every other relevant connected teacher.
-  // If the committee changed, the old audience no longer needs a copy —
-  // retract theirs, then fan out fresh to the new audience.
-  if (event.committee !== updated.committee) {
-    if (event.committee) {
-      retractCommitteeEvent(updated.id).catch((err) => console.error("[GCal] retractCommitteeEvent error:", err))
+    // Committee events fan out to every other relevant connected teacher.
+    // If the committee changed, the old audience no longer needs a copy —
+    // retract theirs, then fan out fresh to the new audience.
+    if (event.committee !== updated.committee) {
+      if (event.committee) await retractCommitteeEvent(updated.id)
+      if (updated.committee) await fanOutCommitteeEvent(updated)
+    } else if (updated.committee) {
+      await fanOutCommitteeEvent(updated)
     }
-    if (updated.committee) {
-      fanOutCommitteeEvent(updated).catch((err) => console.error("[GCal] fanOutCommitteeEvent error:", err))
-    }
-  } else if (updated.committee) {
-    fanOutCommitteeEvent(updated).catch((err) => console.error("[GCal] fanOutCommitteeEvent error:", err))
+  } catch (err) {
+    // Never fail the request over a Google problem — the edit is already saved.
+    console.error("[GCal] update sync error:", err)
   }
 
   return NextResponse.json(updated)
@@ -94,10 +96,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const event = await prisma.calendarEvent.findUnique({ where: { id: params.id } })
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // Only a global ADMIN or the president (chair) of the event's committee may
-  // delete it. Events with no committee (全校) are ADMIN-only.
+  // The event's own author may always delete it. Otherwise, a global ADMIN or
+  // the president (chair) of the event's committee may; events with no
+  // committee (全校) are author-or-ADMIN only.
   const allowed =
     isAdmin(session.user.role) ||
+    event.authorId === session.user.id ||
     (event.committee
       ? await canEditCommittee(session.user.id, session.user.role, event.committee)
       : false)
@@ -123,27 +127,29 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     `Event "${event.title}" (${event.id}) deleted by ${session.user.name}`
   )
 
-  // Google Calendar sync — best-effort, non-blocking. Uses the event's
-  // AUTHOR's own calendar (not the deleter's) — a committee chair or admin
-  // other than the author may be the one deleting it.
-  if (googleEventId) {
-    isConnected(authorId)
-      .then(async (connected) => {
-        if (!connected) return
-        const conn = await prisma.googleCalendarConnection.findUnique({
-          where:  { userId: authorId },
-          select: { googleCalendarId: true },
-        })
-        if (conn) {
-          await deleteGoogleEvent(authorId, googleEventId, conn.googleCalendarId)
-        }
+  // Google Calendar sync — best-effort, but AWAITED (a fire-and-forget promise
+  // is dropped when the response ends the request context, which silently left
+  // the event behind on Google). Uses the event's AUTHOR's own calendar (not
+  // the deleter's) — a committee chair or admin other than the author may be
+  // the one deleting it.
+  try {
+    if (googleEventId && await isConnected(authorId)) {
+      const conn = await prisma.googleCalendarConnection.findUnique({
+        where:  { userId: authorId },
+        select: { googleCalendarId: true },
       })
-      .catch((err) => console.error("[GCal] deleteGoogleEvent error:", err))
-  }
+      if (conn) {
+        await deleteGoogleEvent(authorId, googleEventId, conn.googleCalendarId)
+      }
+    }
 
-  // Committee events — clean up every fanned-out copy too
-  if (committeeSyncs.length > 0) {
-    retractCommitteeEvent(params.id, committeeSyncs).catch((err) => console.error("[GCal] retractCommitteeEvent error:", err))
+    // Committee events — clean up every fanned-out copy too
+    if (committeeSyncs.length > 0) {
+      await retractCommitteeEvent(params.id, committeeSyncs)
+    }
+  } catch (err) {
+    // Never fail the request over a Google problem — the event is already deleted.
+    console.error("[GCal] delete sync error:", err)
   }
 
   return NextResponse.json({ deleted: true })

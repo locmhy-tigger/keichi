@@ -70,17 +70,23 @@ export async function POST(req: NextRequest) {
     `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
   )
 
-  // Google Calendar sync — best-effort, non-blocking
-  isConnected(session.user.id)
-    .then((connected) => {
-      if (connected) return createGoogleEvent(session.user.id, event)
-    })
-    .catch((err) => console.error("[GCal] createGoogleEvent error:", err))
-
-  // Committee events also fan out to every other relevant connected teacher
-  // (SCHOOL → everyone; other committees → that committee's members)
-  if (event.committee) {
-    fanOutCommitteeEvent(event).catch((err) => console.error("[GCal] fanOutCommitteeEvent error:", err))
+  // Google Calendar sync — best-effort, but AWAITED. Fire-and-forget here
+  // silently breaks sync: the response ends the request context, so the
+  // promise gets dropped part-way through — the event reaches Google, but the
+  // googleEventId write-back never lands, leaving the event unlinked and
+  // impossible to update/delete on Google later.
+  try {
+    if (await isConnected(session.user.id)) {
+      await createGoogleEvent(session.user.id, event)
+    }
+    // Committee events also fan out to every other relevant connected teacher
+    // (SCHOOL → everyone; other committees → that committee's members)
+    if (event.committee) {
+      await fanOutCommitteeEvent(event)
+    }
+  } catch (err) {
+    // Never fail the request over a Google problem — the event is already saved.
+    console.error("[GCal] create sync error:", err)
   }
 
   return NextResponse.json(event, { status: 201 })

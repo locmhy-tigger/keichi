@@ -672,11 +672,12 @@ export async function retractCommitteeEvent(
 /**
  * Pushes every existing committee event relevant to a teacher (SCHOOL events,
  * plus events for committees they're a member of; excluding events they
- * authored themselves) into their calendar right after they connect Google
- * Calendar, so they see everything immediately instead of waiting for the
- * next edit to one of those events.
+ * authored themselves) into their calendar. Run on first connect and on a
+ * manual "Sync Now", so teachers get events that already existed rather than
+ * only ones created/edited after the fan-out went live. Idempotent — an event
+ * already pushed to this user is PATCHed in place, not duplicated.
  */
-export async function backfillCommitteeEventsForNewConnection(userId: string): Promise<number> {
+export async function backfillCommitteeEventsForUser(userId: string): Promise<number> {
   const memberships = await prisma.committeeRole.findMany({
     where:  { userId },
     select: { committee: true },
