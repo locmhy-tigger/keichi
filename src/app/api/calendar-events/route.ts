@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
 import { logToObsidian } from "@/lib/obsidian-log"
+import { createGoogleEvent, isConnected } from "@/lib/google-calendar"
 import { z } from "zod"
 
 const createSchema = z.object({
@@ -11,7 +12,7 @@ const createSchema = z.object({
   endDate:     z.string().optional(),
   allDay:      z.boolean().default(true),
   description: z.string().optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "SCHOOL"]).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -68,6 +69,13 @@ export async function POST(req: NextRequest) {
     "Calendar Event Created",
     `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
   )
+
+  // Google Calendar sync — best-effort, non-blocking
+  isConnected(session.user.id)
+    .then((connected) => {
+      if (connected) return createGoogleEvent(session.user.id, event)
+    })
+    .catch((err) => console.error("[GCal] createGoogleEvent error:", err))
 
   return NextResponse.json(event, { status: 201 })
 }

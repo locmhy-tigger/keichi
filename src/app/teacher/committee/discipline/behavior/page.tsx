@@ -20,7 +20,9 @@ type BehaviorRecord = {
   author:      { id: string; name: string | null }
 }
 
-type HomeroomClass = {
+// 班級 + 學生名單，由 GET /api/homeroom 提供（資料來源：Class 模型 = 群組管理-班級分組）。
+// 命名刻意避開已棄用的 Prisma `HomeroomClass` 模型，以免新開發誤用舊「班級管理」概念。
+type ClassRoster = {
   className: string
   students: { studentName: string; classNumber: string | null }[]
 }
@@ -46,7 +48,7 @@ export default function BehaviorPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Homeroom classes + rosters (for the dropdown + student multi-select)
-  const [hrClasses, setHrClasses] = useState<HomeroomClass[]>([])
+  const [hrClasses, setHrClasses] = useState<ClassRoster[]>([])
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [studentQuery, setStudentQuery] = useState("")
 

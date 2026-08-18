@@ -18,7 +18,7 @@ const notoSansTC = Noto_Sans_TC({
 })
 
 export const metadata: Metadata = {
-  title: "基智若愚 ICHI",
+  title: "基智行政平台",
   description: "教師行政管理平台",
 }
 
@@ -31,6 +31,9 @@ export default function RootLayout({
     <html lang="zh-HK" className={`${inter.variable} ${notoSansTC.variable}`}>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
+        <div className="fixed bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none select-none">
+          v0.1.0
+        </div>
       </body>
     </html>
   )

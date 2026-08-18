@@ -17,7 +17,10 @@ export default async function TeacherDashboard() {
 
   const upcomingTodos = await prisma.todo.findMany({
     where: {
-      createdById: session.user.id,
+      OR: [
+        { createdById: session.user.id },
+        { assignees: { some: { userId: session.user.id } } },
+      ],
       status: { not: "DONE" },
     },
     orderBy: [{ dueDate: "asc" }],
@@ -33,7 +36,7 @@ export default async function TeacherDashboard() {
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  
+
   const [calEvents, allEvents] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: { startDate: { gte: monthStart, lt: monthEnd } },

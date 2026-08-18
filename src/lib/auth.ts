@@ -8,11 +8,13 @@ import bcrypt from "bcryptjs"
 import type { Role } from "@prisma/client"
 import type { Adapter } from "next-auth/adapters"
 
-// Bootstrap admins: these emails are always granted ADMIN on login (handy for
-// Google Workspace SSO where accounts are created on first sign-in). Add more
-// via the ADMIN_EMAILS env var (comma-separated); the default is always kept.
+// Bootstrap admins: emails listed in the ADMIN_EMAILS env var (comma-separated)
+// are always granted ADMIN on login — handy for Google Workspace SSO where
+// accounts are created on first sign-in. Kept out of source (public repo);
+// configure per-environment (e.g. Zeabur env vars).
 const ADMIN_EMAILS = new Set(
-  ["test2020@ga.keichi.edu.hk", ...(process.env.ADMIN_EMAILS ?? "").split(",")]
+  (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 )
@@ -33,6 +35,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId:  process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Request offline access so Google issues a refresh_token
+          access_type: "offline",
+          prompt: "consent",
+          scope: [
+            "openid",
+            "email",
+            "profile",
+          ].join(" "),
+        },
+      },
     }),
     Credentials({
       name: "帳號密碼",
@@ -119,6 +133,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 scope:             account.scope,
                 id_token:          account.id_token,
                 refresh_token:     account.refresh_token ?? null,
+              },
+            })
+          } else if (account.refresh_token) {
+            // Update tokens on re-sign-in so we always have a fresh refresh_token
+            await prisma.account.update({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              data: {
+                access_token:  account.access_token,
+                expires_at:    account.expires_at,
+                refresh_token: account.refresh_token,
               },
             })
           }
