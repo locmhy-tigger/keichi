@@ -233,6 +233,8 @@ model User {
   promptsCreated Prompt[] @relation("PromptsCreated")
   // Google Calendar sync
   googleCalendarConnection GoogleCalendarConnection?
+  // 學校活動及假期 copies fanned out to this user's own calendar
+  calendarEventGoogleSyncs CalendarEventGoogleSync[]
 }
 
 // ─────────────────────────────────────────
@@ -721,6 +723,7 @@ model CalendarEvent {
   syncedAt      DateTime? // Last successful sync timestamp
 
   author User @relation("CalendarEvents", fields: [authorId], references: [id], onDelete: Cascade)
+  googleSyncs CalendarEventGoogleSync[]
 
   @@index([startDate])
   @@index([committee])
@@ -752,6 +755,26 @@ model GoogleCalendarConnection {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([watchChannelId])
+}
+
+// SCHOOL-committee (學校活動及假期) events fan out to every connected teacher's
+// own dedicated calendar, not just the author's — so one CalendarEvent can have
+// many Google-side copies. This tracks each (event, recipient) copy's
+// googleEventId. The author's own copy is still tracked on
+// CalendarEvent.googleEventId as before; this table only covers OTHER
+// recipients the event was pushed to.
+model CalendarEventGoogleSync {
+  id              String   @id @default(cuid())
+  calendarEventId String
+  userId          String
+  googleEventId   String
+  syncedAt        DateTime @default(now())
+
+  calendarEvent CalendarEvent @relation(fields: [calendarEventId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarEventId, userId])
+  @@index([userId])
 }
 
 model CommitteeTool {

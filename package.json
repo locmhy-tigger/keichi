@@ -18,7 +18,9 @@
     "db:seed:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/keichi?schema=public DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@localhost:5433/keichi?schema=public prisma db seed",
     "db:reset:local": "docker compose down -v && docker compose up -d --wait && npm run db:push:local && npm run db:seed:local",
     "db:studio:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/keichi?schema=public DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@localhost:5433/keichi?schema=public prisma studio",
-    "email:test": "node --env-file=.env --env-file-if-exists=.env.local --import tsx scripts/test-email.ts"
+    "email:test": "node --env-file=.env --env-file-if-exists=.env.local --import tsx scripts/test-email.ts",
+    "calendar:cleanup:dry": "node --env-file=.env --env-file-if-exists=.env.local --import tsx scripts/delete-old-calendar-events.ts",
+    "calendar:cleanup:confirm": "node --env-file=.env --env-file-if-exists=.env.local --import tsx scripts/delete-old-calendar-events.ts --confirm"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
