@@ -235,12 +235,33 @@ model User {
   googleCalendarConnection GoogleCalendarConnection?
   // 學校活動及假期 copies fanned out to this user's own calendar
   calendarEventGoogleSyncs CalendarEventGoogleSync[]
+  // Web Push (PWA) device subscriptions
+  pushSubscriptions PushSubscription[]
 }
 
 // ─────────────────────────────────────────
 // NOTIFICATIONS — persistent in-app notifications (announcements,
 // doc approvals, behavior records). Complements ephemeral Pusher events.
 // ─────────────────────────────────────────
+// Web Push (PWA) subscriptions — one row per DEVICE, not per user: a teacher
+// with an iPad and a phone has two. `endpoint` is the browser-issued push URL
+// and is globally unique, so it doubles as the natural key for upserts.
+// Rows are deleted when the push service reports the subscription is gone
+// (HTTP 404/410), e.g. the user removed the home-screen app.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique @db.Text
+  p256dh    String // client public key (payload encryption)
+  auth      String // client auth secret
+  userAgent String? // helps a user tell their devices apart
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String

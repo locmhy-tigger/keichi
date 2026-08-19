@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { getPusherClient } from "@/lib/pusher-client"
+import { PushToggle } from "@/components/teacher/PushToggle"
 
 type Notification = {
   id:        string
@@ -129,6 +130,9 @@ export function NotificationBell() {
               })}
             </div>
           )}
+          <div className="border-t" style={{ borderColor: "var(--color-border)" }}>
+            <PushToggle />
+          </div>
         </div>
       )}
     </div>
