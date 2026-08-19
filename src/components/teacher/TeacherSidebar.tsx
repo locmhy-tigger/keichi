@@ -63,7 +63,7 @@ export function TeacherSidebar({ user }: { user: User }) {
       className="flex flex-col h-full"
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
-      {/* Logo — replace /logo-placeholder.svg with your actual logo */}
+      {/* Logo */}
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
         <Image
           src="/logo.png"
@@ -204,10 +204,11 @@ export function TeacherSidebar({ user }: { user: User }) {
           <MenuIcon />
         </button>
         <Image
-          src="/logo-placeholder.svg"
+          src="/logo.png"
           alt="基智行政平台 Logo"
           width={24}
           height={24}
+          priority
         />
         <span className="font-semibold text-base" style={{ color: "var(--color-ink-900)" }}>
           基智行政平台

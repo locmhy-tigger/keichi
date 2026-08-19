@@ -43,7 +43,7 @@ export function StudentSidebar({ user }: { user: User }) {
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
-        <Image src="/logo-placeholder.svg" alt="基智行政平台 Logo" width={32} height={32} priority />
+        <Image src="/logo.png" alt="基智行政平台 Logo" width={32} height={32} priority />
         <div className="flex items-end gap-1.5">
           <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
             基智行政平台
