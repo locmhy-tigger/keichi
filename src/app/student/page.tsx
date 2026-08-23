@@ -113,10 +113,12 @@ export default function StudentDashboard() {
     })
   }, [])
 
-  // Pusher subscriptions ... (omitted for brevity in thinking but I'll keep them in code)
+  // Pusher subscriptions — optional. getPusherClient() returns null when the
+  // realtime config is missing, in which case we simply skip live updates.
   useEffect(() => {
     if (!activeClass) return
     const pusher = getPusherClient()
+    if (!pusher) return
     const channel = pusher.subscribe(`class-${activeClass.id}`)
     channel.bind("points-awarded", (data: PusherPointsAwardedPayload) => {
       showToast(`+${data.amount} 積點！`)
@@ -132,6 +134,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!session?.user?.id) return
     const pusher  = getPusherClient()
+    if (!pusher) return
     const channel = pusher.subscribe(`private-user-${session.user.id}`)
     channel.bind("activity-alert", (data: { title: string; startTime: string; location?: string | null }) => {
       const loc = data.location ? ` 於 ${data.location}` : ""
