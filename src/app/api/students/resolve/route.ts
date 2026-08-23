@@ -10,7 +10,7 @@ import { z } from "zod"
 //
 // Matching order, most reliable first:
 //   1. class name + class number  (ClassEnrollment — the school's own numbering)
-//   2. exact student name
+//   2. exact student name — Chinese (name) or English (nameEn)
 //   3. email, if the name column actually holds one
 // Rows that match nothing come back flagged so the teacher can fix them
 // BEFORE saving, instead of being silently dropped.
@@ -49,29 +49,35 @@ export async function POST(req: NextRequest) {
           select:  {
             classNumber: true,
             class:   { select: { name: true } },
-            student: { select: { id: true, name: true, email: true, role: true } },
+            student: { select: { id: true, name: true, nameEn: true, email: true, role: true } },
           },
         })
       : Promise.resolve([]),
     names.length
       ? prisma.user.findMany({
-          where:  { role: "STUDENT", OR: [{ name: { in: names } }, { email: { in: names } }] },
-          select: { id: true, name: true, email: true },
+          where:  {
+            role: "STUDENT",
+            OR: [{ name: { in: names } }, { nameEn: { in: names } }, { email: { in: names } }],
+          },
+          select: { id: true, name: true, nameEn: true, email: true },
         })
       : Promise.resolve([]),
   ])
 
+  type Hit = { id: string; name: string | null; nameEn?: string | null; email: string | null }
+
   // (class, number) → student
-  const byClassNo = new Map<string, { id: string; name: string | null; email: string | null }>()
+  const byClassNo = new Map<string, Hit>()
   for (const e of enrollments) {
     if (e.student.role !== "STUDENT" || !e.classNumber) continue
     byClassNo.set(`${norm(e.class.name)}#${normNum(e.classNumber)}`, e.student)
   }
 
-  const nameMap = new Map<string, { id: string; name: string | null; email: string | null }>()
+  const nameMap = new Map<string, Hit>()
   for (const u of byName) {
-    if (u.name)  nameMap.set(norm(u.name), u)
-    if (u.email) nameMap.set(norm(u.email), u)
+    if (u.name)   nameMap.set(norm(u.name), u)
+    if (u.nameEn) nameMap.set(norm(u.nameEn), u)
+    if (u.email)  nameMap.set(norm(u.email), u)
   }
 
   const results = rows.map((r) => {
