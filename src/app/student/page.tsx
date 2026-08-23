@@ -136,11 +136,16 @@ export default function StudentDashboard() {
     const pusher  = getPusherClient()
     if (!pusher) return
     const channel = pusher.subscribe(`private-user-${session.user.id}`)
-    channel.bind("activity-alert", (data: { title: string; startTime: string; location?: string | null }) => {
+    const onAlert = (data: { title: string; startTime: string; location?: string | null }) => {
       const loc = data.location ? ` 於 ${data.location}` : ""
       showToast(`📢 你有一個活動：${data.title} — ${formatActivityTime(data.startTime)}${loc}`)
-    })
-    return () => { channel.unbind_all(); pusher.unsubscribe(`private-user-${session.user.id}`) }
+    }
+    channel.bind("activity-alert", onAlert)
+    // Unbind only OUR handler and leave the channel subscribed — the
+    // notification bell in the sidebar shares this private channel, and
+    // unbind_all()/unsubscribe() here would silently kill its live updates
+    // as soon as the student navigated away from the dashboard.
+    return () => { channel.unbind("activity-alert", onAlert) }
   }, [session?.user?.id])
 
   const handleJoin = async () => {
