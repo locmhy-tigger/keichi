@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isTeacherOrAdmin, isAdmin } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -14,13 +14,23 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     include: {
       assignments: {
-        where:   { status: "PENDING" },
+        // Everyone still expected to take part. Previously this was
+        // PENDING-only, which meant a reminder reached NOBODY in the normal
+        // case — students are assigned as CONFIRMED unless their timetable
+        // clashes. ATTENDED/ABSENT are historical, so they are excluded.
+        where:   { status: { in: ["PENDING", "CONFIRMED"] } },
         include: { student: { select: { id: true } } },
       },
     },
   })
   if (!activity) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  if (activity.createdById !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // The activity's owner, or any admin, may send reminders.
+  if (activity.createdById !== session.user.id && !isAdmin(session.user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  if (activity.assignments.length === 0) {
+    return NextResponse.json({ error: "沒有可提醒的學生（名單為空或全部已出席／缺席）" }, { status: 400 })
+  }
 
   const payload = {
     activityId: activity.id,
