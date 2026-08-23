@@ -166,7 +166,8 @@ model VerificationToken {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  name          String?
+  name          String? // 中文姓名 (primary display name)
+  nameEn        String? // 英文姓名 — helps match rosters pasted in either language
   image         String?
   role          Role      @default(STUDENT)
   emailVerified DateTime?

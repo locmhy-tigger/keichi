@@ -6,6 +6,7 @@ import { getPusherClient } from "@/lib/pusher-client"
 import type { PusherPointsAwardedPayload, PusherMissionApprovedPayload } from "@/types/mission"
 import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
 import { UnifiedTimeline } from "@/components/UnifiedTimeline"
+import { fetchArray } from "@/lib/fetch-json"
 
 type ClassInfo = { id: string; name: string; classCode: string }
 type LeaderboardEntry = { rank: number; user: { id: string; name: string }; totalPoints: number }
@@ -59,7 +60,7 @@ export default function StudentDashboard() {
   }, [])
 
   useEffect(() => {
-    fetch("/api/classes").then((r) => r.json()).then((data: ClassInfo[]) => {
+    fetchArray<ClassInfo>("/api/classes").then((data) => {
       setClasses(data)
       if (data.length > 0) setActiveClass(data[0])
     })
@@ -72,9 +73,8 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     // Count due flashcards
-    fetch("/api/flashcard-decks")
-      .then((r) => r.json())
-      .then(async (decks: { id: string }[]) => {
+    fetchArray<{ id: string }>("/api/flashcard-decks")
+      .then(async (decks) => {
         let total = 0
         for (const deck of decks) {
           const res = await fetch(`/api/flashcard-decks/${deck.id}/due`)
