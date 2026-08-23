@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
+import { NotificationBell } from "@/components/NotificationBell"
 
 type User = {
   name?:  string | null
@@ -91,6 +92,7 @@ export function StudentSidebar({ user }: { user: User }) {
             </p>
             <p className="text-[10px] truncate" style={{ color: "var(--color-ink-400)" }}>學生</p>
           </div>
+          <NotificationBell />
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             className="text-caption shrink-0 hover:opacity-70 transition-opacity"

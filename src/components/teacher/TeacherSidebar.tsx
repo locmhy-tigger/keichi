@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
-import { NotificationBell } from "@/components/teacher/NotificationBell"
+import { NotificationBell } from "@/components/NotificationBell"
 
 type User = {
   name?: string | null
