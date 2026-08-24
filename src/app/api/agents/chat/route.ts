@@ -14,11 +14,21 @@ import { getRecentMemories, formatRecentMemories } from "@/lib/agent-memory"
 import { prisma } from "@/lib/prisma"
 import { pusherServer } from "@/lib/pusher"
 import { aiRateLimit } from "@/lib/rate-limit"
+import { hkNowLabel, hkYmd } from "@/lib/hk-date"
 
 async function pushEvent(userId: string, event: string, data: object) {
   try {
     await pusherServer.trigger(`private-user-${userId}`, event, data)
   } catch {}
+}
+
+
+// The model has no clock. Without this it cannot resolve 「下星期五」,
+// 「今個月」 or 「聽日」 at all — the single biggest reason date questions
+// used to fail. Hong Kong time, because the server runs UTC.
+function nowContext(): string {
+  return `\n\n---\n[現在時間]\n今日是 ${hkNowLabel()}（${hkYmd()}，香港時間）。` +
+    `\n處理「今日」「聽日」「下星期」「今個月」等相對日期時，一律以此為準，並在需要時換算成 YYYY-MM-DD。`
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +61,7 @@ export async function POST(req: NextRequest) {
         send({ agentId: "A01", status: "running" })
 
         const dispatcherReply = await completeLLM("claude", messages, {
-          system: loadCharter("dispatcher"), maxTokens: 512,
+          system: loadCharter("dispatcher") + nowContext(), maxTokens: 512,
         })
 
         await pushEvent(userId, "agent-status", { agentId: "A01", status: "done" })
@@ -71,7 +81,7 @@ export async function POST(req: NextRequest) {
         await pushEvent(userId, "agent-status", { agentId: specId, status: "running" })
         send({ agentId: specId, status: "running", route: routeKey })
 
-        let specialistSystem = loadCharter(routeKey)
+        let specialistSystem = loadCharter(routeKey) + nowContext()
 
         // Cross-conversation memory: let the specialist see recent summaries
         // from this teacher's other conversations. Best-effort — a failure

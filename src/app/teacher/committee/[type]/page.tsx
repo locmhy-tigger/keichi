@@ -47,6 +47,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "宣佈訊息", description: "管理今日宣佈訊息、分類、AI 搜尋及匯入匯出", href: "/teacher/committee/admin/pa-announcements" },
       { label: "採購申請",   description: "填寫及追蹤採購申請表", href: "/teacher/committee/admin/procurement" },
       { label: "活動文件",   description: "一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP)", href: "/teacher/committee/admin/activity-docs" },
+      { label: "FAD8 年度彙編", description: "將全年已批核通告按學生整理成 FAD8 紀錄，可匯出 Excel", href: "/teacher/committee/admin/fad8" },
       { label: "KCquotation 報價", description: "填寫按口頭報價採購表格、生成 DOCX，支援 AI OCR 預填", href: "/teacher/committee/admin/quotation" },
       { label: "設施預約",   description: "電腦室、特別室及禮堂預約", href: "/teacher/committee/admin/booking" },
       { label: "費用結算",   description: "班費及活動費用記錄"   },
@@ -65,6 +66,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     tools: [
       { label: "行為記錄",   description: "記錄優點、缺點、小過、大過、遲到、缺席", href: "/teacher/committee/discipline/behavior" },
       { label: "行為儀表板", description: "按學生統計行為表現、電郵班主任", href: "/teacher/committee/discipline/dashboard" },
+      { label: "行為預警",   description: "本月需留意的學生，與上月比較及早發現轉差個案", href: "/teacher/committee/discipline/early-warning" },
       { label: "訓育設定",   description: "班主任電郵及自動提示門檻", href: "/teacher/committee/discipline/settings" },
     ],
     icon: (
