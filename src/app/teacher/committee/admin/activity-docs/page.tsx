@@ -386,7 +386,7 @@ export default function ActivityDocsPage() {
       const r = window.prompt("退回原因（會通知建立者）：")
       if (!r?.trim()) return
       reason = r.trim()
-    } else if (!confirm("批核後會自動將活動加入行事曆。確定批核？")) return
+    } else if (!confirm("批核後會自動加入行事曆，並建立活動記錄及出席名單。確定批核？")) return
 
     const res = await fetch(`/api/activity-notices/${id}/review`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -399,7 +399,8 @@ export default function ActivityDocsPage() {
     }
     const d = await res.json()
     window.alert(action === "approve"
-      ? `已批核，並加入 ${d.calendarEventsCreated ?? 0} 個活動到行事曆。`
+      ? `已批核。\n行事曆：${d.calendarEventsCreated ?? 0} 項\n活動記錄：${d.activitiesCreated ?? 0} 項`
+        + (d.assignmentsCreated ? `\n已指派出席：${d.assignmentsCreated} 人次` : "")
       : "已退回。")
     if (id === noticeId) { setStatus(action === "approve" ? "APPROVED" : "REJECTED") }
     loadLists()
