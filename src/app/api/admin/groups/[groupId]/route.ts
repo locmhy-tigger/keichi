@@ -11,6 +11,9 @@ const updateSchema = z.object({
   type: z.enum(["FORM_CLASS", "SUBJECT_CLASS", "SPECIFIC"]).optional(),
   description: z.string().optional(),
   teacherId: z.string().nullable().optional(),
+  // Tagging a group with a committee lets its members see that
+  // committee's calendar — the group half of restricted visibility.
+  committee: z.enum(["ADMIN","DISCIPLINE","IT","CURRICULUM","ECA","STUDENT_SUPPORT"]).nullable().optional(),
 })
 
 const teacherSelect = { id: true, name: true, image: true, email: true } as const

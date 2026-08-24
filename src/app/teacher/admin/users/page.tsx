@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 type CommitteeRole = {
   committee: CommitteeType

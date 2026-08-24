@@ -10,7 +10,7 @@ const patchSchema = z.object({
   startTime:   z.string().datetime().optional(),
   endTime:     z.string().datetime().nullable().optional(),
   location:    z.string().max(200).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).nullable().optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]).nullable().optional(),
   activityType: z.enum(["ECA", "ACADEMIC"]).nullable().optional(),
 })
 

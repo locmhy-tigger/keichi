@@ -9,7 +9,7 @@ const GoogleCalendarSettings = dynamic(
   { ssr: false, loading: () => null }
 )
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "SCHOOL"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "SCHOOL"
 
 type CalendarEvent = {
   id:          string
@@ -29,6 +29,7 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
   ECA:        "var(--color-eca)",
+  STUDENT_SUPPORT: "var(--color-student-support)",
   SCHOOL:     "var(--color-school)",
 }
 
@@ -38,6 +39,7 @@ const COMMITTEE_LABELS: Record<CommitteeType, string> = {
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
   ECA:        "課外活動",
+  STUDENT_SUPPORT: "學生支援",
   SCHOOL:     "學校活動及假期",
 }
 

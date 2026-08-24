@@ -66,6 +66,7 @@ enum CommitteeType {
   CURRICULUM
   ECA
   SCHOOL // 校曆及假期 — school-wide events & holidays (calendar category)
+  STUDENT_SUPPORT // 學生支援 — RESTRICTED: see RESTRICTED_COMMITTEES in src/lib/committee.ts
 }
 
 enum PromptSubject {
@@ -113,6 +114,7 @@ enum AnnouncementTarget {
   IT
   CURRICULUM
   ECA
+  STUDENT_SUPPORT
   CLASS
 }
 
@@ -985,6 +987,9 @@ model StudentGroup {
   id          String        @id @default(cuid())
   name        String
   type        GroupType
+  // Links a group to a committee. Members of a group tagged with a RESTRICTED
+  // committee (e.g. STUDENT_SUPPORT) can see that committee's calendar events.
+  committee   CommitteeType?
   description String?       @db.Text
   teacherId   String? // 負責老師
   createdAt   DateTime      @default(now())

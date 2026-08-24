@@ -20,7 +20,7 @@ export type NoticePayload = {
   [key: string]: unknown
 }
 
-export const NOTICE_COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]
+export const NOTICE_COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]
 
 /** Local wall-clock Date from "YYYY-MM-DD" + optional "HH:MM" (Asia/Hong_Kong server assumed). */
 export function sessionStart(s: NoticeSession): Date | null {

@@ -2,7 +2,7 @@
 
 export type Priority      = "NORMAL" | "IMPORTANT" | "URGENT"
 export type Status        = "DRAFT" | "PUBLISHED" | "ARCHIVED"
-export type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+export type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 export type Category = { id: string; name: string; committee: CommitteeType | null }
 

@@ -11,6 +11,7 @@ import {
   retractCommitteeEvent,
 } from "@/lib/google-calendar"
 import { z } from "zod"
+import { canSeeCommittee } from "@/lib/committee"
 
 const patchSchema = z.object({
   title:       z.string().min(1).max(200).optional(),
@@ -18,8 +19,32 @@ const patchSchema = z.object({
   endDate:     z.string().nullable().optional(),
   allDay:      z.boolean().optional(),
   description: z.string().optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "SCHOOL"]).nullable().optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT", "SCHOOL"]).nullable().optional(),
 })
+
+
+// GET — a single event. Previously absent, which left the by-id endpoint as a
+// way around the list route's audience filtering.
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const event = await prisma.calendarEvent.findUnique({
+    where: { id: params.id },
+    include: { author: { select: { id: true, name: true } } },
+  })
+  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  if (session.user.role === "STUDENT" && !["SCHOOL", "ECA"].includes(event.committee ?? "")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+  if (!(await canSeeCommittee(session.user.id, session.user.role, event.committee))) {
+    // 404 rather than 403 — don't confirm a restricted event exists.
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  return NextResponse.json(event)
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()

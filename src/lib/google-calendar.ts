@@ -589,13 +589,27 @@ async function connectedUserIds(excludeUserId?: string): Promise<string[]> {
 async function committeeFanOutTargets(committee: CommitteeType, excludeUserId: string): Promise<string[]> {
   if (committee === "SCHOOL") return connectedUserIds(excludeUserId)
 
-  const members = await prisma.committeeRole.findMany({
-    where:  { committee, userId: { not: excludeUserId } },
-    select: { userId: true },
-  })
-  if (members.length === 0) return []
+  // Membership has two routes, matching who can SEE the committee's events:
+  // a CommitteeRole, or membership of a StudentGroup tagged with it. Without
+  // the second, a 學生支援 group member would see an event in the app but
+  // never get it on their Google Calendar.
+  const [roleMembers, groupMembers] = await Promise.all([
+    prisma.committeeRole.findMany({
+      where:  { committee, userId: { not: excludeUserId } },
+      select: { userId: true },
+    }),
+    prisma.groupMember.findMany({
+      where:  { group: { committee }, userId: { not: excludeUserId } },
+      select: { userId: true },
+    }),
+  ])
 
-  const memberIds = new Set(members.map((m) => m.userId))
+  const memberIds = new Set([
+    ...roleMembers.map((m) => m.userId),
+    ...groupMembers.map((m) => m.userId),
+  ])
+  if (memberIds.size === 0) return []
+
   const connected = await connectedUserIds(excludeUserId)
   return connected.filter((id) => memberIds.has(id))
 }
@@ -678,11 +692,19 @@ export async function retractCommitteeEvent(
  * already pushed to this user is PATCHed in place, not duplicated.
  */
 export async function backfillCommitteeEventsForUser(userId: string): Promise<number> {
-  const memberships = await prisma.committeeRole.findMany({
-    where:  { userId },
-    select: { committee: true },
-  })
-  const committees = Array.from(new Set<CommitteeType>(["SCHOOL", ...memberships.map((m) => m.committee)]))
+  const [memberships, groupTags] = await Promise.all([
+    prisma.committeeRole.findMany({ where: { userId }, select: { committee: true } }),
+    // Groups they belong to that are tagged with a committee (學生支援 etc.)
+    prisma.studentGroup.findMany({
+      where:  { committee: { not: null }, members: { some: { userId } } },
+      select: { committee: true },
+    }),
+  ])
+  const committees = Array.from(new Set<CommitteeType>([
+    "SCHOOL",
+    ...memberships.map((m) => m.committee),
+    ...groupTags.map((g) => g.committee).filter(Boolean) as CommitteeType[],
+  ]))
 
   const events = await prisma.calendarEvent.findMany({
     where: { committee: { in: committees }, authorId: { not: userId } },

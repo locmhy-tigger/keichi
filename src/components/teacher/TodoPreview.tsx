@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { CommitteeBadge } from "./CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 type TodoStatus    = "OPEN" | "IN_PROGRESS" | "DONE"
 
 type Todo = {
@@ -22,6 +22,7 @@ const BORDER_CLASS: Record<CommitteeType, string> = {
   IT:         "committee-border-it",
   CURRICULUM: "committee-border-curriculum",
   ECA:        "committee-border-eca",
+  STUDENT_SUPPORT: "committee-border-student-support",
 }
 
 const STATUS_LABELS: Record<TodoStatus, string> = {

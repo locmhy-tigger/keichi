@@ -7,11 +7,11 @@ import { BEHAVIOR_LABEL, BEHAVIOR_ORDER, type BehaviorTypeValue } from "@/lib/be
 // The draft shape forwarded from the chat route (kind + loosely-typed data).
 export type Draft = { kind: string; data: Record<string, unknown> }
 
-const COMMITTEES = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"] as const
+const COMMITTEES = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"] as const
 const COMMITTEE_LABEL: Record<string, string> = {
   ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程", ECA: "課外活動",
 }
-const TARGETS = ["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"] as const
+const TARGETS = ["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"] as const
 
 const KIND_META: Record<string, { title: string; endpoint: string; link: string; linkLabel: string }> = {
   todo:           { title: "新增待辦事項", endpoint: "/api/todos",             link: "/teacher/todos",                          linkLabel: "查看待辦" },

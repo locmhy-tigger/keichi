@@ -8,7 +8,7 @@ import { z } from "zod"
 const createSchema = z.object({
   title:      z.string().min(1).max(200),
   body:       z.string().min(1).max(10000),
-  committee:  z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  committee:  z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]).optional(),
   target:     z.enum(["ALL", "ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "CLASS"]).default("ALL"),
   priority:   z.enum(["NORMAL", "IMPORTANT", "URGENT"]).default("NORMAL"),
   status:     z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("PUBLISHED"),
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     } else {
       // A committee target — notify that committee's members.
       const members = await prisma.committeeRole.findMany({
-        where: { committee: data.target as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" },
+        where: { committee: data.target as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" },
         select: { userId: true },
       })
       recipientIds = members.map((m) => m.userId)

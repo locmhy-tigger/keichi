@@ -5,9 +5,10 @@ import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 import { CommitteeToolsManager } from "@/components/teacher/CommitteeToolsManager"
 import { PresetToolsGrid } from "@/components/teacher/PresetToolsGrid"
 import Link from "next/link"
+import { canSeeCommittee } from "@/lib/committee"
 
-type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca"
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca" | "student-support"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 export async function generateStaticParams() {
   return [
@@ -16,6 +17,7 @@ export async function generateStaticParams() {
     { type: "it" },
     { type: "curriculum" },
     { type: "eca" },
+    { type: "student-support" },
   ]
 }
 
@@ -25,6 +27,7 @@ const SLUG_TO_ENUM: Record<Slug, CommitteeType> = {
   it:         "IT",
   curriculum: "CURRICULUM",
   eca:        "ECA",
+  "student-support": "STUDENT_SUPPORT",
 }
 
 type CommitteeConfig = {
@@ -126,6 +129,21 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       </svg>
     ),
   },
+  STUDENT_SUPPORT: {
+    label:       "學生支援組",
+    description: "支援有特殊學習或情緒需要的學生。此組別的行事曆只有組員及管理員可見。",
+    colorVar:    "student-support",
+    tools: [
+      { label: "個案記錄",   description: "記錄及跟進個別學生支援情況" },
+      { label: "支援計劃",   description: "制定及檢視學生支援計劃"   },
+      { label: "轉介記錄",   description: "校內及校外專業轉介紀錄"   },
+    ],
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-student-support)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+      </svg>
+    ),
+  },
 }
 
 export default async function CommitteePage({ params }: { params: { type: string } }) {
@@ -135,6 +153,10 @@ export default async function CommitteePage({ params }: { params: { type: string
 
   const session = await auth()
   if (!session?.user) return null
+
+  // 學生支援 is private: hiding the nav entry isn't enough, since the URL is
+  // still guessable. 404 rather than 403 so the page's existence isn't confirmed.
+  if (!(await canSeeCommittee(session.user.id, session.user.role, committeeType))) notFound()
 
   const config = CONFIGS[committeeType]
 

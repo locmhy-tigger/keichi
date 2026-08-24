@@ -178,7 +178,7 @@ function BatchCalendarModal({
 
 // ─── Main Page ────────────────────────────────────────────
 
-type NoticeCommittee = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type NoticeCommittee = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 type NoticeStatus    = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED"
 
 type NoticeRow = {
@@ -193,6 +193,7 @@ type NoticeRow = {
 
 const COMMITTEE_LABEL: Record<NoticeCommittee, string> = {
   ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展", ECA: "課外活動",
+  STUDENT_SUPPORT: "學生支援",
 }
 
 const STATUS_META: Record<NoticeStatus, { label: string; color: string }> = {

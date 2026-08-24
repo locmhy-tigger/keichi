@@ -12,7 +12,7 @@ import { z } from "zod"
 // announcements, nothing is stored as a public record — this is purely a
 // message push, so use it for one-off notices rather than school announcements.
 
-const COMMITTEES = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"] as const
+const COMMITTEES = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"] as const
 
 // GET — staff list for the recipient picker (teachers + admins).
 export async function GET() {

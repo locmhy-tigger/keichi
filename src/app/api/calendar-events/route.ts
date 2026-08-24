@@ -5,7 +5,7 @@ import { isTeacherOrAdmin } from "@/lib/roles"
 import { logToObsidian } from "@/lib/obsidian-log"
 import { createGoogleEvent, isConnected, fanOutCommitteeEvent } from "@/lib/google-calendar"
 import { z } from "zod"
-import type { CommitteeType } from "@prisma/client"
+import { calendarVisibilityWhere } from "@/lib/committee"
 
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
@@ -13,7 +13,7 @@ const createSchema = z.object({
   endDate:     z.string().optional(),
   allDay:      z.boolean().default(true),
   description: z.string().optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "SCHOOL"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT", "SCHOOL"]).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -34,17 +34,17 @@ export async function GET(req: NextRequest) {
     endFilter   = new Date(y, m, 1)
   }
 
-  // Students only see school-wide events and 課外活動 — the other committees
-  // (行政 / 訓育 / 資訊科技 / 課程發展) are internal staff business. Filtered
-  // here rather than hidden in the UI so the data never reaches the client.
-  const studentVisible = { committee: { in: ["SCHOOL", "ECA"] as CommitteeType[] } }
+  // Audience filtering happens here, not in the UI, so events a user may not
+  // see never reach the client at all. Covers both the student cap
+  // (school-wide + 課外活動) and restricted committees such as 學生支援.
+  const visibility = await calendarVisibilityWhere(session.user.id, session.user.role)
 
   const events = await prisma.calendarEvent.findMany({
     where: {
       ...(startFilter && endFilter
         ? { startDate: { gte: startFilter, lt: endFilter } }
         : {}),
-      ...(session.user.role === "STUDENT" ? studentVisible : {}),
+      ...visibility,
     },
     orderBy: { startDate: "asc" },
     include: { author: { select: { id: true, name: true } } },
