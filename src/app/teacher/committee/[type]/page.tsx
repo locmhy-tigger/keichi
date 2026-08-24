@@ -114,7 +114,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "策劃及管理課外活動、學會及聯課活動，豐富學生校園生活。",
     colorVar:    "eca",
     tools: [
-      { label: "活動管理",     description: "建立活動、貼上學生名單、追蹤出席", href: "/teacher/activities" },
+      { label: "活動總覽",     description: "建立活動、今日／本週、按班別或學生查看出席", href: "/teacher/activities" },
       { label: "活動報名",     description: "管理課外活動及學會報名" },
       { label: "活動出席記錄", description: "記錄學生課外活動出席情況" },
       { label: "比賽及獎項",   description: "登記校外比賽及學生獎項"   },

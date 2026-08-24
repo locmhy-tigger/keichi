@@ -43,11 +43,31 @@ export async function GET(req: NextRequest) {
 
   // TEACHER：自己建立的活動；ADMIN：全部活動
   const where = session.user.role === "ADMIN" ? {} : { createdById: session.user.id }
+
+  // ?withStudents=1 — the 活動總覽 hub needs each participant's class to offer
+  // 按班別 / 按學生 views. Kept opt-in so other callers keep the light payload.
+  const withStudents = new URL(req.url).searchParams.get("withStudents") === "1"
+
   const activities = await prisma.activity.findMany({
     where,
     include: {
       _count: { select: { assignments: true } },
-      assignments: { where: { status: "CONFIRMED" }, select: { id: true } },
+      assignments: withStudents
+        ? {
+            select: {
+              id: true, status: true, note: true,
+              student: {
+                select: {
+                  id: true, name: true,
+                  // Usually one or two rows; the UI picks the form class.
+                  enrollments: {
+                    select: { classNumber: true, class: { select: { name: true } } },
+                  },
+                },
+              },
+            },
+          }
+        : { where: { status: "CONFIRMED" }, select: { id: true } },
     },
     orderBy: { startTime: "asc" },
   })

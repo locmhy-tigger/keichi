@@ -12,7 +12,7 @@ type Activity = {
   startTime:   string
   endTime:     string | null
   location:    string | null
-  assignments: { status: AttendanceStatus }[]
+  assignments: { status: AttendanceStatus; note?: string | null }[]
 }
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
@@ -34,6 +34,16 @@ type FilterTab = "upcoming" | "confirmed" | "past"
 function formatDateTime(iso: string) {
   const d = new Date(iso)
   return `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+}
+
+// 課外活動 mostly sit after school or at weekends — worth calling out so a
+// student can see at a glance which commitments fall outside lesson time.
+function whenLabel(iso: string): string | null {
+  const d = new Date(iso)
+  const day = d.getDay()
+  if (day === 0 || day === 6) return "週末"
+  if (d.getHours() >= 15) return "放學後"
+  return null
 }
 
 export default function StudentActivitiesPage() {
@@ -104,6 +114,8 @@ export default function StudentActivitiesPage() {
         <div className="space-y-3">
           {filtered.map((act) => {
             const status = act.assignments[0]?.status ?? "PENDING"
+            const note   = act.assignments[0]?.note
+            const when   = whenLabel(act.startTime)
             return (
               <div key={act.id} className="card p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -119,10 +131,23 @@ export default function StudentActivitiesPage() {
                           📍 {act.location}
                         </p>
                       )}
+                      {when && (
+                        <span className="text-caption px-2 py-0.5 rounded-pill"
+                          style={{ background: "var(--color-eca)20", color: "var(--color-eca)" }}>
+                          {when}
+                        </span>
+                      )}
                     </div>
                     {act.description && (
                       <p className="text-caption mt-2" style={{ color: "var(--color-ink-700)" }}>
                         {act.description}
+                      </p>
+                    )}
+                    {/* The reason behind a 待確認 status — fetched all along but
+                        never shown, so students saw the status with no cause. */}
+                    {note && (
+                      <p className="text-caption mt-2" style={{ color: "var(--color-discipline)" }}>
+                        ⚠ {note}
                       </p>
                     )}
                   </div>

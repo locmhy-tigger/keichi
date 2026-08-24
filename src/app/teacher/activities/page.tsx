@@ -4,6 +4,15 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { StudentRosterInput, makeRow, type RosterRow } from "@/components/teacher/StudentRosterInput"
 
+type Enrollment = { classNumber: string | null; class: { name: string } }
+
+type Assignment = {
+  id:      string
+  status?: string
+  note?:   string | null
+  student?: { id: string; name: string | null; enrollments: Enrollment[] }
+}
+
 type Activity = {
   id:          string
   title:       string
@@ -13,8 +22,10 @@ type Activity = {
   location:    string | null
   committee:   string | null
   _count:      { assignments: number }
-  assignments: { id: string }[]
+  assignments: Assignment[]
 }
+
+type ViewMode = "all" | "today" | "week" | "class" | "student"
 
 function formatDateTime(iso: string) {
   const d = new Date(iso)
@@ -22,6 +33,37 @@ function formatDateTime(iso: string) {
 }
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"]
+
+// Same heuristic as /api/homeroom: only 1A-6Z style names are real form classes,
+// so a student in several groups is still filed under one class.
+const FORM_CLASS = /^[1-6][A-Z]$/
+function formClassOf(a: Assignment): string | null {
+  const hit = a.student?.enrollments?.find((e) => FORM_CLASS.test(e.class.name.trim()))
+  return hit?.class.name.trim() ?? a.student?.enrollments?.[0]?.class.name.trim() ?? null
+}
+function classNumberOf(a: Assignment): string | null {
+  const hit = a.student?.enrollments?.find((e) => FORM_CLASS.test(e.class.name.trim()))
+  return hit?.classNumber ?? a.student?.enrollments?.[0]?.classNumber ?? null
+}
+
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
+}
+/** Monday-start week containing `d`. */
+function weekRange(d: Date): { from: Date; to: Date } {
+  const from = new Date(d); from.setHours(0,0,0,0)
+  from.setDate(from.getDate() - ((from.getDay() + 6) % 7))
+  const to = new Date(from); to.setDate(to.getDate() + 7)
+  return { from, to }
+}
+/** 課外活動 usually run after school or at weekends — worth calling out. */
+function whenLabel(iso: string): string | null {
+  const d = new Date(iso)
+  const day = d.getDay()
+  if (day === 0 || day === 6) return "週末"
+  if (d.getHours() >= 15) return "放學後"
+  return null
+}
 
 export default function TeacherActivitiesPage() {
   const [activities, setActivities]   = useState<Activity[]>([])
@@ -34,6 +76,9 @@ export default function TeacherActivitiesPage() {
   const [searchQ,    setSearchQ]      = useState("")
   const [weekdayFilter, setWeekdayFilter] = useState<number | null>(null)
   const [sortBy,     setSortBy]       = useState<"date" | "students" | "title">("date")
+  const [view,       setView]         = useState<ViewMode>("all")
+  const [pickedDate, setPickedDate]   = useState<string>("")
+  const [studentQ,   setStudentQ]     = useState("")
 
   // Form state
   const [title,   setTitle]   = useState("")
@@ -96,7 +141,7 @@ export default function TeacherActivitiesPage() {
 
   async function load() {
     setLoading(true)
-    const res = await fetch("/api/activities")
+    const res = await fetch("/api/activities?withStudents=1")
     if (res.ok) setActivities(await res.json())
     setLoading(false)
   }
@@ -162,8 +207,8 @@ export default function TeacherActivitiesPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-h1">活動管理</h1>
-          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>為學生指派活動及管理出席</p>
+          <h1 className="text-h1">活動總覽</h1>
+          <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>建立活動、指派學生，並按日期、班別或學生查看誰要出席</p>
         </div>
         <div className="flex items-center gap-2">
           <a
@@ -275,6 +320,40 @@ export default function TeacherActivitiesPage() {
         </form>
       )}
 
+      {/* View modes */}
+      {!loading && activities.length > 0 && (
+        <div className="flex gap-2 items-center flex-wrap mb-3">
+          <div className="flex gap-1 p-1 rounded-input" style={{ background: "var(--color-surface-2)" }}>
+            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"]] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setView(id)}
+                className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
+                style={{
+                  background: view === id ? "var(--color-surface)" : "transparent",
+                  color:      view === id ? "var(--color-ink-900)" : "var(--color-ink-500)",
+                  boxShadow:  view === id ? "0 1px 3px rgb(0 0 0 / 0.06)" : "none",
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>指定日期：</span>
+            <input type="date" value={pickedDate} onChange={(e) => setPickedDate(e.target.value)}
+              className="text-caption px-2 py-1 rounded-input border"
+              style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-700)" }} />
+            {pickedDate && (
+              <button onClick={() => setPickedDate("")} className="text-caption" style={{ color: "var(--color-accent)" }}>清除</button>
+            )}
+          </div>
+          {view === "student" && (
+            <input value={studentQ} onChange={(e) => setStudentQ(e.target.value)}
+              placeholder="搜尋學生姓名…"
+              className="text-caption px-2 py-1 rounded-input border flex-1 min-w-[160px]"
+              style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }} />
+          )}
+        </div>
+      )}
+
       {/* Filter bar */}
       {!loading && activities.length > 0 && (
         <div className="mb-4 space-y-3">
@@ -326,21 +405,136 @@ export default function TeacherActivitiesPage() {
       ) : activities.length === 0 ? (
         <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>尚未建立任何活動</div>
       ) : (() => {
+        const now = new Date()
+        const todayStr = ymd(now)
+        const { from: wkFrom, to: wkTo } = weekRange(now)
+
         const filtered = activities
           .filter((a) => {
             const q = searchQ.toLowerCase()
             const matchQ = !q || a.title.toLowerCase().includes(q) || (a.location ?? "").toLowerCase().includes(q)
             const matchDay = weekdayFilter === null || new Date(a.startTime).getDay() === weekdayFilter
-            return matchQ && matchDay
+
+            const start = new Date(a.startTime)
+            // 指定日期 overrides the view's own date window, so a teacher can ask
+            // "who has something on this day" from any tab.
+            const matchPicked = !pickedDate || ymd(start) === pickedDate
+            const matchView =
+              pickedDate ? true
+              : view === "today" ? ymd(start) === todayStr
+              : view === "week"  ? (start >= wkFrom && start < wkTo)
+              : true
+
+            return matchQ && matchDay && matchPicked && matchView
           })
           .sort((a, b) => {
             if (sortBy === "students") return b._count.assignments - a._count.assignments
             if (sortBy === "title") return a.title.localeCompare(b.title)
             return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
           })
-        return filtered.length === 0 ? (
-          <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>沒有符合的活動</div>
-        ) : (
+        if (filtered.length === 0) {
+          return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>沒有符合的活動</div>
+        }
+
+        // 按班別 — one card per class, listing who from it has to attend what.
+        if (view === "class") {
+          const byClass = new Map<string, { act: Activity; a: Assignment }[]>()
+          for (const act of filtered) {
+            for (const a of act.assignments) {
+              if (!a.student) continue
+              const cls = formClassOf(a) ?? "未分班"
+              const list = byClass.get(cls) ?? []
+              list.push({ act, a })
+              byClass.set(cls, list)
+            }
+          }
+          if (byClass.size === 0) {
+            return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>此範圍內的活動未有學生名單</div>
+          }
+          return (
+            <div className="space-y-4">
+              {Array.from(byClass.keys()).sort().map((cls) => {
+                const rows = byClass.get(cls)!
+                return (
+                  <div key={cls} className="card p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-h3">{cls}</h3>
+                      <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>{rows.length} 人次</span>
+                    </div>
+                    <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+                      {rows
+                        .sort((x, y) => new Date(x.act.startTime).getTime() - new Date(y.act.startTime).getTime())
+                        .map(({ act, a }) => (
+                          <li key={`${act.id}-${a.id}`} className="py-2 flex items-center gap-2 text-body">
+                            <span style={{ color: "var(--color-ink-900)" }}>
+                              {classNumberOf(a) ? `${classNumberOf(a)}. ` : ""}{a.student!.name ?? "—"}
+                            </span>
+                            <Link href={`/teacher/activities/${act.id}`} className="truncate" style={{ color: "var(--color-accent)" }}>
+                              {act.title}
+                            </Link>
+                            <span className="text-caption ml-auto shrink-0" style={{ color: "var(--color-ink-400)" }}>
+                              {formatDateTime(act.startTime)}{whenLabel(act.startTime) ? ` · ${whenLabel(act.startTime)}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        }
+
+        // 按學生 — what one student has to attend.
+        if (view === "student") {
+          const q = studentQ.trim().toLowerCase()
+          const byStudent = new Map<string, { name: string; cls: string | null; items: Activity[] }>()
+          for (const act of filtered) {
+            for (const a of act.assignments) {
+              if (!a.student) continue
+              const name = a.student.name ?? "—"
+              if (q && !name.toLowerCase().includes(q)) continue
+              const cur = byStudent.get(a.student.id) ?? { name, cls: formClassOf(a), items: [] }
+              cur.items.push(act)
+              byStudent.set(a.student.id, cur)
+            }
+          }
+          if (byStudent.size === 0) {
+            return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>
+              {q ? "沒有符合的學生" : "此範圍內的活動未有學生名單"}
+            </div>
+          }
+          return (
+            <div className="space-y-3">
+              {Array.from(byStudent.values())
+                .sort((a, b) => (a.cls ?? "").localeCompare(b.cls ?? "") || a.name.localeCompare(b.name))
+                .map((st) => (
+                  <div key={st.name + (st.cls ?? "")} className="card p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-h3">{st.name}</h3>
+                      {st.cls && <span className="text-caption px-2 py-0.5 rounded-pill"
+                        style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}>{st.cls}</span>}
+                      <span className="text-caption ml-auto" style={{ color: "var(--color-ink-400)" }}>{st.items.length} 項活動</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {st.items
+                        .sort((x, y) => new Date(x.startTime).getTime() - new Date(y.startTime).getTime())
+                        .map((act) => (
+                          <li key={act.id} className="flex items-center gap-2 text-body">
+                            <Link href={`/teacher/activities/${act.id}`} className="truncate" style={{ color: "var(--color-accent)" }}>{act.title}</Link>
+                            <span className="text-caption ml-auto shrink-0" style={{ color: "var(--color-ink-400)" }}>
+                              {formatDateTime(act.startTime)}{whenLabel(act.startTime) ? ` · ${whenLabel(act.startTime)}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                ))}
+            </div>
+          )
+        }
+
+        return (
         <div className="space-y-3">
           {filtered.map((act) => (
             <Link
