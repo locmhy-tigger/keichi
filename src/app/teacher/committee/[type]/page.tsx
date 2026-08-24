@@ -87,6 +87,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "圖片壓縮器",     description: "本地壓縮 JPG/PNG/WebP，不上傳伺服器",  href: "/teacher/committee/it/image-compress" },
       { label: "PDF 壓縮器",     description: "縮小 PDF 大小，方便電郵傳送",           href: "/teacher/committee/it/pdf-compress"   },
       { label: "OCR 文字提取",   description: "AI 識別圖片中的文字，支援繁體中文",      href: "/teacher/committee/it/ocr"            },
+      { label: "AI 教學資源",    description: "老師共享的 YouTube 影片、工具及文章",     href: "/teacher/committee/it/ai-resources"   },
     ],
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-it)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

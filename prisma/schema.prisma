@@ -241,6 +241,9 @@ model User {
   // Web Push (PWA) device subscriptions
   pushSubscriptions PushSubscription[]
 
+  // AI 教學資源
+  resourcesCreated TeachingResource[] @relation("ResourcesCreated")
+
   // 活動通告 (activity notices)
   noticesCreated  ActivityNotice[] @relation("NoticesCreated")
   noticesReviewed ActivityNotice[] @relation("NoticesReviewed")
@@ -874,6 +877,35 @@ model Prompt {
 
   @@index([subject])
   @@index([type])
+}
+
+enum ResourceCategory {
+  AI_TOOL // AI 工具
+  LESSON // 課堂應用
+  PEDAGOGY // 教學法
+  ASSESSMENT // 評估
+  PD // 專業發展
+  OTHER // 其他
+}
+
+// AI 教學資源 — a shared link library (YouTube, articles, tools) for staff.
+// Same permission shape as Prompt: any teacher may add; only the creator or an
+// admin may edit/delete, so seeded/shared entries can't be wiped by anyone.
+model TeachingResource {
+  id          String           @id @default(cuid())
+  title       String
+  url         String           @db.Text
+  description String?          @db.Text
+  category    ResourceCategory @default(OTHER)
+  tags        String[]
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  createdBy User? @relation("ResourcesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([createdById])
 }
 
 // Fixed-window rate-limit counters (survives serverless cold starts).
