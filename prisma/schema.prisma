@@ -238,6 +238,10 @@ model User {
   calendarEventGoogleSyncs CalendarEventGoogleSync[]
   // Web Push (PWA) device subscriptions
   pushSubscriptions PushSubscription[]
+
+  // 活動通告 (activity notices)
+  noticesCreated  ActivityNotice[] @relation("NoticesCreated")
+  noticesReviewed ActivityNotice[] @relation("NoticesReviewed")
 }
 
 // ─────────────────────────────────────────
@@ -797,6 +801,39 @@ model CalendarEventGoogleSync {
 
   @@unique([calendarEventId, userId])
   @@index([userId])
+}
+
+enum NoticeStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// 活動通告 — the activity-docs form, persisted so it can be revised and signed
+// off. `payload` holds the whole form state verbatim (sessions[], students[],
+// FAD8 fields...) which is exactly the shape /api/activity-docs/generate already
+// accepts, so document generation needs no changes.
+model ActivityNotice {
+  id              String        @id @default(cuid())
+  title           String // = payload.activityName, denormalised for list views
+  committee       CommitteeType @default(ECA) // drives approval routing + calendar category
+  payload         Json
+  status          NoticeStatus  @default(DRAFT)
+  createdById     String
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?       @db.Text
+  calendarSynced  Boolean       @default(false) // stops re-approval duplicating events
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  createdBy  User  @relation("NoticesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("NoticesReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([committee, status])
+  @@index([createdById])
 }
 
 model CommitteeTool {

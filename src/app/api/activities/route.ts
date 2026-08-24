@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { findClashes, windowOf, clashTitleMap } from "@/lib/clash"
 
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
@@ -108,24 +109,15 @@ export async function POST(req: NextRequest) {
 
       if (resolvedUsers.length > 0) {
         const targetStudentIds = resolvedUsers.map(u => u.id)
-        const activityEnd = activity.endTime ?? new Date(activity.startTime.getTime() + 60 * 60 * 1000)
 
-        // Clash detection
-        const clashingAssignments = await prisma.activityAssignment.findMany({
-          where: {
-            studentId: { in: targetStudentIds },
-            activity: {
-              id:        { not: activity.id },
-              startTime: { lt: activityEnd },
-              endTime:   { gt: activity.startTime },
-            },
-          },
-          include: {
-            activity: { select: { title: true } }
-          }
-        })
-
-        const clashMap = new Map(clashingAssignments.map(a => [a.studentId, a.activity.title]))
+        // Shared helper: handles activities saved with a NULL endTime, which
+        // the old inline query silently skipped (SQL NULL never matches `gt`).
+        const hits = await findClashes(
+          targetStudentIds,
+          [windowOf(activity.startTime, activity.endTime)],
+          activity.id,
+        )
+        const clashMap = clashTitleMap(hits)
 
         // Assign all
         await prisma.activityAssignment.createMany({

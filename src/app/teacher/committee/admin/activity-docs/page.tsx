@@ -178,6 +178,30 @@ function BatchCalendarModal({
 
 // ─── Main Page ────────────────────────────────────────────
 
+type NoticeCommittee = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type NoticeStatus    = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED"
+
+type NoticeRow = {
+  id: string
+  title: string
+  committee: NoticeCommittee
+  status: NoticeStatus
+  rejectionReason: string | null
+  updatedAt: string
+  createdBy?: { id: string; name: string | null }
+}
+
+const COMMITTEE_LABEL: Record<NoticeCommittee, string> = {
+  ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展", ECA: "課外活動",
+}
+
+const STATUS_META: Record<NoticeStatus, { label: string; color: string }> = {
+  DRAFT:    { label: "草稿",   color: "var(--color-ink-400)" },
+  PENDING:  { label: "待批核", color: "var(--color-admin)" },
+  APPROVED: { label: "已批核", color: "var(--color-curriculum)" },
+  REJECTED: { label: "已退回", color: "var(--color-discipline)" },
+}
+
 export default function ActivityDocsPage() {
   const today = new Date().toISOString().split("T")[0]
 
@@ -222,6 +246,219 @@ export default function ActivityDocsPage() {
   // Loading
   const [generating, setGenerating] = useState(false)
   const [error, setError]           = useState("")
+
+  // ── Notice persistence / approval ─────────────────────
+  const [tab, setTab]             = useState<"form" | "mine" | "review">("form")
+  const [committee, setCommittee] = useState<NoticeCommittee>("ECA")
+  const [noticeId, setNoticeId]   = useState<string | null>(null)
+  const [status, setStatus]       = useState<NoticeStatus>("DRAFT")
+  const [rejectReason, setRejectReason] = useState<string | null>(null)
+  const [myNotices, setMyNotices]       = useState<NoticeRow[]>([])
+  const [reviewList, setReviewList]     = useState<NoticeRow[]>([])
+  const [savingNotice, setSavingNotice] = useState(false)
+  const [noticeMsg, setNoticeMsg]       = useState<string | null>(null)
+  const [canReview, setCanReview]       = useState(false)
+
+  // Per-student clash results, keyed by roster row id.
+  const [clashByRow, setClashByRow] = useState<Record<number, string[]>>({})
+  const [checkingClash, setCheckingClash] = useState(false)
+
+  // ── Notice persistence / approval ─────────────────────
+
+  // The saved payload is exactly what /api/activity-docs/generate consumes, so
+  // persistence needs no change to document generation.
+  const buildPayload = useCallback(() => ({
+    activityName, noticeNum, issueDate, teacher, tutorType, orgName, contactTel,
+    bodyText, noticeType, t2Arrive, t2Leave, dept, fad8Category, fad8Achievement,
+    sessions: sessions.map(({ id, ...rest }) => rest),
+    students: students.filter(st => st.name.trim()).map(({ id, ...rest }) => rest),
+  }), [activityName, noticeNum, issueDate, teacher, tutorType, orgName, contactTel,
+       bodyText, noticeType, t2Arrive, t2Leave, dept, fad8Category, fad8Achievement,
+       sessions, students])
+
+  const applyPayload = useCallback((p: Record<string, any>) => {
+    setActivityName(p.activityName ?? "")
+    setNoticeNum(p.noticeNum ?? "")
+    setIssueDate(p.issueDate ?? today)
+    setTeacher(p.teacher ?? "")
+    setTutorType(p.tutorType === "external" ? "external" : "school")
+    setOrgName(p.orgName ?? "")
+    setContactTel(p.contactTel ?? "2342-2954")
+    setBodyText(p.bodyText ?? BODY_TEMPLATES[0])
+    setNoticeType(p.noticeType === "2" ? "2" : "1")
+    setT2Arrive(p.t2Arrive ?? "")
+    setT2Leave(p.t2Leave ?? "")
+    setDept(p.dept ?? "電腦科")
+    setFad8Category(p.fad8Category ?? "1")
+    setFad8Achievement(p.fad8Achievement ?? "積極參與/表現投入")
+    const sess = Array.isArray(p.sessions) && p.sessions.length ? p.sessions : [{}]
+    setSessions(sess.map((x: any, i: number) => ({
+      id: i + 1, date: x.date ?? "", time: x.time ?? "", location: x.location ?? "",
+      activityName: x.activityName ?? "", arriveTime: x.arriveTime ?? "", leaveTime: x.leaveTime ?? "",
+    })))
+    nextSessId.current = sess.length + 1
+    const studs = Array.isArray(p.students) ? p.students : []
+    setStudents(studs.map((x: any, i: number) => ({
+      id: i + 1, className: x.className ?? "", studentId: x.studentId ?? "", name: x.name ?? "",
+    })))
+    nextStudId.current = studs.length + 1
+    setClashByRow({})
+  }, [today])
+
+  const loadLists = useCallback(async () => {
+    const [mineRes, revRes] = await Promise.all([
+      fetch("/api/activity-notices?scope=mine"),
+      fetch("/api/activity-notices?scope=review"),
+    ])
+    if (mineRes.ok) setMyNotices((await mineRes.json()).notices ?? [])
+    if (revRes.ok) {
+      const rows = (await revRes.json()).notices ?? []
+      setReviewList(rows)
+      setCanReview(true)
+    }
+  }, [])
+
+  useEffect(() => { loadLists() }, [loadLists])
+
+  const openNotice = useCallback(async (id: string) => {
+    const res = await fetch(`/api/activity-notices/${id}`)
+    if (!res.ok) { setNoticeMsg("載入失敗"); return }
+    const n = await res.json()
+    applyPayload(n.payload ?? {})
+    setNoticeId(n.id); setCommittee(n.committee); setStatus(n.status)
+    setRejectReason(n.rejectionReason ?? null)
+    setTab("form"); setNoticeMsg(null)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }, [applyPayload])
+
+  // Deep link from a 待批核 notification.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id")
+    if (id) openNotice(id)
+  }, [openNotice])
+
+  function resetNotice() {
+    setNoticeId(null); setStatus("DRAFT"); setRejectReason(null); setNoticeMsg(null)
+    applyPayload({})
+  }
+
+  async function saveNotice(): Promise<string | null> {
+    if (!activityName.trim()) { setNoticeMsg("請先填寫活動名稱"); return null }
+    setSavingNotice(true); setNoticeMsg(null)
+    const body = { committee, payload: buildPayload() }
+    const res = noticeId
+      ? await fetch(`/api/activity-notices/${noticeId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      : await fetch("/api/activity-notices", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    setSavingNotice(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setNoticeMsg(d?.error ?? `儲存失敗 (${res.status})`)
+      return null
+    }
+    const saved = await res.json()
+    setNoticeId(saved.id); setStatus(saved.status)
+    setNoticeMsg("已儲存草稿")
+    loadLists()
+    return saved.id
+  }
+
+  async function submitNotice() {
+    const id = noticeId ?? await saveNotice()
+    if (!id) return
+    if (!confirm("提交後將交由該組別主席或管理員審批，期間不可修改。確定提交？")) return
+    setSavingNotice(true)
+    const res = await fetch(`/api/activity-notices/${id}/submit`, { method: "POST" })
+    setSavingNotice(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setNoticeMsg(d?.error ?? "提交失敗")
+      return
+    }
+    setStatus("PENDING"); setNoticeMsg("已提交審批")
+    loadLists()
+  }
+
+  async function reviewNotice(id: string, action: "approve" | "reject") {
+    let reason: string | undefined
+    if (action === "reject") {
+      const r = window.prompt("退回原因（會通知建立者）：")
+      if (!r?.trim()) return
+      reason = r.trim()
+    } else if (!confirm("批核後會自動將活動加入行事曆。確定批核？")) return
+
+    const res = await fetch(`/api/activity-notices/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, rejectionReason: reason }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? "操作失敗")
+      return
+    }
+    const d = await res.json()
+    window.alert(action === "approve"
+      ? `已批核，並加入 ${d.calendarEventsCreated ?? 0} 個活動到行事曆。`
+      : "已退回。")
+    if (id === noticeId) { setStatus(action === "approve" ? "APPROVED" : "REJECTED") }
+    loadLists()
+  }
+
+  // Match the roster to student accounts, then flag anyone already booked at
+  // one of these session times — before the notice is saved.
+  async function checkClashes() {
+    const rows = students.filter(st => st.name.trim() || (st.className.trim() && st.studentId.trim()))
+    if (rows.length === 0) { setNoticeMsg("學生名單為空"); return }
+    setCheckingClash(true); setNoticeMsg(null)
+    try {
+      const resolveRes = await fetch("/api/students/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: rows.map(r => ({ id: r.id, className: r.className, studentId: r.studentId, name: r.name })) }),
+      })
+      if (!resolveRes.ok) throw new Error()
+      const { results } = await resolveRes.json() as {
+        results: { id: number; matched: boolean; userId?: string }[]
+      }
+      const rowByUser = new Map<string, number>()
+      for (const r of results) if (r.matched && r.userId) rowByUser.set(r.userId, r.id)
+
+      const clashRes = await fetch("/api/students/clash-check", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIds: Array.from(rowByUser.keys()),
+          sessions: sessions.filter(x => x.date).map(x => ({
+            date: x.date,
+            arriveTime: noticeType === "2" ? t2Arrive : x.arriveTime,
+            leaveTime:  noticeType === "2" ? t2Leave  : x.leaveTime,
+          })),
+        }),
+      })
+      if (!clashRes.ok) throw new Error()
+      const { clashes } = await clashRes.json() as { clashes: { studentId: string; titles: string[] }[] }
+
+      const map: Record<number, string[]> = {}
+      // Unmatched rows are worth flagging too — they have no account to check.
+      for (const r of results) if (!r.matched) map[r.id] = ["__UNMATCHED__"]
+      for (const c of clashes) {
+        const rowId = rowByUser.get(c.studentId)
+        if (rowId !== undefined) map[rowId] = c.titles
+      }
+      setClashByRow(map)
+      const clashCount = clashes.length
+      const missing = results.filter(r => !r.matched).length
+      setNoticeMsg(
+        clashCount === 0 && missing === 0
+          ? "已檢查：沒有時間衝突"
+          : `已檢查：${clashCount} 人時間衝突${missing ? `，${missing} 人找不到帳戶` : ""}`
+      )
+    } catch {
+      setNoticeMsg("檢查失敗，請重試")
+    }
+    setCheckingClash(false)
+  }
+
+  const editable = status === "DRAFT" || status === "REJECTED"
 
   // ── Session helpers ───────────────────────────────────
 
@@ -389,39 +626,6 @@ export default function ActivityDocsPage() {
 
   // ── Generate ──────────────────────────────────────────
 
-  // After the docs download, offer to put the activity on the school calendar
-  // under 課外活動 (ECA). One event per session date. Best-effort: a calendar
-  // failure must not make a successful generation look broken.
-  async function maybeAddToCalendar() {
-    const dated = sessions.filter((s) => s.date)
-    if (dated.length === 0) return
-    if (!confirm(`文件已生成。\n\n要將此活動加入行事曆（課外活動）嗎？\n共 ${dated.length} 個日期。`)) return
-
-    let ok = 0
-    for (const s of dated) {
-      // CalendarEvent has no location field — fold the venue into the notes.
-      const parts = [s.time, s.location].filter(Boolean)
-      try {
-        const res = await fetch("/api/calendar-events", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title:       s.activityName?.trim() || activityName.trim(),
-            startDate:   new Date(`${s.date}T00:00:00`).toISOString(),
-            allDay:      true,
-            committee:   "ECA",
-            description: parts.length ? parts.join(" · ") : undefined,
-          }),
-        })
-        if (res.ok) ok++
-      } catch { /* keep going — report the total at the end */ }
-    }
-
-    alert(ok === dated.length
-      ? `已加入 ${ok} 個活動到行事曆（課外活動）。`
-      : `已加入 ${ok} / ${dated.length} 個活動，部分失敗，請於行事曆檢查。`)
-  }
-
   async function handleGenerate() {
     if (!activityName.trim() || !teacher.trim() || !issueDate) {
       setError("請填寫活動名稱、負責老師及發出日期。")
@@ -488,7 +692,6 @@ export default function ActivityDocsPage() {
       a.click()
       setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 1000)
 
-      await maybeAddToCalendar()
     } catch (e: any) {
       setError(e?.message ?? "發生錯誤，請稍後再試。")
     } finally {
@@ -516,9 +719,141 @@ export default function ActivityDocsPage() {
         <span style={{ color: "var(--color-ink-300)" }}>/</span>
         <h1 className="text-h1">活動文件生成器</h1>
       </div>
-      <p className="text-caption mb-6" style={{ color: "var(--color-ink-400)" }}>
-        填寫一份表單，一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP 下載)。
+      <p className="text-caption mb-4" style={{ color: "var(--color-ink-400)" }}>
+        填寫一份表單，一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP 下載)。儲存後可稍後修改，並提交組別主席／管理員審批；批核後活動會自動加入行事曆。
       </p>
+
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-input mb-5" style={{ background: "var(--color-surface-2)" }}>
+        {([["form","新增／編輯通告"],["mine",`我的通告 (${myNotices.length})`],
+           ...(canReview ? [["review",`待批核 (${reviewList.length})`] as const] : [])] as const).map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id as typeof tab)}
+            className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
+            style={{
+              background: tab === id ? "var(--color-surface)" : "transparent",
+              color:      tab === id ? "var(--color-ink-900)" : "var(--color-ink-500)",
+              boxShadow:  tab === id ? "0 1px 3px rgb(0 0 0 / 0.06)" : "none",
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── 我的通告 ── */}
+      {tab === "mine" && (
+        <div className={cardCls}>
+          {myNotices.length === 0 ? (
+            <p className="text-body text-center py-8" style={{ color: "var(--color-ink-300)" }}>尚未儲存任何通告</p>
+          ) : (
+            <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+              {myNotices.map(n => (
+                <li key={n.id} className="py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>{n.title}</p>
+                    <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                      {COMMITTEE_LABEL[n.committee]} · {new Date(n.updatedAt).toLocaleDateString("zh-HK")}
+                    </p>
+                    {n.status === "REJECTED" && n.rejectionReason && (
+                      <p className="text-caption mt-0.5" style={{ color: "var(--color-discipline)" }}>退回原因：{n.rejectionReason}</p>
+                    )}
+                  </div>
+                  <span className="text-caption px-2 py-0.5 rounded-pill shrink-0"
+                    style={{ background: STATUS_META[n.status].color + "20", color: STATUS_META[n.status].color }}>
+                    {STATUS_META[n.status].label}
+                  </span>
+                  <button type="button" onClick={() => openNotice(n.id)}
+                    className="text-caption font-medium shrink-0" style={{ color: adminColor }}>開啟</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ── 待批核 ── */}
+      {tab === "review" && (
+        <div className={cardCls}>
+          {reviewList.length === 0 ? (
+            <p className="text-body text-center py-8" style={{ color: "var(--color-ink-300)" }}>暫無待批核通告</p>
+          ) : (
+            <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+              {reviewList.map(n => (
+                <li key={n.id} className="py-3 flex items-center gap-2 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>{n.title}</p>
+                    <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                      {COMMITTEE_LABEL[n.committee]} · {n.createdBy?.name ?? "老師"} · {new Date(n.updatedAt).toLocaleDateString("zh-HK")}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => openNotice(n.id)}
+                    className="text-caption font-medium" style={{ color: adminColor }}>檢視</button>
+                  <button type="button" onClick={() => reviewNotice(n.id, "approve")}
+                    className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
+                    style={{ background: "var(--color-curriculum)" }}>批核</button>
+                  <button type="button" onClick={() => reviewNotice(n.id, "reject")}
+                    className="text-caption font-medium px-3 py-1.5 rounded-input"
+                    style={{ color: "var(--color-discipline)" }}>退回</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === "form" && (<>
+
+      {/* Notice status bar */}
+      <div className={cardCls}>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-caption px-2 py-0.5 rounded-pill"
+            style={{ background: STATUS_META[status].color + "20", color: STATUS_META[status].color }}>
+            {STATUS_META[status].label}
+          </span>
+          <div className="flex items-center gap-2">
+            <label className="text-caption" style={{ color: "var(--color-ink-700)" }}>負責組別</label>
+            <select className="px-2 py-1 text-caption rounded-input border" disabled={!editable}
+              style={{ border: "1px solid var(--color-border)", background: editable ? "var(--color-surface)" : "var(--color-surface-2)" }}
+              value={committee} onChange={e => setCommittee(e.target.value as NoticeCommittee)}>
+              {(Object.keys(COMMITTEE_LABEL) as NoticeCommittee[]).map(c => (
+                <option key={c} value={c}>{COMMITTEE_LABEL[c]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {noticeId && (
+              <button type="button" onClick={resetNotice}
+                className="text-caption px-3 py-1.5 rounded-input border"
+                style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}>新增另一份</button>
+            )}
+            <button type="button" onClick={saveNotice} disabled={savingNotice || !editable}
+              className="text-caption font-medium px-3 py-1.5 rounded-input border"
+              style={{ border: `1px solid ${adminColor}`, color: adminColor, opacity: savingNotice || !editable ? 0.5 : 1 }}>
+              {savingNotice ? "儲存中…" : "儲存草稿"}
+            </button>
+            <button type="button" onClick={submitNotice} disabled={savingNotice || !editable}
+              className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
+              style={{ background: adminColor, opacity: savingNotice || !editable ? 0.5 : 1 }}>
+              提交審批
+            </button>
+          </div>
+        </div>
+        {status === "PENDING" && (
+          <p className="text-caption mt-2" style={{ color: "var(--color-admin)" }}>
+            審批中，暫不可修改。仍可隨時生成及下載文件。
+          </p>
+        )}
+        {status === "APPROVED" && (
+          <p className="text-caption mt-2" style={{ color: "var(--color-curriculum)" }}>
+            已批核，活動已加入行事曆。通告內容已鎖定。
+          </p>
+        )}
+        {status === "REJECTED" && rejectReason && (
+          <p className="text-caption mt-2" style={{ color: "var(--color-discipline)" }}>退回原因：{rejectReason}</p>
+        )}
+        {noticeMsg && (
+          <p className="text-caption mt-2" style={{ color: "var(--color-ink-500)" }}>{noticeMsg}</p>
+        )}
+      </div>
 
       {/* ① 基本資料 */}
       <div className={cardCls} style={{ borderTop: "3px solid " + adminColor }}>
@@ -817,6 +1152,7 @@ export default function ActivityDocsPage() {
                 <th className="bg-gray-700 text-white text-xs font-bold px-2 py-2 text-left">班級</th>
                 <th className="bg-gray-700 text-white text-xs font-bold px-2 py-2 text-left">學號</th>
                 <th className="bg-gray-700 text-white text-xs font-bold px-2 py-2 text-left">學生姓名</th>
+                <th className="bg-gray-700 text-white text-xs font-bold px-2 py-2 text-left">狀態</th>
                 <th className="bg-gray-700 text-white w-8" />
               </tr>
             </thead>
@@ -835,6 +1171,16 @@ export default function ActivityDocsPage() {
                   <td className="px-1 py-0.5">
                     <input className="w-full bg-transparent px-2 py-1 text-sm focus:outline-2 focus:outline-[var(--color-admin)] rounded focus:bg-white"
                       value={st.name} onChange={e => updateStudent(st.id, "name", e.target.value)} placeholder="學生姓名" />
+                  </td>
+                  <td className="px-2 py-1 text-[11px] whitespace-nowrap">
+                    {(() => {
+                      const c = clashByRow[st.id]
+                      if (!c) return null
+                      if (c[0] === "__UNMATCHED__") {
+                        return <span style={{ color: "var(--color-ink-400)" }}>⚠ 找不到帳戶</span>
+                      }
+                      return <span style={{ color: "var(--color-discipline)" }}>⚠ 與「{c.join("、")}」重疊</span>
+                    })()}
                   </td>
                   <td className="px-1 py-0.5">
                     <button onClick={() => removeStudent(st.id)} className="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
@@ -858,9 +1204,14 @@ export default function ActivityDocsPage() {
               清空
             </button>
           )}
+          <button type="button" onClick={checkClashes} disabled={checkingClash}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: adminColor, color: adminColor, opacity: checkingClash ? 0.5 : 1 }}>
+            {checkingClash ? "檢查中…" : "檢查時間衝突"}
+          </button>
           <span className="text-xs text-gray-400 ml-auto">{students.filter(s => s.name.trim()).length} 名學生</span>
         </div>
-        <p className="text-xs text-gray-400 mt-2">此名單將填入「出席紀錄.xlsx」及「FAD8.xlsx」。</p>
+        <p className="text-xs text-gray-400 mt-2">此名單將填入「出席紀錄.xlsx」及「FAD8.xlsx」。按「檢查時間衝突」可對照現有活動，找出撞期的學生。</p>
       </div>
 
       {/* ⑤ FAD8 */}
@@ -891,6 +1242,8 @@ export default function ActivityDocsPage() {
           </div>
         </div>
       </div>
+
+      </>)}
 
       {/* Batch modal */}
       {showBatchModal && (
