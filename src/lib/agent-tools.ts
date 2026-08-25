@@ -13,13 +13,14 @@ import {
 import { searchSchoolData, formatSearchResults } from "@/lib/agent-search"
 import { hybridSearch, formatRetrievedChunks } from "@/lib/knowledge-base"
 import { prisma } from "@/lib/prisma"
+import type { Role } from "@prisma/client"
 
-export async function runAgentTool(call: ToolCall, userId: string): Promise<string> {
+export async function runAgentTool(call: ToolCall, userId: string, role?: Role): Promise<string> {
   try {
     switch (call.tool) {
       case "timetable_query":       return await runTimetableQuery(call.params)
       case "free_teachers":         return await runFreeTeachers(call.params)
-      case "search_school_data":    return await runSearchSchoolData(call.params, userId)
+      case "search_school_data":    return await runSearchSchoolData(call.params, userId, role)
       case "search_knowledge_base": return await runSearchKnowledgeBase(call.params, userId)
       case "get_student_profile":   return await runGetStudentProfile(call.params)
       default:
@@ -53,11 +54,11 @@ async function runGetStudentProfile(params: Record<string, unknown>): Promise<st
   return `${matches[0].name} 嘅學習概況：${profile.summary}`
 }
 
-async function runSearchSchoolData(params: Record<string, unknown>, userId: string): Promise<string> {
+async function runSearchSchoolData(params: Record<string, unknown>, userId: string, role?: Role): Promise<string> {
   const query = typeof params.query === "string" ? params.query.trim() : ""
   if (!query) return "缺少 query 參數。請先問清楚用戶想搜尋咩，再重新調用（例如學生姓名、活動名稱、關鍵字）。"
 
-  const results = await searchSchoolData(query, userId)
+  const results = await searchSchoolData(query, userId, role)
   return formatSearchResults(query, results)
 }
 

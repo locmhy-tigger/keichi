@@ -15,6 +15,8 @@
 // injection despite using raw SQL.
 // ============================================================
 import { prisma } from "@/lib/prisma"
+import type { Role } from "@prisma/client"
+import { visibleRestrictedCommittees, RESTRICTED_COMMITTEES } from "@/lib/committee"
 
 const SIMILARITY_THRESHOLD = 0.15
 const PER_TABLE_LIMIT = 8
@@ -43,17 +45,30 @@ function truncate(text: string, max = 200): string {
 
 /**
  * Searches across Announcement / BehaviorRecord / CalendarEvent / Todo /
- * Activity / AgentDocument for text similar to `query`, scoped the same
- * way each table is scoped in /api/ai/query today (BehaviorRecord/Todo/
- * Activity/AgentDocument are personal to the caller; Announcement/
- * CalendarEvent are school-wide).
+ * Activity / AgentDocument for text similar to `query`.
+ *
+ * Scope per table:
+ *   Announcement    school-wide
+ *   CalendarEvent   school-wide, MINUS restricted committees the caller isn't
+ *                   in (學生支援) — without this Keida would hand back private
+ *                   events that the calendar API correctly hides
+ *   Activity        school-wide (any teacher may find any school activity)
+ *   BehaviorRecord  only records the caller authored
+ *   Todo            only todos the caller created
+ *   AgentDocument   only the caller's own
  */
 export async function searchSchoolData(
   query: string,
-  userId: string
+  userId: string,
+  role?: Role,
 ): Promise<SearchResult[]> {
   const q = query.trim()
   if (!q) return []
+
+  // Restricted committees this caller may NOT see. Passed into the SQL below
+  // as a text[]; an empty array leaves everything visible.
+  const allowed = await visibleRestrictedCommittees(userId, role)
+  const hiddenCommittees = RESTRICTED_COMMITTEES.filter((c) => !allowed.includes(c))
 
   const [announcements, behaviorRecords, calendarEvents, todos, activities, agentDocuments] =
     await Promise.all([
@@ -86,8 +101,9 @@ export async function searchSchoolData(
         SELECT id, title, description, "startDate",
                GREATEST(similarity(title, ${q}), similarity(COALESCE(description, ''), ${q})) AS similarity
         FROM "CalendarEvent"
-        WHERE similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
-           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD}
+        WHERE ("committee" IS NULL OR "committee"::text <> ALL(${hiddenCommittees}::text[]))
+          AND (similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
+           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD})
         ORDER BY similarity DESC
         LIMIT ${PER_TABLE_LIMIT}
       `,
@@ -109,9 +125,8 @@ export async function searchSchoolData(
         SELECT id, title, description, "startTime",
                GREATEST(similarity(title, ${q}), similarity(COALESCE(description, ''), ${q})) AS similarity
         FROM "Activity"
-        WHERE "createdById" = ${userId}
-          AND (similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
-           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD})
+        WHERE similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
+           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD}
         ORDER BY similarity DESC
         LIMIT ${PER_TABLE_LIMIT}
       `,
