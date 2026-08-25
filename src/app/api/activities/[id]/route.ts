@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin } from "@/lib/roles"
+import { isTeacherOrAdmin, isAdmin, canEditCommittee } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -71,8 +71,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   const activity = await prisma.activity.findUnique({ where: { id: params.id } })
   if (!activity) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  if (activity.createdById !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
+  // Creator, the committee's chair, or any admin — matching who may approve it.
+  // Creator-only meant an admin couldn't remove a colleague's stray activity.
+  const allowed =
+    activity.createdById === session.user.id ||
+    isAdmin(session.user.role) ||
+    (activity.committee
+      ? await canEditCommittee(session.user.id, session.user.role, activity.committee)
+      : false)
+  if (!allowed) return NextResponse.json({ error: "只有建立者、組別主席或管理員可刪除" }, { status: 403 })
+
+  // ActivityAssignment cascades, so the attendance list goes with it.
   await prisma.activity.delete({ where: { id: params.id } })
   return NextResponse.json({ deleted: true })
 }
