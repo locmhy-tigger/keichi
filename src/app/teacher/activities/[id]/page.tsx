@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
@@ -303,6 +303,8 @@ function BulkAssignModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
 export default function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+  const [deleting,  setDeleting]  = useState(false)
   const [activity,  setActivity]  = useState<Activity | null>(null)
   const [loading,   setLoading]   = useState(true)
   const [clashes,   setClashes]   = useState<Clash[]>([])
@@ -339,6 +341,27 @@ export default function ActivityDetailPage() {
         assignments: prev.assignments.map((a) => a.studentId === studentId ? { ...a, ...updated } : a),
       } : prev)
     }
+  }
+
+  // Deleting cascades to the attendance list, so say how many students are
+  // affected rather than a bare "are you sure".
+  async function deleteActivity() {
+    if (!activity) return
+    const n = activity.assignments.length
+    const warn = n > 0
+      ? `確定刪除「${activity.title}」？\n\n此活動的 ${n} 位學生出席記錄會一併刪除，且無法復原。`
+      : `確定刪除「${activity.title}」？此操作無法復原。`
+    if (!confirm(warn)) return
+
+    setDeleting(true)
+    const res = await fetch(`/api/activities/${id}`, { method: "DELETE" })
+    setDeleting(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? `刪除失敗 (${res.status})`)
+      return
+    }
+    router.push("/teacher/activities")
   }
 
   // Chair / admin sign-off for a directly-created activity.
@@ -494,6 +517,11 @@ export default function ActivityDetailPage() {
             className="text-caption px-3 py-1 rounded-input border"
             style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}>
             🗓 建議改期
+          </button>
+          <button onClick={deleteActivity} disabled={deleting}
+            className="text-caption px-3 py-1 rounded-input border"
+            style={{ border: "1px solid var(--color-discipline)", color: "var(--color-discipline)", opacity: deleting ? 0.5 : 1 }}>
+            {deleting ? "刪除中…" : "🗑 刪除活動"}
           </button>
         </div>
         {activity.description && (
