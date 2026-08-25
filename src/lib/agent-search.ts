@@ -125,8 +125,9 @@ export async function searchSchoolData(
         SELECT id, title, description, "startTime",
                GREATEST(similarity(title, ${q}), similarity(COALESCE(description, ''), ${q})) AS similarity
         FROM "Activity"
-        WHERE similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
-           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD}
+        WHERE ("committee" IS NULL OR "committee"::text <> ALL(${hiddenCommittees}::text[]))
+          AND (similarity(title, ${q}) > ${SIMILARITY_THRESHOLD}
+           OR similarity(COALESCE(description, ''), ${q}) > ${SIMILARITY_THRESHOLD})
         ORDER BY similarity DESC
         LIMIT ${PER_TABLE_LIMIT}
       `,
