@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { StudentRosterInput, makeRow, type RosterRow } from "@/components/teacher/StudentRosterInput"
 import { BatchCalendarModal } from "@/components/teacher/BatchDateModal"
@@ -28,6 +28,20 @@ type Activity = {
 }
 
 type ViewMode = "all" | "today" | "week" | "class" | "student" | "pending"
+
+type NoticeRow = {
+  id: string
+  title: string
+  committee: string
+  status: string
+  updatedAt: string
+  createdBy?: { id: string; name: string | null }
+}
+
+const COMMITTEE_LABEL: Record<string, string> = {
+  ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技",
+  CURRICULUM: "課程發展", ECA: "課外活動", STUDENT_SUPPORT: "學生支援",
+}
 
 function formatDateTime(iso: string) {
   const d = new Date(iso)
@@ -106,6 +120,14 @@ export default function TeacherActivitiesPage() {
   const [extraDates, setExtraDates] = useState<string[]>([])
   const [showDates,  setShowDates]  = useState(false)
 
+  // 匯入文件 — AI reads an existing notice and fills this form.
+  const [importing, setImporting] = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
+
+  // Pending NOTICES awaiting this user's sign-off, shown in the same 待批核
+  // queue as pending activities so a chair has one place to look.
+  const [pendingNotices, setPendingNotices] = useState<NoticeRow[]>([])
+
   // Student roster (班級/學號/姓名 grid) + the accounts it resolved to.
   const [roster,       setRoster]       = useState<RosterRow[]>([makeRow(1)])
   const [resolvedIds,  setResolvedIds]  = useState<string[]>([])
@@ -114,6 +136,86 @@ export default function TeacherActivitiesPage() {
 
   // Match roster rows to student accounts so the teacher sees who was found
   // (and who wasn't) BEFORE saving, rather than losing rows silently.
+  // Upload an existing notice; the model proposes values which are mapped onto
+  // THIS form (title / dates / times / location / roster). Notice-only fields
+  // (通告編號, 正文, FAD8) are dropped — this page doesn't generate documents.
+  // Nothing is saved: the teacher reviews and presses 建立 themselves.
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true); setFormError(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res  = await fetch("/api/activity-notices/extract", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setFormError(data?.error ?? `匯入失敗 (${res.status})`); return }
+
+      const p = data.payload ?? {}
+      if (p.activityName) setTitle(p.activityName)
+      if (p.bodyText)     setDesc(p.bodyText)
+
+      const sessions: any[] = Array.isArray(p.sessions) ? p.sessions.filter((x: any) => x?.date) : []
+      if (sessions.length > 0) {
+        const first = sessions[0]
+        if (first.location) setLocation(first.location)
+        // The first dated session becomes 開始時間; the rest become extra dates,
+        // which is exactly the multi-date shape this form already handles.
+        const t = /^\d{1,2}:\d{2}$/.test(first.arriveTime ?? "") ? first.arriveTime : "00:00"
+        setStart(`${first.date}T${String(t).padStart(5, "0")}`)
+        if (/^\d{1,2}:\d{2}$/.test(first.leaveTime ?? "")) {
+          setEnd(`${first.date}T${String(first.leaveTime).padStart(5, "0")}`)
+        }
+        setExtraDates(Array.from(new Set(sessions.slice(1).map((x: any) => x.date))).sort() as string[])
+      }
+
+      if (Array.isArray(p.students) && p.students.length) {
+        setRoster(p.students.map((x: any, i: number) => makeRow(
+          i + 1, x.className ?? "", x.studentId ?? "", x.name ?? "",
+        )))
+        setResolvedIds([]); setMatchSummary(null)
+      }
+
+      const bits = [
+        sessions.length ? `${sessions.length} 個日期` : null,
+        Array.isArray(p.students) && p.students.length ? `${p.students.length} 位學生` : null,
+      ].filter(Boolean)
+      setFormError(null)
+      setShowForm(true)
+      window.alert(`已匯入並填入表單${bits.length ? `（${bits.join("、")}）` : ""}。\n請核對內容後再建立。`)
+    } catch {
+      setFormError("匯入失敗，請重試")
+    } finally {
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ""
+    }
+  }
+
+  // Sign off a pending NOTICE from the same queue as pending activities.
+  async function reviewNotice(id: string, action: "approve" | "reject") {
+    let reason: string | undefined
+    if (action === "reject") {
+      const r = window.prompt("退回原因（會通知建立者）：")
+      if (!r?.trim()) return
+      reason = r.trim()
+    } else if (!confirm("批核後會自動加入行事曆，並建立活動記錄及出席名單。確定批核？")) return
+
+    const res = await fetch(`/api/activity-notices/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, rejectionReason: reason }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? "操作失敗")
+      return
+    }
+    const d = await res.json()
+    window.alert(action === "approve"
+      ? `已批核。\n行事曆：${d.calendarEventsCreated ?? 0} 項\n活動記錄：${d.activitiesCreated ?? 0} 項`
+      : "已退回。")
+    loadNotices(); load()
+  }
+
   async function resolveRoster(): Promise<string[] | null> {
     setResolving(true)
     try {
@@ -172,6 +274,15 @@ export default function TeacherActivitiesPage() {
       .then((d) => setCommitteeOptions(d.committees ?? []))
       .catch(() => {})
   }, [])
+
+  const loadNotices = () => {
+    // 403 simply means this user chairs nothing — an empty queue, not an error.
+    fetch("/api/activity-notices?scope=review")
+      .then((r) => r.ok ? r.json() : { notices: [] })
+      .then((d) => setPendingNotices(d.notices ?? []))
+      .catch(() => {})
+  }
+  useEffect(() => { loadNotices() }, [])
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
@@ -242,6 +353,9 @@ export default function TeacherActivitiesPage() {
     }
   }
 
+  const pendingCount =
+    activities.filter((a) => a.approval === "PENDING").length + pendingNotices.length
+
   const inputCls   = "w-full px-3 py-2 text-body rounded-input border outline-none"
   const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
@@ -260,6 +374,17 @@ export default function TeacherActivitiesPage() {
           >
             ⬇ 匯出 CSV
           </a>
+          <input ref={importRef} type="file" hidden onChange={handleImport}
+            accept=".docx,.txt,.pdf,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+          <button
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            className="text-caption px-3 py-2 rounded-input border"
+            style={{ border: "1px solid var(--color-accent)", color: "var(--color-accent)", opacity: importing ? 0.5 : 1 }}
+            title="上載現有通告，由 AI 整理並填入表單"
+          >
+            {importing ? "識別中…" : "📄 匯入文件"}
+          </button>
           <button
             onClick={() => setShowForm((v) => !v)}
             className="px-4 py-2 rounded-input text-body font-medium text-white"
@@ -424,10 +549,10 @@ export default function TeacherActivitiesPage() {
       )}
 
       {/* View modes */}
-      {!loading && activities.length > 0 && (
+      {!loading && (activities.length > 0 || pendingNotices.length > 0) && (
         <div className="flex gap-2 items-center flex-wrap mb-3">
           <div className="flex gap-1 p-1 rounded-input" style={{ background: "var(--color-surface-2)" }}>
-            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"],["pending","待批核"]] as const).map(([id, label]) => (
+            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"],["pending",`待批核${pendingCount ? ` (${pendingCount})` : ""}`]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setView(id)}
                 className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
                 style={{
@@ -503,10 +628,43 @@ export default function TeacherActivitiesPage() {
         </div>
       )}
 
+      {/* Pending NOTICES — same queue as pending activities, so a chair has one
+          place to sign things off rather than two. */}
+      {view === "pending" && pendingNotices.length > 0 && (
+        <div className="card p-4 mb-4">
+          <h3 className="text-h3 mb-1">待批核通告</h3>
+          <p className="text-caption mb-3" style={{ color: "var(--color-ink-400)" }}>
+            批核後會自動加入行事曆，並建立活動記錄及出席名單。
+          </p>
+          <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+            {pendingNotices.map((n) => (
+              <li key={n.id} className="py-3 flex items-center gap-2 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>{n.title}</p>
+                  <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                    通告 · {COMMITTEE_LABEL[n.committee] ?? n.committee} · {n.createdBy?.name ?? "老師"} · {new Date(n.updatedAt).toLocaleDateString("zh-HK")}
+                  </p>
+                </div>
+                <Link href={`/teacher/committee/admin/activity-docs?id=${n.id}`}
+                  className="text-caption font-medium" style={{ color: "var(--color-accent)" }}>檢視內容</Link>
+                <button onClick={() => reviewNotice(n.id, "approve")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
+                  style={{ background: "var(--color-curriculum)" }}>批核</button>
+                <button onClick={() => reviewNotice(n.id, "reject")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input"
+                  style={{ color: "var(--color-discipline)" }}>退回</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
       ) : activities.length === 0 ? (
-        <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>尚未建立任何活動</div>
+        view === "pending" && pendingNotices.length > 0 ? null : (
+          <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>尚未建立任何活動</div>
+        )
       ) : (() => {
         const now = new Date()
         const todayStr = ymd(now)
