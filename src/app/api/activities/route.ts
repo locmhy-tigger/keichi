@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { findClashes, windowOf, clashTitleMap } from "@/lib/clash"
+import { restrictedCommitteeWhere } from "@/lib/committee"
 
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
@@ -45,8 +46,9 @@ export async function GET(req: NextRequest) {
 
   // TEACHER：自己建立的活動；ADMIN：全部活動
   // Staff see all activities (school-wide), including pending ones so a chair
-  // can act on them and an author can see their own awaiting review.
-  const where = {}
+  // can act on them and an author can see their own awaiting review — minus
+  // restricted committees they don't belong to (學生支援).
+  const where = await restrictedCommitteeWhere(session.user.id, session.user.role)
 
   // ?withStudents=1 — the 活動總覽 hub needs each participant's class to offer
   // 按班別 / 按學生 views. Kept opt-in so other callers keep the light payload.

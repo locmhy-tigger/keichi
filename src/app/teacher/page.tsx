@@ -7,6 +7,7 @@ import { CommitteeToolsGrid } from "@/components/teacher/CommitteeToolsGrid"
 import { FavoriteToolsGrid } from "@/components/teacher/FavoriteToolsGrid"
 import { DashboardAnnouncements } from "@/components/DashboardAnnouncements"
 import { UnifiedTimeline } from "@/components/UnifiedTimeline"
+import { calendarVisibilityWhere } from "@/lib/committee"
 
 export default async function TeacherDashboard() {
   const session = await auth()
@@ -37,13 +38,18 @@ export default async function TeacherDashboard() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
+  // This page reads Prisma directly rather than through /api/calendar-events,
+  // so it needs the same audience filter — otherwise a private committee's
+  // events (學生支援) show up on every teacher's dashboard.
+  const eventVisibility = await calendarVisibilityWhere(session.user.id, session.user.role)
+
   const [calEvents, allEvents] = await Promise.all([
     prisma.calendarEvent.findMany({
-      where: { startDate: { gte: monthStart, lt: monthEnd } },
+      where: { startDate: { gte: monthStart, lt: monthEnd }, ...eventVisibility },
       select: { id: true, startDate: true, title: true, committee: true },
     }),
     prisma.calendarEvent.findMany({
-      where: { startDate: { gte: now, lt: nextWeek } },
+      where: { startDate: { gte: now, lt: nextWeek }, ...eventVisibility },
       orderBy: { startDate: "asc" },
       take: 10,
     })

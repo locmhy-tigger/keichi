@@ -54,19 +54,17 @@ export async function canSeeCommittee(
 }
 
 /**
- * Prisma `where` fragment limiting calendar events to what this user may see.
- * Students are additionally capped to school-wide + 課外活動.
+ * Prisma `where` fragment hiding restricted committees this user isn't in.
+ * Works for ANY model with a nullable `committee` field (CalendarEvent,
+ * Activity, Todo…). Returns {} when nothing is hidden.
+ *
+ * Use this anywhere committee-tagged rows are queried directly — several
+ * screens read Prisma without going through an API route, and each one is
+ * its own chance to leak a private committee's data.
  */
-export async function calendarVisibilityWhere(userId: string, role: Role | undefined) {
-  const allowedRestricted = await visibleRestrictedCommittees(userId, role)
-
-  if (role === "STUDENT") {
-    const base: CommitteeType[] = ["SCHOOL", "ECA"]
-    return { committee: { in: [...base, ...allowedRestricted] } }
-  }
-
-  // Staff see everything except restricted committees they don't belong to.
-  const hidden = RESTRICTED_COMMITTEES.filter((c) => !allowedRestricted.includes(c))
+export async function restrictedCommitteeWhere(userId: string, role: Role | undefined) {
+  const allowed = await visibleRestrictedCommittees(userId, role)
+  const hidden  = RESTRICTED_COMMITTEES.filter((c) => !allowed.includes(c))
   if (hidden.length === 0) return {}
   return {
     OR: [
@@ -74,4 +72,17 @@ export async function calendarVisibilityWhere(userId: string, role: Role | undef
       { committee: { notIn: hidden } },
     ],
   }
+}
+
+/**
+ * Prisma `where` fragment limiting calendar events to what this user may see.
+ * Students are additionally capped to school-wide + 課外活動.
+ */
+export async function calendarVisibilityWhere(userId: string, role: Role | undefined) {
+  if (role === "STUDENT") {
+    const allowedRestricted = await visibleRestrictedCommittees(userId, role)
+    const base: CommitteeType[] = ["SCHOOL", "ECA"]
+    return { committee: { in: [...base, ...allowedRestricted] } }
+  }
+  return restrictedCommitteeWhere(userId, role)
 }

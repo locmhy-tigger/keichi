@@ -6,7 +6,7 @@ import { queryKeida } from "@/lib/claude"
 import { aiRateLimit } from "@/lib/rate-limit"
 import { searchSchoolData } from "@/lib/agent-search"
 import { z } from "zod"
-import { calendarVisibilityWhere } from "@/lib/committee"
+import { calendarVisibilityWhere, restrictedCommitteeWhere } from "@/lib/committee"
 
 const schema = z.object({
   query: z.string().min(1).max(500),
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     const searchResults = await searchSchoolData(query, session.user.id, session.user.role)
 
     const calendarWhere = await calendarVisibilityWhere(session.user.id, session.user.role)
+    const activityWhere = await restrictedCommitteeWhere(session.user.id, session.user.role)
     const matchedIds = (source: string) =>
       searchResults.filter((r) => r.source === source).map((r) => r.id)
 
@@ -109,7 +110,9 @@ export async function POST(req: NextRequest) {
       }),
       prisma.activity.findMany({
         where: {
-          // School-wide: any teacher may ask about any school activity.
+          // School-wide: any teacher may ask about any school activity —
+          // except restricted committees they don't belong to.
+          ...activityWhere,
           OR: [
             { startTime: { gte: new Date() } },
             { id: { in: matchedIds("activity") } },
