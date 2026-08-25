@@ -117,6 +117,16 @@ export default function CalendarPage() {
   const icsInputRef  = useRef<HTMLInputElement>(null)
   const [importCommittee, setImportCommittee] = useState<CommitteeType | "">("")
   const [importing,    setImporting]    = useState(false)
+  // Committee options come from the server: 學生支援 must only be offered to
+  // its members, or a teacher could tag an event they then cannot see.
+  const [committeeOptions, setCommitteeOptions] = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    fetch("/api/committees")
+      .then((r) => r.ok ? r.json() : { committees: [] })
+      .then((d) => setCommitteeOptions(d.committees ?? []))
+      .catch(() => {})
+  }, [])
   const [importResult, setImportResult] = useState<IcsImportResult | null>(null)
 
   // Modal state
@@ -338,12 +348,9 @@ export default function CalendarPage() {
               style={{ color: "var(--color-ink-700)" }}
             >
               <option value="">— 沒有 —</option>
-              <option value="ADMIN">行政</option>
-              <option value="DISCIPLINE">訓育</option>
-              <option value="IT">資訊科技</option>
-              <option value="CURRICULUM">課程發展</option>
-              <option value="ECA">課外活動</option>
-              <option value="SCHOOL">學校活動及假期</option>
+              {committeeOptions.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
             </select>
             <button
               onClick={() => icsInputRef.current?.click()}
@@ -636,12 +643,9 @@ export default function CalendarPage() {
               <select value={formCommittee} onChange={(e) => setFormCommittee(e.target.value as CommitteeType | "")}
                 className={inputCls} style={inputStyle}>
                 <option value="">— 沒有 —</option>
-                <option value="ADMIN">行政</option>
-                <option value="DISCIPLINE">訓育</option>
-                <option value="IT">資訊科技</option>
-                <option value="CURRICULUM">課程發展</option>
-                <option value="ECA">課外活動</option>
-                <option value="SCHOOL">學校活動及假期</option>
+                {committeeOptions.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
               </select>
             </div>
 

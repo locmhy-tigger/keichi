@@ -28,6 +28,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   if (activity.createdById !== session.user.id && !isAdmin(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+  if (activity.approval !== "APPROVED") {
+    // Students cannot see a pending activity, so a reminder would point at
+    // something that isn't there for them.
+    return NextResponse.json({ error: "活動尚未批核，未能發送提醒" }, { status: 400 })
+  }
   if (activity.assignments.length === 0) {
     return NextResponse.json({ error: "沒有可提醒的學生（名單為空或全部已出席／缺席）" }, { status: 400 })
   }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { StudentRosterInput, makeRow, type RosterRow } from "@/components/teacher/StudentRosterInput"
+import { BatchCalendarModal } from "@/components/teacher/BatchDateModal"
 
 type Enrollment = { classNumber: string | null; class: { name: string } }
 
@@ -16,6 +17,7 @@ type Assignment = {
 type Activity = {
   id:          string
   title:       string
+  approval?:   "PENDING" | "APPROVED" | "REJECTED"
   description: string | null
   startTime:   string
   endTime:     string | null
@@ -25,7 +27,7 @@ type Activity = {
   assignments: Assignment[]
 }
 
-type ViewMode = "all" | "today" | "week" | "class" | "student"
+type ViewMode = "all" | "today" | "week" | "class" | "student" | "pending"
 
 function formatDateTime(iso: string) {
   const d = new Date(iso)
@@ -33,6 +35,11 @@ function formatDateTime(iso: string) {
 }
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"]
+
+const APPROVAL_BADGE: Record<string, { label: string; color: string }> = {
+  PENDING:  { label: "待批核", color: "var(--color-admin)" },
+  REJECTED: { label: "已退回", color: "var(--color-discipline)" },
+}
 
 // Same heuristic as /api/homeroom: only 1A-6Z style names are real form classes,
 // so a student in several groups is still filed under one class.
@@ -87,6 +94,17 @@ export default function TeacherActivitiesPage() {
   const [end,     setEnd]     = useState("")
   const [location, setLocation] = useState("")
   const [activityType, setActivityType] = useState<"" | "ECA" | "ACADEMIC">("")
+  // 負責組別 — was never sent, so every activity created here ended up
+  // untagged. Options come from the server so a restricted committee is only
+  // offered to its own members.
+  const [committee, setCommittee] = useState("")
+  const [committeeOptions, setCommitteeOptions] = useState<{ value: string; label: string }[]>([])
+
+  // Extra dates — an Activity holds ONE startTime, so a repeated activity
+  // becomes one row per date (the same shape notice approval produces, and
+  // what attendance needs since it is taken per occasion).
+  const [extraDates, setExtraDates] = useState<string[]>([])
+  const [showDates,  setShowDates]  = useState(false)
 
   // Student roster (班級/學號/姓名 grid) + the accounts it resolved to.
   const [roster,       setRoster]       = useState<RosterRow[]>([makeRow(1)])
@@ -148,6 +166,13 @@ export default function TeacherActivitiesPage() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    fetch("/api/committees")
+      .then((r) => r.ok ? r.json() : { committees: [] })
+      .then((d) => setCommitteeOptions(d.committees ?? []))
+      .catch(() => {})
+  }, [])
+
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -169,29 +194,46 @@ export default function TeacherActivitiesPage() {
       ids = resolved
     }
 
+    // Every chosen date gets its own activity, keeping the time-of-day from
+    // the 開始/結束時間 fields.
+    const allStarts = [start, ...extraDates.map((d) => `${d}T${start.slice(11)}`)]
+
     try {
-      const res = await fetch("/api/activities", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description: desc || undefined,
-          startTime:    new Date(start).toISOString(),
-          endTime:      end ? new Date(end).toISOString() : undefined,
-          location:     location || undefined,
-          activityType: activityType || undefined,
-          studentIds:   ids.length ? ids : undefined,
-        }),
-      })
-      if (res.ok) {
-        const created: Activity = await res.json()
-        setActivities((prev) => [created, ...prev])
-        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType("")
+      const createdAll: Activity[] = []
+      let failed = 0
+      for (const st of allStarts) {
+        const endForDate = end
+          ? `${st.slice(0, 10)}T${end.slice(11)}`
+          : undefined
+        const res = await fetch("/api/activities", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            description: desc || undefined,
+            startTime:    new Date(st).toISOString(),
+            endTime:      endForDate ? new Date(endForDate).toISOString() : undefined,
+            location:     location || undefined,
+            activityType: activityType || undefined,
+            committee:    committee || undefined,
+            studentIds:   ids.length ? ids : undefined,
+          }),
+        })
+        if (res.ok) createdAll.push(await res.json())
+        else failed++
+      }
+
+      if (createdAll.length > 0) {
+        setActivities((prev) => [...createdAll, ...prev])
+        if (failed > 0) {
+          setFormError(`已建立 ${createdAll.length} 個活動，${failed} 個失敗。`)
+        }
+        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType(""); setCommittee("")
+        setExtraDates([])
         resetRoster()
-        setShowForm(false)
+        if (failed === 0) setShowForm(false)
       } else {
-        const body = await res.json().catch(() => ({}))
-        setFormError(body?.error ?? `建立失敗 (${res.status})，請重試`)
+        setFormError("建立失敗，請重試")
       }
     } catch {
       setFormError("網絡錯誤，請檢查連接後重試")
@@ -248,6 +290,41 @@ export default function TeacherActivitiesPage() {
                 className={inputCls} style={inputStyle} />
             </div>
           </div>
+
+          {/* Repeat over several dates — one activity per date. */}
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <label className="text-caption" style={{ color: "var(--color-ink-700)" }}>其他日期（選填）</label>
+              <button type="button" onClick={() => setShowDates(true)} disabled={!start}
+                className="text-caption font-medium"
+                style={{ color: "var(--color-accent)", opacity: start ? 1 : 0.5 }}
+                title={start ? "選擇多個日期" : "請先填寫開始時間"}>
+                🗓 選擇多個日期
+              </button>
+              {extraDates.length > 0 && (
+                <button type="button" onClick={() => setExtraDates([])}
+                  className="text-caption" style={{ color: "var(--color-ink-400)" }}>清除</button>
+              )}
+            </div>
+            {extraDates.length === 0 ? (
+              <p className="text-[11px]" style={{ color: "var(--color-ink-400)" }}>
+                同一活動在多個日期舉行時，可一次選取；系統會為每個日期建立一個活動（出席按次記錄）。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {extraDates.map((d) => (
+                  <span key={d} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-caption"
+                    style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}>
+                    {d}
+                    <button type="button" onClick={() => setExtraDates((p) => p.filter((x) => x !== d))}>×</button>
+                  </span>
+                ))}
+                <span className="text-caption self-center" style={{ color: "var(--color-ink-400)" }}>
+                  連同開始日期，共 {extraDates.length + 1} 個活動
+                </span>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>活動類型（選填）</label>
@@ -258,6 +335,18 @@ export default function TeacherActivitiesPage() {
                 <option value="ACADEMIC">學科活動（星期三至五）</option>
               </select>
             </div>
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>負責組別（選填）</label>
+              <select value={committee} onChange={(e) => setCommittee(e.target.value)}
+                className={inputCls} style={inputStyle}>
+                <option value="">— 沒有 —</option>
+                {committeeOptions
+                  .filter((c) => c.value !== "SCHOOL")
+                  .map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>地點（選填）</label>
               <input value={location} onChange={(e) => setLocation(e.target.value)}
@@ -320,11 +409,25 @@ export default function TeacherActivitiesPage() {
         </form>
       )}
 
+      {showDates && (
+        <BatchCalendarModal
+          accent="var(--color-accent)"
+          lastDate={start ? start.slice(0, 10) : undefined}
+          onClose={() => setShowDates(false)}
+          onConfirm={(dates) => {
+            // The primary date already has its own activity — drop it if the
+            // teacher also ticked it in the picker, so it isn't created twice.
+            const primary = start.slice(0, 10)
+            setExtraDates(Array.from(new Set(dates.filter((d) => d !== primary))).sort())
+          }}
+        />
+      )}
+
       {/* View modes */}
       {!loading && activities.length > 0 && (
         <div className="flex gap-2 items-center flex-wrap mb-3">
           <div className="flex gap-1 p-1 rounded-input" style={{ background: "var(--color-surface-2)" }}>
-            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"]] as const).map(([id, label]) => (
+            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"],["pending","待批核"]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setView(id)}
                 className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
                 style={{
@@ -420,12 +523,19 @@ export default function TeacherActivitiesPage() {
             // "who has something on this day" from any tab.
             const matchPicked = !pickedDate || ymd(start) === pickedDate
             const matchView =
-              pickedDate ? true
+              view === "pending" ? true
+              : pickedDate ? true
               : view === "today" ? ymd(start) === todayStr
               : view === "week"  ? (start >= wkFrom && start < wkTo)
               : true
 
-            return matchQ && matchDay && matchPicked && matchView
+            // 待批核 shows only what needs a decision. Other views show
+            // everything — staff should still see pending items, and each card
+            // carries a status badge — but rejected ones are noise.
+            const matchApproval =
+              view === "pending" ? a.approval === "PENDING" : a.approval !== "REJECTED"
+
+            return matchQ && matchDay && matchPicked && matchView && matchApproval
           })
           .sort((a, b) => {
             if (sortBy === "students") return b._count.assignments - a._count.assignments
@@ -544,7 +654,18 @@ export default function TeacherActivitiesPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-h3 mb-1">{act.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="text-h3">{act.title}</h3>
+                    {act.approval && APPROVAL_BADGE[act.approval] && (
+                      <span className="text-caption px-2 py-0.5 rounded-pill shrink-0"
+                        style={{
+                          background: APPROVAL_BADGE[act.approval].color + "20",
+                          color:      APPROVAL_BADGE[act.approval].color,
+                        }}>
+                        {APPROVAL_BADGE[act.approval].label}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-4 flex-wrap">
                     <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
                       📅 {formatDateTime(act.startTime)}

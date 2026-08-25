@@ -31,6 +31,9 @@ type ActivityType = "ECA" | "ACADEMIC"
 type Activity = {
   id:          string
   title:       string
+  committee?:  string | null
+  approval?:   "PENDING" | "APPROVED" | "REJECTED"
+  rejectionReason?: string | null
   description: string | null
   startTime:   string
   endTime:     string | null
@@ -319,6 +322,28 @@ export default function ActivityDetailPage() {
     }
   }
 
+  // Chair / admin sign-off for a directly-created activity.
+  async function review(action: "approve" | "reject") {
+    let reason: string | undefined
+    if (action === "reject") {
+      const r = window.prompt("退回原因（會通知建立者）：")
+      if (!r?.trim()) return
+      reason = r.trim()
+    } else if (!confirm("批核後學生即可看到此活動，並可發送提醒。確定批核？")) return
+
+    const res = await fetch(`/api/activities/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, rejectionReason: reason }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? "操作失敗")
+      return
+    }
+    window.alert(action === "approve" ? "已批核。" : "已退回。")
+    load()
+  }
+
   async function sendAlert() {
     setAlerting(true)
     const res = await fetch(`/api/activities/${id}/alert`, { method: "POST" })
@@ -542,6 +567,39 @@ export default function ActivityDetailPage() {
         </div>
         <StudentSearch onAssign={handleAssign} existingIds={existingIds} />
       </div>
+
+      {/* Approval state — directly-created activities need a chair's sign-off
+          before students can see them. */}
+      {activity.approval && activity.approval !== "APPROVED" && (
+        <div className="card p-4 mb-4" style={{
+          borderLeft: `3px solid ${activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)"}`,
+        }}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-caption px-2 py-0.5 rounded-pill"
+              style={{
+                background: (activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)") + "20",
+                color:       activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)",
+              }}>
+              {activity.approval === "PENDING" ? "待批核" : "已退回"}
+            </span>
+            <p className="text-caption flex-1 min-w-0" style={{ color: "var(--color-ink-500)" }}>
+              {activity.approval === "PENDING"
+                ? "學生暫時看不到此活動，亦未能發送提醒。需由該組別主席或管理員批核。"
+                : `已退回：${activity.rejectionReason ?? "—"}`}
+            </p>
+            {activity.approval === "PENDING" && (
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => review("approve")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
+                  style={{ background: "var(--color-curriculum)" }}>批核</button>
+                <button onClick={() => review("reject")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input"
+                  style={{ color: "var(--color-discipline)" }}>退回</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Student attendance list */}
       <div>
