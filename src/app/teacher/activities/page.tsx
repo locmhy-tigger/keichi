@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { StudentRosterInput, makeRow, type RosterRow } from "@/components/teacher/StudentRosterInput"
+import { BatchCalendarModal } from "@/components/teacher/BatchDateModal"
 
 type Enrollment = { classNumber: string | null; class: { name: string } }
 
@@ -99,6 +100,12 @@ export default function TeacherActivitiesPage() {
   const [committee, setCommittee] = useState("")
   const [committeeOptions, setCommitteeOptions] = useState<{ value: string; label: string }[]>([])
 
+  // Extra dates — an Activity holds ONE startTime, so a repeated activity
+  // becomes one row per date (the same shape notice approval produces, and
+  // what attendance needs since it is taken per occasion).
+  const [extraDates, setExtraDates] = useState<string[]>([])
+  const [showDates,  setShowDates]  = useState(false)
+
   // Student roster (班級/學號/姓名 grid) + the accounts it resolved to.
   const [roster,       setRoster]       = useState<RosterRow[]>([makeRow(1)])
   const [resolvedIds,  setResolvedIds]  = useState<string[]>([])
@@ -187,30 +194,46 @@ export default function TeacherActivitiesPage() {
       ids = resolved
     }
 
+    // Every chosen date gets its own activity, keeping the time-of-day from
+    // the 開始/結束時間 fields.
+    const allStarts = [start, ...extraDates.map((d) => `${d}T${start.slice(11)}`)]
+
     try {
-      const res = await fetch("/api/activities", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description: desc || undefined,
-          startTime:    new Date(start).toISOString(),
-          endTime:      end ? new Date(end).toISOString() : undefined,
-          location:     location || undefined,
-          activityType: activityType || undefined,
-          committee:    committee || undefined,
-          studentIds:   ids.length ? ids : undefined,
-        }),
-      })
-      if (res.ok) {
-        const created: Activity = await res.json()
-        setActivities((prev) => [created, ...prev])
+      const createdAll: Activity[] = []
+      let failed = 0
+      for (const st of allStarts) {
+        const endForDate = end
+          ? `${st.slice(0, 10)}T${end.slice(11)}`
+          : undefined
+        const res = await fetch("/api/activities", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            description: desc || undefined,
+            startTime:    new Date(st).toISOString(),
+            endTime:      endForDate ? new Date(endForDate).toISOString() : undefined,
+            location:     location || undefined,
+            activityType: activityType || undefined,
+            committee:    committee || undefined,
+            studentIds:   ids.length ? ids : undefined,
+          }),
+        })
+        if (res.ok) createdAll.push(await res.json())
+        else failed++
+      }
+
+      if (createdAll.length > 0) {
+        setActivities((prev) => [...createdAll, ...prev])
+        if (failed > 0) {
+          setFormError(`已建立 ${createdAll.length} 個活動，${failed} 個失敗。`)
+        }
         setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType(""); setCommittee("")
+        setExtraDates([])
         resetRoster()
-        setShowForm(false)
+        if (failed === 0) setShowForm(false)
       } else {
-        const body = await res.json().catch(() => ({}))
-        setFormError(body?.error ?? `建立失敗 (${res.status})，請重試`)
+        setFormError("建立失敗，請重試")
       }
     } catch {
       setFormError("網絡錯誤，請檢查連接後重試")
@@ -266,6 +289,41 @@ export default function TeacherActivitiesPage() {
               <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)}
                 className={inputCls} style={inputStyle} />
             </div>
+          </div>
+
+          {/* Repeat over several dates — one activity per date. */}
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <label className="text-caption" style={{ color: "var(--color-ink-700)" }}>其他日期（選填）</label>
+              <button type="button" onClick={() => setShowDates(true)} disabled={!start}
+                className="text-caption font-medium"
+                style={{ color: "var(--color-accent)", opacity: start ? 1 : 0.5 }}
+                title={start ? "選擇多個日期" : "請先填寫開始時間"}>
+                🗓 選擇多個日期
+              </button>
+              {extraDates.length > 0 && (
+                <button type="button" onClick={() => setExtraDates([])}
+                  className="text-caption" style={{ color: "var(--color-ink-400)" }}>清除</button>
+              )}
+            </div>
+            {extraDates.length === 0 ? (
+              <p className="text-[11px]" style={{ color: "var(--color-ink-400)" }}>
+                同一活動在多個日期舉行時，可一次選取；系統會為每個日期建立一個活動（出席按次記錄）。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {extraDates.map((d) => (
+                  <span key={d} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-caption"
+                    style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}>
+                    {d}
+                    <button type="button" onClick={() => setExtraDates((p) => p.filter((x) => x !== d))}>×</button>
+                  </span>
+                ))}
+                <span className="text-caption self-center" style={{ color: "var(--color-ink-400)" }}>
+                  連同開始日期，共 {extraDates.length + 1} 個活動
+                </span>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -349,6 +407,20 @@ export default function TeacherActivitiesPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {showDates && (
+        <BatchCalendarModal
+          accent="var(--color-accent)"
+          lastDate={start ? start.slice(0, 10) : undefined}
+          onClose={() => setShowDates(false)}
+          onConfirm={(dates) => {
+            // The primary date already has its own activity — drop it if the
+            // teacher also ticked it in the picker, so it isn't created twice.
+            const primary = start.slice(0, 10)
+            setExtraDates(Array.from(new Set(dates.filter((d) => d !== primary))).sort())
+          }}
+        />
       )}
 
       {/* View modes */}
