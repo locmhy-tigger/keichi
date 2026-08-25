@@ -87,6 +87,11 @@ export default function TeacherActivitiesPage() {
   const [end,     setEnd]     = useState("")
   const [location, setLocation] = useState("")
   const [activityType, setActivityType] = useState<"" | "ECA" | "ACADEMIC">("")
+  // 負責組別 — was never sent, so every activity created here ended up
+  // untagged. Options come from the server so a restricted committee is only
+  // offered to its own members.
+  const [committee, setCommittee] = useState("")
+  const [committeeOptions, setCommitteeOptions] = useState<{ value: string; label: string }[]>([])
 
   // Student roster (班級/學號/姓名 grid) + the accounts it resolved to.
   const [roster,       setRoster]       = useState<RosterRow[]>([makeRow(1)])
@@ -148,6 +153,13 @@ export default function TeacherActivitiesPage() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    fetch("/api/committees")
+      .then((r) => r.ok ? r.json() : { committees: [] })
+      .then((d) => setCommitteeOptions(d.committees ?? []))
+      .catch(() => {})
+  }, [])
+
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -180,13 +192,14 @@ export default function TeacherActivitiesPage() {
           endTime:      end ? new Date(end).toISOString() : undefined,
           location:     location || undefined,
           activityType: activityType || undefined,
+          committee:    committee || undefined,
           studentIds:   ids.length ? ids : undefined,
         }),
       })
       if (res.ok) {
         const created: Activity = await res.json()
         setActivities((prev) => [created, ...prev])
-        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType("")
+        setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType(""); setCommittee("")
         resetRoster()
         setShowForm(false)
       } else {
@@ -258,6 +271,18 @@ export default function TeacherActivitiesPage() {
                 <option value="ACADEMIC">學科活動（星期三至五）</option>
               </select>
             </div>
+            <div>
+              <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>負責組別（選填）</label>
+              <select value={committee} onChange={(e) => setCommittee(e.target.value)}
+                className={inputCls} style={inputStyle}>
+                <option value="">— 沒有 —</option>
+                {committeeOptions
+                  .filter((c) => c.value !== "SCHOOL")
+                  .map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>地點（選填）</label>
               <input value={location} onChange={(e) => setLocation(e.target.value)}
