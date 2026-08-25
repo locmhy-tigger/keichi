@@ -158,24 +158,18 @@ export default function ActivityDocsPage() {
   const [error, setError]           = useState("")
 
   // ── Notice persistence / approval ─────────────────────
-  const [tab, setTab]             = useState<"form" | "mine" | "review">("form")
+  const [tab, setTab]             = useState<"form" | "mine">("form")
   const [committee, setCommittee] = useState<NoticeCommittee>("ECA")
   const [noticeId, setNoticeId]   = useState<string | null>(null)
   const [status, setStatus]       = useState<NoticeStatus>("DRAFT")
   const [rejectReason, setRejectReason] = useState<string | null>(null)
   const [myNotices, setMyNotices]       = useState<NoticeRow[]>([])
-  const [reviewList, setReviewList]     = useState<NoticeRow[]>([])
   const [savingNotice, setSavingNotice] = useState(false)
   const [noticeMsg, setNoticeMsg]       = useState<string | null>(null)
-  const [canReview, setCanReview]       = useState(false)
 
   // Per-student clash results, keyed by roster row id.
   const [clashByRow, setClashByRow] = useState<Record<number, string[]>>({})
   const [checkingClash, setCheckingClash] = useState(false)
-
-  // 匯入文件 — AI reads an existing notice and proposes form values.
-  const [importing, setImporting] = useState(false)
-  const importRef = useRef<HTMLInputElement>(null)
 
   // ── Notice persistence / approval ─────────────────────
 
@@ -220,16 +214,8 @@ export default function ActivityDocsPage() {
   }, [today])
 
   const loadLists = useCallback(async () => {
-    const [mineRes, revRes] = await Promise.all([
-      fetch("/api/activity-notices?scope=mine"),
-      fetch("/api/activity-notices?scope=review"),
-    ])
-    if (mineRes.ok) setMyNotices((await mineRes.json()).notices ?? [])
-    if (revRes.ok) {
-      const rows = (await revRes.json()).notices ?? []
-      setReviewList(rows)
-      setCanReview(true)
-    }
+    const res = await fetch("/api/activity-notices?scope=mine")
+    if (res.ok) setMyNotices((await res.json()).notices ?? [])
   }, [])
 
   useEffect(() => { loadLists() }, [loadLists])
@@ -294,32 +280,6 @@ export default function ActivityDocsPage() {
     loadLists()
   }
 
-  async function reviewNotice(id: string, action: "approve" | "reject") {
-    let reason: string | undefined
-    if (action === "reject") {
-      const r = window.prompt("退回原因（會通知建立者）：")
-      if (!r?.trim()) return
-      reason = r.trim()
-    } else if (!confirm("批核後會自動加入行事曆，並建立活動記錄及出席名單。確定批核？")) return
-
-    const res = await fetch(`/api/activity-notices/${id}/review`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, rejectionReason: reason }),
-    })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}))
-      window.alert(d?.error ?? "操作失敗")
-      return
-    }
-    const d = await res.json()
-    window.alert(action === "approve"
-      ? `已批核。\n行事曆：${d.calendarEventsCreated ?? 0} 項\n活動記錄：${d.activitiesCreated ?? 0} 項`
-        + (d.assignmentsCreated ? `\n已指派出席：${d.assignmentsCreated} 人次` : "")
-      : "已退回。")
-    if (id === noticeId) { setStatus(action === "approve" ? "APPROVED" : "REJECTED") }
-    loadLists()
-  }
-
   // Match the roster to student accounts, then flag anyone already booked at
   // one of these session times — before the notice is saved.
   async function checkClashes() {
@@ -371,64 +331,6 @@ export default function ActivityDocsPage() {
       setNoticeMsg("檢查失敗，請重試")
     }
     setCheckingClash(false)
-  }
-
-  // Upload an existing notice (.docx / PDF / photo); the model proposes field
-  // values which are merged into the form for the teacher to check. Nothing is
-  // saved here — they still press 儲存草稿 / 提交審批 themselves.
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!editable) { setNoticeMsg("此通告已鎖定，不可匯入"); return }
-
-    setImporting(true); setNoticeMsg(null); setError("")
-    try {
-      const fd = new FormData()
-      fd.append("file", file)
-      const res = await fetch("/api/activity-notices/extract", { method: "POST", body: fd })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { setNoticeMsg(data?.error ?? `匯入失敗 (${res.status})`); return }
-
-      const p = data.payload ?? {}
-      // Merge rather than replace: never blank a field the teacher already
-      // filled just because the document didn't mention it.
-      if (p.activityName) setActivityName(p.activityName)
-      if (p.noticeNum)    setNoticeNum(p.noticeNum)
-      if (p.issueDate)    setIssueDate(p.issueDate)
-      if (p.teacher)      setTeacher(p.teacher)
-      if (p.contactTel)   setContactTel(p.contactTel)
-      if (p.tutorType === "external" || p.tutorType === "school") setTutorType(p.tutorType)
-      if (p.orgName)      setOrgName(p.orgName)
-      if (p.bodyText)     { setBodyText(p.bodyText); setBodyChipIdx(BODY_TEMPLATES.length) }
-      if (p.dept)         setDept(p.dept)
-
-      if (Array.isArray(p.sessions) && p.sessions.length) {
-        setSessions(p.sessions.map((x: any, i: number) => ({
-          id: i + 1, date: x.date ?? "", time: x.time ?? "", location: x.location ?? "",
-          activityName: "", arriveTime: x.arriveTime ?? "", leaveTime: x.leaveTime ?? "",
-        })))
-        nextSessId.current = p.sessions.length + 1
-      }
-      if (Array.isArray(p.students) && p.students.length) {
-        setStudents(p.students.map((x: any, i: number) => ({
-          id: i + 1, className: x.className ?? "", studentId: x.studentId ?? "", name: x.name ?? "",
-        })))
-        nextStudId.current = p.students.length + 1
-        setClashByRow({})
-      }
-
-      const bits = [
-        Array.isArray(p.sessions) && p.sessions.length ? `${p.sessions.length} 個日期` : null,
-        Array.isArray(p.students) && p.students.length ? `${p.students.length} 位學生` : null,
-      ].filter(Boolean)
-      setNoticeMsg(`已匯入並填入表單${bits.length ? `（${bits.join("、")}）` : ""}。請核對內容後再儲存或提交。`)
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    } catch {
-      setNoticeMsg("匯入失敗，請重試")
-    } finally {
-      setImporting(false)
-      if (importRef.current) importRef.current.value = ""
-    }
   }
 
   const editable = status === "DRAFT" || status === "REJECTED"
@@ -693,13 +595,12 @@ export default function ActivityDocsPage() {
         <h1 className="text-h1">活動文件生成器</h1>
       </div>
       <p className="text-caption mb-4" style={{ color: "var(--color-ink-400)" }}>
-        填寫一份表單，一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP 下載)。亦可「匯入文件」上載已寫好的通告，由 AI 整理並自動填入表單。儲存後可稍後修改，並提交組別主席／管理員審批；批核後活動會自動加入行事曆。
+        填寫一份表單，一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP 下載)。儲存後可稍後修改，並提交組別主席／管理員審批；批核後活動會自動加入行事曆。
       </p>
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-input mb-5" style={{ background: "var(--color-surface-2)" }}>
-        {([["form","新增／編輯通告"],["mine",`我的通告 (${myNotices.length})`],
-           ...(canReview ? [["review",`待批核 (${reviewList.length})`] as const] : [])] as const).map(([id, label]) => (
+        {([["form","新增／編輯通告"],["mine",`我的通告 (${myNotices.length})`]] as const).map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id as typeof tab)}
             className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
             style={{
@@ -743,36 +644,6 @@ export default function ActivityDocsPage() {
         </div>
       )}
 
-      {/* ── 待批核 ── */}
-      {tab === "review" && (
-        <div className={cardCls}>
-          {reviewList.length === 0 ? (
-            <p className="text-body text-center py-8" style={{ color: "var(--color-ink-300)" }}>暫無待批核通告</p>
-          ) : (
-            <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
-              {reviewList.map(n => (
-                <li key={n.id} className="py-3 flex items-center gap-2 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body font-medium truncate" style={{ color: "var(--color-ink-900)" }}>{n.title}</p>
-                    <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
-                      {COMMITTEE_LABEL[n.committee]} · {n.createdBy?.name ?? "老師"} · {new Date(n.updatedAt).toLocaleDateString("zh-HK")}
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => openNotice(n.id)}
-                    className="text-caption font-medium" style={{ color: adminColor }}>檢視</button>
-                  <button type="button" onClick={() => reviewNotice(n.id, "approve")}
-                    className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
-                    style={{ background: "var(--color-curriculum)" }}>批核</button>
-                  <button type="button" onClick={() => reviewNotice(n.id, "reject")}
-                    className="text-caption font-medium px-3 py-1.5 rounded-input"
-                    style={{ color: "var(--color-discipline)" }}>退回</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       {tab === "form" && (<>
 
       {/* Notice status bar */}
@@ -793,14 +664,6 @@ export default function ActivityDocsPage() {
             </select>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <input ref={importRef} type="file" hidden onChange={handleImport}
-              accept=".docx,.txt,.pdf,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-            <button type="button" onClick={() => importRef.current?.click()} disabled={importing || !editable}
-              className="text-caption font-medium px-3 py-1.5 rounded-input border"
-              style={{ border: `1px solid ${adminColor}`, color: adminColor, opacity: importing || !editable ? 0.5 : 1 }}
-              title="上載現有通告，由 AI 整理並填入表單">
-              {importing ? "識別中…" : "📄 匯入文件"}
-            </button>
             {noticeId && (
               <button type="button" onClick={resetNotice}
                 className="text-caption px-3 py-1.5 rounded-input border"
@@ -820,7 +683,7 @@ export default function ActivityDocsPage() {
         </div>
         {status === "PENDING" && (
           <p className="text-caption mt-2" style={{ color: "var(--color-admin)" }}>
-            審批中，暫不可修改。仍可隨時生成及下載文件。
+            審批中，暫不可修改。批核在「活動總覽 → 待批核」進行。仍可隨時生成及下載文件。
           </p>
         )}
         {status === "APPROVED" && (
