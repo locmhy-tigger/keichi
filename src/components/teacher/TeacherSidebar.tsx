@@ -34,6 +34,8 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/it",         label: "資訊科技", icon: MonitorIcon,   color: "var(--color-it)"         },
   { href: "/teacher/committee/curriculum", label: "課程發展", icon: BookIcon,      color: "var(--color-curriculum)" },
   { href: "/teacher/committee/eca",        label: "課外活動", icon: ActivityIcon,  color: "var(--color-eca)"        },
+  // Only rendered for members/admins — see visibleRestricted below.
+  { href: "/teacher/committee/student-support", label: "學生支援", icon: SupportIcon, color: "var(--color-student-support)", restricted: "STUDENT_SUPPORT" },
 ]
 
 const ADMIN_NAV: NavItem[] = [
@@ -46,7 +48,9 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/teacher/admin/settings", label: "系統設定", icon: SettingsIcon },
 ]
 
-export function TeacherSidebar({ user }: { user: User }) {
+export function TeacherSidebar(
+  { user, visibleRestricted = [] }: { user: User; visibleRestricted?: string[] },
+) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
@@ -105,7 +109,9 @@ export function TeacherSidebar({ user }: { user: User }) {
           各組 · COMMITTEES
         </p>
         <ul className="space-y-0.5">
-          {COMMITTEE_NAV.map(({ href, label, icon: Icon, color }) => (
+          {COMMITTEE_NAV
+            .filter((n) => !("restricted" in n) || visibleRestricted.includes(n.restricted as string))
+            .map(({ href, label, icon: Icon, color }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -420,6 +426,14 @@ function StudentIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
       <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+    </svg>
+  )
+}
+
+function SupportIcon({ color }: { color?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
     </svg>
   )
 }

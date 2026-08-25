@@ -96,6 +96,7 @@ async function main() {
     { name: "資訊科技", committee: "IT"         },
     { name: "課程發展", committee: "CURRICULUM" },
     { name: "課外活動", committee: "ECA"        },
+    { name: "學生支援", committee: "STUDENT_SUPPORT" },
   ] as const
   for (const c of COMMITTEE_CATEGORIES) {
     await prisma.announcementCategory.upsert({

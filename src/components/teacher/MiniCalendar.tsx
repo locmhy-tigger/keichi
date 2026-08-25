@@ -8,7 +8,7 @@ type CalendarEventMin = {
   id: string
   startDate: string
   title: string
-  committee: "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "SCHOOL" | null
+  committee: "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "SCHOOL" | null
 }
 
 const COMMITTEE_COLORS: Record<string, string> = {

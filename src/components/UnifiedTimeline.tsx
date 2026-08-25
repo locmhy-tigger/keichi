@@ -2,7 +2,7 @@
 
 import { CommitteeBadge } from "./teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 type TimelineItem = {
   id: string

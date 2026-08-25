@@ -17,14 +17,16 @@ const GROUP_TYPE_COLORS: Record<GroupType, string> = {
   SPECIFIC:      "bg-amber-50 text-amber-700 border-amber-200",
 }
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 const COMMITTEE_LABELS: Record<CommitteeType, string> = {
   ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展", ECA: "課外活動",
+  STUDENT_SUPPORT: "學生支援",
 }
 const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   ADMIN: "bg-blue-50 text-blue-700", DISCIPLINE: "bg-red-50 text-red-700",
   IT: "bg-green-50 text-green-700", CURRICULUM: "bg-yellow-50 text-yellow-700",
   ECA: "bg-purple-50 text-purple-700",
+  STUDENT_SUPPORT: "bg-teal-50 text-teal-700",
 }
 
 type CommitteeRole = { committee: CommitteeType; isChair: boolean }
@@ -47,6 +49,7 @@ type Group = {
   id: string
   name: string
   type: GroupType
+  committee?: CommitteeType | null
   description: string | null
   isClass?: boolean
   classCode?: string
@@ -290,6 +293,25 @@ export default function AdminGroupsPage() {
     }
   }
 
+  // Tag the group with a committee — this is what grants its members access to
+  // that committee's calendar (see visibleRestrictedCommittees in lib/committee).
+  async function setGroupCommittee(committee: string | null) {
+    if (!selectedGroup || selectedGroup.isClass) return
+    const res = await fetch(`/api/admin/groups/${selectedGroup.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ committee }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setSelectedGroup((prev: any) => prev ? { ...prev, committee: updated.committee ?? null } : prev)
+      setGroups((prev: any[]) => prev.map((g) => g.id === selectedGroup.id ? { ...g, committee: updated.committee ?? null } : g))
+      showToast(committee ? "已設定所屬組別" : "已清除所屬組別")
+    } else {
+      showToast("更新失敗，請重試")
+    }
+  }
+
   async function addToCommittee(userId: string, committee: CommitteeType, isChair: boolean) {
     setSaving(`${userId}-${committee}`)
     const res = await fetch("/api/admin/committee-roles", {
@@ -325,7 +347,7 @@ export default function AdminGroupsPage() {
   }
 
   const filteredGroups = groups.filter((g) => g.type === activeGroupType)
-  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]
+  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -603,6 +625,7 @@ export default function AdminGroupsPage() {
           onRemove={removeMember}
           onSetHomeroom={setHomeroom}
           onSetGroupTeacher={setGroupTeacher}
+          onSetGroupCommittee={setGroupCommittee}
         />
       )}
     </div>
@@ -610,7 +633,7 @@ export default function AdminGroupsPage() {
 }
 
 function ManageMembersModal({
-  group, allStudents, allStaff, onClose, onAdd, onRemove, onSetHomeroom, onSetGroupTeacher,
+  group, allStudents, allStaff, onClose, onAdd, onRemove, onSetHomeroom, onSetGroupTeacher, onSetGroupCommittee,
 }: {
   group: GroupDetail
   allStudents: Student[]
@@ -620,6 +643,7 @@ function ManageMembersModal({
   onRemove: (userId: string) => Promise<void>
   onSetHomeroom: (teacherId: string | null) => Promise<void>
   onSetGroupTeacher: (teacherId: string | null) => Promise<void>
+  onSetGroupCommittee: (committee: string | null) => Promise<void>
 }) {
   const [search, setSearch] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
@@ -688,6 +712,30 @@ function ManageMembersModal({
                 onSelect={(id) => onSetGroupTeacher(id || null)}
                 badge="負責老師"
               />
+            </div>
+          )}
+
+          {/* 所屬組別 — tagging a group with a committee grants its members
+              access to that committee's calendar (e.g. 學生支援). */}
+          {!group.isClass && (
+            <div>
+              <p className="text-caption font-medium mb-2" style={{ color: "var(--color-ink-500)" }}>
+                所屬組別（行事曆權限）
+              </p>
+              <select
+                value={group.committee ?? ""}
+                onChange={(e) => onSetGroupCommittee(e.target.value || null)}
+                className="w-full px-3 py-2 text-body rounded-input border"
+                style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
+              >
+                <option value="">— 沒有 —</option>
+                {(Object.keys(COMMITTEE_LABELS) as CommitteeType[]).map((c) => (
+                  <option key={c} value={c}>{COMMITTEE_LABELS[c]}</option>
+                ))}
+              </select>
+              <p className="text-[11px] mt-1" style={{ color: "var(--color-ink-400)" }}>
+                設定後，此群組的成員可查看該組別的行事曆項目（如「學生支援」等私隱組別）。
+              </p>
             </div>
           )}
 

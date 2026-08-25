@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 
-type Committee = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type Committee = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 type Target    = "ALL" | "COMMITTEE" | "USERS"
 
 type Staff = {
@@ -21,6 +21,7 @@ const COMMITTEE_LABELS: Record<Committee, string> = {
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
   ECA:        "課外活動",
+  STUDENT_SUPPORT: "學生支援",
 }
 
 const TARGETS: { id: Target; label: string; hint: string }[] = [

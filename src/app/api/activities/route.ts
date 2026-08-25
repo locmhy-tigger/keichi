@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { findClashes, windowOf, clashTitleMap } from "@/lib/clash"
 
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
@@ -10,7 +11,7 @@ const createSchema = z.object({
   startTime:   z.string().datetime(),
   endTime:     z.string().datetime().optional(),
   location:    z.string().max(200).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]).optional(),
   activityType: z.enum(["ECA", "ACADEMIC"]).optional(),
   studentList: z.string().optional(), // Legacy: raw text, one name/email per line
   // Preferred: already-resolved student account ids from the roster grid
@@ -42,11 +43,31 @@ export async function GET(req: NextRequest) {
 
   // TEACHER：自己建立的活動；ADMIN：全部活動
   const where = session.user.role === "ADMIN" ? {} : { createdById: session.user.id }
+
+  // ?withStudents=1 — the 活動總覽 hub needs each participant's class to offer
+  // 按班別 / 按學生 views. Kept opt-in so other callers keep the light payload.
+  const withStudents = new URL(req.url).searchParams.get("withStudents") === "1"
+
   const activities = await prisma.activity.findMany({
     where,
     include: {
       _count: { select: { assignments: true } },
-      assignments: { where: { status: "CONFIRMED" }, select: { id: true } },
+      assignments: withStudents
+        ? {
+            select: {
+              id: true, status: true, note: true,
+              student: {
+                select: {
+                  id: true, name: true,
+                  // Usually one or two rows; the UI picks the form class.
+                  enrollments: {
+                    select: { classNumber: true, class: { select: { name: true } } },
+                  },
+                },
+              },
+            },
+          }
+        : { where: { status: "CONFIRMED" }, select: { id: true } },
     },
     orderBy: { startTime: "asc" },
   })
@@ -108,24 +129,15 @@ export async function POST(req: NextRequest) {
 
       if (resolvedUsers.length > 0) {
         const targetStudentIds = resolvedUsers.map(u => u.id)
-        const activityEnd = activity.endTime ?? new Date(activity.startTime.getTime() + 60 * 60 * 1000)
 
-        // Clash detection
-        const clashingAssignments = await prisma.activityAssignment.findMany({
-          where: {
-            studentId: { in: targetStudentIds },
-            activity: {
-              id:        { not: activity.id },
-              startTime: { lt: activityEnd },
-              endTime:   { gt: activity.startTime },
-            },
-          },
-          include: {
-            activity: { select: { title: true } }
-          }
-        })
-
-        const clashMap = new Map(clashingAssignments.map(a => [a.studentId, a.activity.title]))
+        // Shared helper: handles activities saved with a NULL endTime, which
+        // the old inline query silently skipped (SQL NULL never matches `gt`).
+        const hits = await findClashes(
+          targetStudentIds,
+          [windowOf(activity.startTime, activity.endTime)],
+          activity.id,
+        )
+        const clashMap = clashTitleMap(hits)
 
         // Assign all
         await prisma.activityAssignment.createMany({

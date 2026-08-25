@@ -5,7 +5,7 @@ import { isTeacherOrAdmin, canEditCommittee } from "@/lib/roles"
 import { z } from "zod"
 
 const bodySchema = z.object({
-  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]),
+  committee: z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]),
   toolKey:   z.string().min(1).max(200),
 })
 

@@ -66,6 +66,7 @@ enum CommitteeType {
   CURRICULUM
   ECA
   SCHOOL // 校曆及假期 — school-wide events & holidays (calendar category)
+  STUDENT_SUPPORT // 學生支援 — RESTRICTED: see RESTRICTED_COMMITTEES in src/lib/committee.ts
 }
 
 enum PromptSubject {
@@ -113,6 +114,7 @@ enum AnnouncementTarget {
   IT
   CURRICULUM
   ECA
+  STUDENT_SUPPORT
   CLASS
 }
 
@@ -238,6 +240,13 @@ model User {
   calendarEventGoogleSyncs CalendarEventGoogleSync[]
   // Web Push (PWA) device subscriptions
   pushSubscriptions PushSubscription[]
+
+  // AI 教學資源
+  resourcesCreated TeachingResource[] @relation("ResourcesCreated")
+
+  // 活動通告 (activity notices)
+  noticesCreated  ActivityNotice[] @relation("NoticesCreated")
+  noticesReviewed ActivityNotice[] @relation("NoticesReviewed")
 }
 
 // ─────────────────────────────────────────
@@ -799,6 +808,39 @@ model CalendarEventGoogleSync {
   @@index([userId])
 }
 
+enum NoticeStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// 活動通告 — the activity-docs form, persisted so it can be revised and signed
+// off. `payload` holds the whole form state verbatim (sessions[], students[],
+// FAD8 fields...) which is exactly the shape /api/activity-docs/generate already
+// accepts, so document generation needs no changes.
+model ActivityNotice {
+  id              String        @id @default(cuid())
+  title           String // = payload.activityName, denormalised for list views
+  committee       CommitteeType @default(ECA) // drives approval routing + calendar category
+  payload         Json
+  status          NoticeStatus  @default(DRAFT)
+  createdById     String
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?       @db.Text
+  calendarSynced  Boolean       @default(false) // stops re-approval duplicating events
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  createdBy  User  @relation("NoticesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("NoticesReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([committee, status])
+  @@index([createdById])
+}
+
 model CommitteeTool {
   id          String        @id @default(cuid())
   committee   CommitteeType
@@ -835,6 +877,35 @@ model Prompt {
 
   @@index([subject])
   @@index([type])
+}
+
+enum ResourceCategory {
+  AI_TOOL // AI 工具
+  LESSON // 課堂應用
+  PEDAGOGY // 教學法
+  ASSESSMENT // 評估
+  PD // 專業發展
+  OTHER // 其他
+}
+
+// AI 教學資源 — a shared link library (YouTube, articles, tools) for staff.
+// Same permission shape as Prompt: any teacher may add; only the creator or an
+// admin may edit/delete, so seeded/shared entries can't be wiped by anyone.
+model TeachingResource {
+  id          String           @id @default(cuid())
+  title       String
+  url         String           @db.Text
+  description String?          @db.Text
+  category    ResourceCategory @default(OTHER)
+  tags        String[]
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  createdBy User? @relation("ResourcesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([createdById])
 }
 
 // Fixed-window rate-limit counters (survives serverless cold starts).
@@ -948,6 +1019,9 @@ model StudentGroup {
   id          String        @id @default(cuid())
   name        String
   type        GroupType
+  // Links a group to a committee. Members of a group tagged with a RESTRICTED
+  // committee (e.g. STUDENT_SUPPORT) can see that committee's calendar events.
+  committee   CommitteeType?
   description String?       @db.Text
   teacherId   String? // 負責老師
   createdAt   DateTime      @default(now())

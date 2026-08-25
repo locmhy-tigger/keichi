@@ -6,6 +6,7 @@ import { queryKeida } from "@/lib/claude"
 import { aiRateLimit } from "@/lib/rate-limit"
 import { searchSchoolData } from "@/lib/agent-search"
 import { z } from "zod"
+import { calendarVisibilityWhere } from "@/lib/committee"
 
 const schema = z.object({
   query: z.string().min(1).max(500),
@@ -36,7 +37,9 @@ export async function POST(req: NextRequest) {
     // questions about older records, e.g. an announcement from months ago,
     // are actually reachable — the old approach only ever saw the latest ~30
     // rows regardless of what was asked).
-    const searchResults = await searchSchoolData(query, session.user.id)
+    const searchResults = await searchSchoolData(query, session.user.id, session.user.role)
+
+    const calendarWhere = await calendarVisibilityWhere(session.user.id, session.user.role)
     const matchedIds = (source: string) =>
       searchResults.filter((r) => r.source === source).map((r) => r.id)
 
@@ -82,6 +85,9 @@ export async function POST(req: NextRequest) {
       }),
       prisma.calendarEvent.findMany({
         where: {
+          // Same audience rule as GET /api/calendar-events — without it this
+          // context stuffing would hand back 學生支援 events the calendar hides.
+          ...calendarWhere,
           OR: [
             { startDate: { gte: new Date() } },
             { id: { in: matchedIds("calendar_event") } },
@@ -103,7 +109,7 @@ export async function POST(req: NextRequest) {
       }),
       prisma.activity.findMany({
         where: {
-          createdById: session.user.id,
+          // School-wide: any teacher may ask about any school activity.
           OR: [
             { startTime: { gte: new Date() } },
             { id: { in: matchedIds("activity") } },

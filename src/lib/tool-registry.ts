@@ -10,7 +10,7 @@ export type ToolRegistryEntry = {
   key:       string // === href, the stable identifier
   href:      string
   label:     string
-  committee: "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+  committee: "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
   colorVar:  string
 }
 

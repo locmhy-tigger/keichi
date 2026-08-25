@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
-type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "CLASS"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
+type Target        = "ALL" | "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "CLASS"
 type Priority      = "NORMAL" | "IMPORTANT" | "URGENT"
 
 type Announcement = {

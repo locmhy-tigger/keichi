@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 
-const committeeEnum = z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"])
+const committeeEnum = z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"])
 const createUserSchema = z.object({
   email:       z.string().email(),
   name:        z.string().max(100).optional(),

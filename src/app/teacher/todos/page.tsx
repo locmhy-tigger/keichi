@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 type TodoStatus    = "OPEN" | "IN_PROGRESS" | "DONE"
 type ViewMode      = "all" | "mine" | "assigned"
 
@@ -59,6 +59,7 @@ const BORDER: Record<CommitteeType, string> = {
   IT:         "committee-border-it",
   CURRICULUM: "committee-border-curriculum",
   ECA:        "committee-border-eca",
+  STUDENT_SUPPORT: "committee-border-student-support",
 }
 
 const NEXT_STATUS: Record<TodoStatus, TodoStatus> = {

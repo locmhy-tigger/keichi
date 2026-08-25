@@ -5,9 +5,10 @@ import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 import { CommitteeToolsManager } from "@/components/teacher/CommitteeToolsManager"
 import { PresetToolsGrid } from "@/components/teacher/PresetToolsGrid"
 import Link from "next/link"
+import { canSeeCommittee } from "@/lib/committee"
 
-type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca"
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type Slug = "admin" | "discipline" | "it" | "curriculum" | "eca" | "student-support"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 export async function generateStaticParams() {
   return [
@@ -16,6 +17,7 @@ export async function generateStaticParams() {
     { type: "it" },
     { type: "curriculum" },
     { type: "eca" },
+    { type: "student-support" },
   ]
 }
 
@@ -25,6 +27,7 @@ const SLUG_TO_ENUM: Record<Slug, CommitteeType> = {
   it:         "IT",
   curriculum: "CURRICULUM",
   eca:        "ECA",
+  "student-support": "STUDENT_SUPPORT",
 }
 
 type CommitteeConfig = {
@@ -44,6 +47,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "宣佈訊息", description: "管理今日宣佈訊息、分類、AI 搜尋及匯入匯出", href: "/teacher/committee/admin/pa-announcements" },
       { label: "採購申請",   description: "填寫及追蹤採購申請表", href: "/teacher/committee/admin/procurement" },
       { label: "活動文件",   description: "一鍵生成通告、出席紀錄及 FAD8 學生學習紀錄 (ZIP)", href: "/teacher/committee/admin/activity-docs" },
+      { label: "FAD8 年度彙編", description: "將全年已批核通告按學生整理成 FAD8 紀錄，可匯出 Excel", href: "/teacher/committee/admin/fad8" },
       { label: "KCquotation 報價", description: "填寫按口頭報價採購表格、生成 DOCX，支援 AI OCR 預填", href: "/teacher/committee/admin/quotation" },
       { label: "設施預約",   description: "電腦室、特別室及禮堂預約", href: "/teacher/committee/admin/booking" },
       { label: "費用結算",   description: "班費及活動費用記錄"   },
@@ -62,6 +66,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     tools: [
       { label: "行為記錄",   description: "記錄優點、缺點、小過、大過、遲到、缺席", href: "/teacher/committee/discipline/behavior" },
       { label: "行為儀表板", description: "按學生統計行為表現、電郵班主任", href: "/teacher/committee/discipline/dashboard" },
+      { label: "行為預警",   description: "本月需留意的學生，與上月比較及早發現轉差個案", href: "/teacher/committee/discipline/early-warning" },
       { label: "訓育設定",   description: "班主任電郵及自動提示門檻", href: "/teacher/committee/discipline/settings" },
     ],
     icon: (
@@ -84,6 +89,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       { label: "圖片壓縮器",     description: "本地壓縮 JPG/PNG/WebP，不上傳伺服器",  href: "/teacher/committee/it/image-compress" },
       { label: "PDF 壓縮器",     description: "縮小 PDF 大小，方便電郵傳送",           href: "/teacher/committee/it/pdf-compress"   },
       { label: "OCR 文字提取",   description: "AI 識別圖片中的文字，支援繁體中文",      href: "/teacher/committee/it/ocr"            },
+      { label: "AI 教學資源",    description: "老師共享的 YouTube 影片、工具及文章",     href: "/teacher/committee/it/ai-resources"   },
     ],
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-it)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -114,7 +120,7 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
     description: "策劃及管理課外活動、學會及聯課活動，豐富學生校園生活。",
     colorVar:    "eca",
     tools: [
-      { label: "活動管理",     description: "建立活動、貼上學生名單、追蹤出席", href: "/teacher/activities" },
+      { label: "活動總覽",     description: "建立活動、今日／本週、按班別或學生查看出席", href: "/teacher/activities" },
       { label: "活動報名",     description: "管理課外活動及學會報名" },
       { label: "活動出席記錄", description: "記錄學生課外活動出席情況" },
       { label: "比賽及獎項",   description: "登記校外比賽及學生獎項"   },
@@ -123,6 +129,21 @@ const CONFIGS: Record<CommitteeType, CommitteeConfig> = {
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-eca)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="6" />
         <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+      </svg>
+    ),
+  },
+  STUDENT_SUPPORT: {
+    label:       "學生支援組",
+    description: "支援有特殊學習或情緒需要的學生。此組別的行事曆只有組員及管理員可見。",
+    colorVar:    "student-support",
+    tools: [
+      { label: "個案記錄",   description: "記錄及跟進個別學生支援情況" },
+      { label: "支援計劃",   description: "制定及檢視學生支援計劃"   },
+      { label: "轉介記錄",   description: "校內及校外專業轉介紀錄"   },
+    ],
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-student-support)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
       </svg>
     ),
   },
@@ -135,6 +156,10 @@ export default async function CommitteePage({ params }: { params: { type: string
 
   const session = await auth()
   if (!session?.user) return null
+
+  // 學生支援 is private: hiding the nav entry isn't enough, since the URL is
+  // still guessable. 404 rather than 403 so the page's existence isn't confirmed.
+  if (!(await canSeeCommittee(session.user.id, session.user.role, committeeType))) notFound()
 
   const config = CONFIGS[committeeType]
 

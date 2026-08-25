@@ -9,7 +9,7 @@ const GoogleCalendarSettings = dynamic(
 )
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
-type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "SCHOOL"
+type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "SCHOOL"
 
 type Activity = {
   id:          string
@@ -49,6 +49,7 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
   ECA:        "var(--color-eca)",
+  STUDENT_SUPPORT: "var(--color-student-support)",
   SCHOOL:     "var(--color-school)",
 }
 

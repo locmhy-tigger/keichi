@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 
 const createSchema = z.object({
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]),
   label:       z.string().min(1).max(100),
   description: z.string().max(300).optional(),
   type:        z.enum(["LINK", "EMBED", "HTML", "GOOGLE_SHEET"]),
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   const tools = await prisma.committeeTool.findMany({
     where: {
-      ...(committee ? { committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" } : {}),
+      ...(committee ? { committee: committee as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" } : {}),
       ...(!staff ? { active: true } : {}),
     },
     orderBy: { order: "asc" },
