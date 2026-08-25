@@ -82,16 +82,20 @@ function StudentSearch({ onAssign, existingIds }: {
   const [results, setResults] = useState<Student[]>([])
   const [selected, setSelected] = useState<Student[]>([])
   const [assigning, setAssigning] = useState(false)
+  // The dropdown is only shown once the teacher actually searches — it used to
+  // open on load (an empty query matches every student) and cover the page.
+  const [open, setOpen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const boxRef   = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch("/api/admin/classes").then(r => r.ok && r.json()).then(setClasses)
   }, [])
 
   const search = useCallback(async (q: string, cid: string) => {
-    let url = "/api/admin/users?"
-    if (q) url += `q=${encodeURIComponent(q)}&`
-    if (cid) url += `classId=${cid}`
+    // Nothing typed and no class picked: show nothing rather than the entire
+    // student body.
+    if (!q.trim() && !cid) { setResults([]); return }
     
     // We'll update the /api/admin/users to support these filters or use a search endpoint
     // For now, let's assume we use the admin users list and filter client-side if q/cid is small
@@ -121,6 +125,20 @@ function StudentSearch({ onAssign, existingIds }: {
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [query, classId, search])
 
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false) }
+    document.addEventListener("mousedown", onClick)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onClick)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [open])
+
   const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
   return (
@@ -148,7 +166,7 @@ function StudentSearch({ onAssign, existingIds }: {
         <div className="w-full sm:w-40">
           <select
             value={classId}
-            onChange={(e) => setClassId(e.target.value)}
+            onChange={(e) => { setClassId(e.target.value); setOpen(true) }}
             className="w-full px-3 py-2 text-caption rounded-input border outline-none h-[38px]"
             style={inputStyle}
           >
@@ -156,20 +174,21 @@ function StudentSearch({ onAssign, existingIds }: {
             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={boxRef}>
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
             placeholder="搜尋姓名或學號…"
             className="w-full px-3 py-2 text-body rounded-input border outline-none text-caption h-[38px]"
             style={inputStyle}
           />
-          {results.length > 0 && (
+          {open && results.length > 0 && (
             <div className="absolute z-10 w-full mt-1 rounded-input shadow-card overflow-hidden max-h-60 overflow-y-auto"
               style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
               {results.slice(0, 20).map((u) => (
                 <button key={u.id} type="button"
-                  onClick={() => { setSelected((prev) => [...prev, u]); setQuery(""); setResults([]) }}
+                  onClick={() => { setSelected((prev) => [...prev, u]); setQuery(""); setResults([]); setOpen(false) }}
                   className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--color-surface-2)] transition-colors">
                   <div>
                     <span className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>{u.name ?? u.email}</span>
