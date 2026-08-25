@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
   if (session.user.role === "STUDENT") {
     const studentActivities = await prisma.activity.findMany({
       where: {
-        assignments: { some: { studentId: session.user.id } }
+        assignments: { some: { studentId: session.user.id } },
+        // Nothing unapproved reaches a student.
+        approval: "APPROVED",
       },
       include: {
         assignments: {
@@ -42,7 +44,9 @@ export async function GET(req: NextRequest) {
   }
 
   // TEACHER：自己建立的活動；ADMIN：全部活動
-  const where = session.user.role === "ADMIN" ? {} : { createdById: session.user.id }
+  // Staff see all activities (school-wide), including pending ones so a chair
+  // can act on them and an author can see their own awaiting review.
+  const where = {}
 
   // ?withStudents=1 — the 活動總覽 hub needs each participant's class to offer
   // 按班別 / 按學生 views. Kept opt-in so other callers keep the light payload.
@@ -100,6 +104,10 @@ export async function POST(req: NextRequest) {
       committee:    data.committee,
       activityType: data.activityType,
       createdById:  session.user.id,
+      // Directly-created activities need a chair's sign-off. (Activities made
+      // by approving a NOTICE are created in the notice review route, which
+      // sets APPROVED explicitly — a chair already signed that one off.)
+      approval:     "PENDING",
     },
     include: {
       _count:      { select: { assignments: true } },

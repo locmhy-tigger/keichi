@@ -188,6 +188,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           committee:    notice.committee,
           activityType: notice.committee === "ECA" ? "ECA" : "ACADEMIC",
           createdById:  notice.createdById,
+          // Already signed off — this IS the chair approving it. Asking for a
+          // second approval on the same activity would be redundant.
+          approval:     "APPROVED",
+          approvedById: session.user.id,
+          approvedAt:   new Date(),
         },
       })
       activityCount++

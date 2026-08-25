@@ -16,6 +16,7 @@ type Assignment = {
 type Activity = {
   id:          string
   title:       string
+  approval?:   "PENDING" | "APPROVED" | "REJECTED"
   description: string | null
   startTime:   string
   endTime:     string | null
@@ -25,7 +26,7 @@ type Activity = {
   assignments: Assignment[]
 }
 
-type ViewMode = "all" | "today" | "week" | "class" | "student"
+type ViewMode = "all" | "today" | "week" | "class" | "student" | "pending"
 
 function formatDateTime(iso: string) {
   const d = new Date(iso)
@@ -33,6 +34,11 @@ function formatDateTime(iso: string) {
 }
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"]
+
+const APPROVAL_BADGE: Record<string, { label: string; color: string }> = {
+  PENDING:  { label: "待批核", color: "var(--color-admin)" },
+  REJECTED: { label: "已退回", color: "var(--color-discipline)" },
+}
 
 // Same heuristic as /api/homeroom: only 1A-6Z style names are real form classes,
 // so a student in several groups is still filed under one class.
@@ -349,7 +355,7 @@ export default function TeacherActivitiesPage() {
       {!loading && activities.length > 0 && (
         <div className="flex gap-2 items-center flex-wrap mb-3">
           <div className="flex gap-1 p-1 rounded-input" style={{ background: "var(--color-surface-2)" }}>
-            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"]] as const).map(([id, label]) => (
+            {([["all","全部"],["today","今日"],["week","本週"],["class","按班別"],["student","按學生"],["pending","待批核"]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setView(id)}
                 className="px-3 py-1.5 text-caption font-medium rounded-input transition-colors"
                 style={{
@@ -445,12 +451,19 @@ export default function TeacherActivitiesPage() {
             // "who has something on this day" from any tab.
             const matchPicked = !pickedDate || ymd(start) === pickedDate
             const matchView =
-              pickedDate ? true
+              view === "pending" ? true
+              : pickedDate ? true
               : view === "today" ? ymd(start) === todayStr
               : view === "week"  ? (start >= wkFrom && start < wkTo)
               : true
 
-            return matchQ && matchDay && matchPicked && matchView
+            // 待批核 shows only what needs a decision. Other views show
+            // everything — staff should still see pending items, and each card
+            // carries a status badge — but rejected ones are noise.
+            const matchApproval =
+              view === "pending" ? a.approval === "PENDING" : a.approval !== "REJECTED"
+
+            return matchQ && matchDay && matchPicked && matchView && matchApproval
           })
           .sort((a, b) => {
             if (sortBy === "students") return b._count.assignments - a._count.assignments
@@ -569,7 +582,18 @@ export default function TeacherActivitiesPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-h3 mb-1">{act.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="text-h3">{act.title}</h3>
+                    {act.approval && APPROVAL_BADGE[act.approval] && (
+                      <span className="text-caption px-2 py-0.5 rounded-pill shrink-0"
+                        style={{
+                          background: APPROVAL_BADGE[act.approval].color + "20",
+                          color:      APPROVAL_BADGE[act.approval].color,
+                        }}>
+                        {APPROVAL_BADGE[act.approval].label}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-4 flex-wrap">
                     <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
                       📅 {formatDateTime(act.startTime)}

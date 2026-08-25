@@ -201,6 +201,7 @@ model User {
   calendarEvents         CalendarEvent[]        @relation("CalendarEvents")
   committeeTools         CommitteeTool[]        @relation("CommitteeTools")
   activitiesCreated      Activity[]             @relation("ActivitiesCreated")
+  activitiesApproved     Activity[]             @relation("ActivitiesApproved")
   activityAssignments    ActivityAssignment[]   @relation("ActivityAssignments")
   groupMemberships       GroupMember[]
   taughtGroups           StudentGroup[]         @relation("GroupTeacher")
@@ -808,6 +809,12 @@ model CalendarEventGoogleSync {
   @@index([userId])
 }
 
+enum ActivityApproval {
+  PENDING // 待批核 — hidden from students and the calendar
+  APPROVED // 已批核
+  REJECTED // 已退回
+}
+
 enum NoticeStatus {
   DRAFT
   PENDING
@@ -969,6 +976,14 @@ enum ActivityType {
 model Activity {
   id           String         @id @default(cuid())
   title        String
+  // Directly-created activities start PENDING and are hidden until a chair
+  // signs off. APPROVED is the DEFAULT so every pre-existing row (and every
+  // activity created by approving a notice, which a chair already signed off)
+  // is treated as approved rather than vanishing.
+  approval     ActivityApproval @default(APPROVED)
+  approvedById String?
+  approvedAt   DateTime?
+  rejectionReason String?     @db.Text
   description  String?        @db.Text
   startTime    DateTime
   endTime      DateTime?
@@ -980,10 +995,12 @@ model Activity {
   updatedAt    DateTime       @updatedAt
 
   createdBy   User                 @relation("ActivitiesCreated", fields: [createdById], references: [id])
+  approvedBy  User?                @relation("ActivitiesApproved", fields: [approvedById], references: [id], onDelete: SetNull)
   assignments ActivityAssignment[]
 
   @@index([startTime])
   @@index([createdById])
+  @@index([approval, startTime])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }
