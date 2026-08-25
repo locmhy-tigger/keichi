@@ -984,6 +984,10 @@ model Activity {
   approvedById String?
   approvedAt   DateTime?
   rejectionReason String?     @db.Text
+  // The CalendarEvent published when this activity was approved. Plain id
+  // rather than a relation: deleting the event should not cascade into the
+  // activity, only the other way round. Also stops re-approval duplicating.
+  calendarEventId String?
   description  String?        @db.Text
   startTime    DateTime
   endTime      DateTime?

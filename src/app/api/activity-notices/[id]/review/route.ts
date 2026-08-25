@@ -193,6 +193,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           approval:     "APPROVED",
           approvedById: session.user.id,
           approvedAt:   new Date(),
+          // Link the event created just above, so deleting this activity later
+          // also removes its calendar entry.
+          calendarEventId: event.id,
         },
       })
       activityCount++
