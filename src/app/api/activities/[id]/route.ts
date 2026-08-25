@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { unpublishActivityCalendar } from "@/lib/activity-calendar"
 
 const patchSchema = z.object({
   title:       z.string().min(1).max(200).optional(),
@@ -84,5 +85,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   // ActivityAssignment cascades, so the attendance list goes with it.
   await prisma.activity.delete({ where: { id: params.id } })
+
+  // Take the published calendar entry (and its Google copies) with it —
+  // otherwise the activity vanishes but the event lingers on everyone's
+  // calendar. Best-effort; the activity is already gone.
+  await unpublishActivityCalendar(activity.calendarEventId)
+
   return NextResponse.json({ deleted: true })
 }

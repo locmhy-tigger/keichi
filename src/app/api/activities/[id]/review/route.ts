@@ -4,6 +4,7 @@ import { isTeacherOrAdmin, isAdmin, canEditCommittee } from "@/lib/roles"
 import { prisma } from "@/lib/prisma"
 import { notify } from "@/lib/notify"
 import { z } from "zod"
+import { publishActivityToCalendar } from "@/lib/activity-calendar"
 
 // Chair sign-off for directly-created activities.
 //
@@ -51,6 +52,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     },
   })
 
+  // Approved == on the school calendar, the same rule the notice path follows.
+  // Idempotent, so re-approving cannot create a second entry.
+  let calendarEventId: string | null = null
+  if (action === "approve") {
+    calendarEventId = await publishActivityToCalendar(updated)
+  }
+
   const when = activity.startTime.toLocaleString("zh-HK", {
     month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
   })
@@ -58,7 +66,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     userId: activity.createdById,
     type:   "DOC_APPROVAL",
     title:  action === "approve" ? `活動已批核：${activity.title}` : `活動被退回：${activity.title}`,
-    body:   action === "approve" ? `${when}　學生現在可以看到此活動` : rejectionReason!.trim(),
+    body:   action === "approve"
+      ? `${when}　學生現在可以看到此活動${calendarEventId ? "，並已加入行事曆" : ""}`
+      : rejectionReason!.trim(),
     link:   `/teacher/activities/${activity.id}`,
   })
 
