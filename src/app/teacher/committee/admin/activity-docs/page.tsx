@@ -816,13 +816,15 @@ export default function ActivityDocsPage() {
                 const weekday = s.date ? WEEKDAYS[new Date(s.date + "T00:00:00").getDay()] : "—"
                 return (
                   <div key={s.id} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2">
-                    <input type="date" className="flex-shrink-0 px-2 py-1.5 text-sm rounded-md border outline-none focus:ring-2 focus:ring-[var(--color-admin)] focus:border-transparent transition-shadow" style={{ width: 500 }} value={s.date}
+                    {/* Flexible width: a fixed 500px with flex-shrink-0 pushed the
+                        weekday badge and delete button off-screen on a phone. */}
+                    <input type="date" className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border outline-none focus:ring-2 focus:ring-[var(--color-admin)] focus:border-transparent transition-shadow" value={s.date}
                       onChange={e => updateSession(s.id, "date", e.target.value)} />
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "#e8eef8", color: adminColor, minWidth: 52, textAlign:"center" }}>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "#e8eef8", color: adminColor, minWidth: 44, textAlign: "center" }}>
                       {weekday}
                     </span>
                     {sessions.length > 1 && (
-                      <button onClick={() => removeSession(s.id)} className="ml-auto flex-shrink-0 w-7 h-7 flex items-center justify-center bg-red-500 text-white rounded-md hover:bg-red-600">
+                      <button onClick={() => removeSession(s.id)} className="flex-shrink-0 w-7 h-7 flex items-center justify-center bg-red-500 text-white rounded-md hover:bg-red-600">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -830,7 +832,7 @@ export default function ActivityDocsPage() {
                 )
               })}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button type="button" onClick={() => addSession()}
                 className="flex-1 flex items-center justify-center gap-1 text-sm font-bold py-2 rounded-lg border-2 border-dashed transition-colors"
                 style={{ borderColor: adminColor, color: adminColor, background: "#f0f4ff" }}>
