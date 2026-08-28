@@ -289,7 +289,12 @@ function TimetableTab() {
   const [term,     setTerm]     = useState("")
   const [csv,      setCsv]      = useState("")
   const [uploading, setUploading] = useState(false)
-  const [result,   setResult]   = useState<{ imported: number; errors: string[] } | null>(null)
+  // parseTimetableCsv returns {line, reason} objects, not strings — the old
+  // string[] annotation was wrong, so rendering them crashed the page
+  // (React error #31: objects are not valid as a React child).
+  type ParseError = { line: number; reason: string }
+  const [result,   setResult]   = useState<{ imported: number; errors: ParseError[] } | null>(null)
+  const [rejected, setRejected] = useState<ParseError[]>([])
   const [error,    setError]    = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -307,6 +312,7 @@ function TimetableTab() {
     setUploading(true)
     setResult(null)
     setError(null)
+    setRejected([])
 
     const res = await fetch("/api/agents/timetable/upload", {
       method:  "POST",
@@ -315,8 +321,14 @@ function TimetableTab() {
     })
 
     const data = await res.json()
-    if (res.ok) setResult(data)
-    else setError(data?.error ?? `錯誤 ${res.status}`)
+    if (res.ok) {
+      setResult(data); setRejected([])
+    } else {
+      setError(data?.error ?? `錯誤 ${res.status}`)
+      // A 400 carries the parse errors too; showing them is far more useful
+      // than "CSV 沒有有效資料" on its own.
+      setRejected(Array.isArray(data?.errors) ? data.errors : [])
+    }
     setUploading(false)
   }
 
@@ -380,7 +392,30 @@ function TimetableTab() {
           </div>
         )}
 
-        {error  && <p className="text-caption" style={{ color: "var(--color-discipline)" }}>{error}</p>}
+        {error && (
+          <div className="card p-3" style={{ borderLeft: "3px solid var(--color-discipline)" }}>
+            <p className="text-caption" style={{ color: "var(--color-discipline)" }}>{error}</p>
+            {rejected.length > 0 && (
+              <>
+                <p className="text-caption mt-2" style={{ color: "var(--color-ink-500)" }}>
+                  以下 {rejected.length} 行未能解析：
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {rejected.slice(0, 10).map((e, i) => (
+                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>
+                      第 {e.line} 行：{e.reason}
+                    </li>
+                  ))}
+                </ul>
+                {rejected.length > 10 && (
+                  <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>
+                    …另有 {rejected.length - 10} 行
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {result && (
           <div className="card p-4" style={{ borderLeft: "3px solid var(--color-curriculum)" }}>
@@ -393,10 +428,17 @@ function TimetableTab() {
                   {result.errors.length} 行有問題（已略過）：
                 </p>
                 <ul className="mt-1 space-y-0.5">
-                  {result.errors.slice(0, 5).map((e, i) => (
-                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>{e}</li>
+                  {result.errors.slice(0, 10).map((e, i) => (
+                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>
+                      第 {e.line} 行：{e.reason}
+                    </li>
                   ))}
                 </ul>
+                {result.errors.length > 10 && (
+                  <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>
+                    …另有 {result.errors.length - 10} 行
+                  </p>
+                )}
               </div>
             )}
           </div>
