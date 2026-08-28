@@ -1,5 +1,6 @@
 import type { ToolCall } from "@/lib/agents"
 import {
+  getTeacherLessons, periodLabelOf,
   getAllTeachers,
   getCommonFreeSlots,
   getFreeTeachers,
@@ -19,6 +20,7 @@ export async function runAgentTool(call: ToolCall, userId: string, role?: Role):
   try {
     switch (call.tool) {
       case "timetable_query":       return await runTimetableQuery(call.params)
+      case "teacher_lessons":       return await runTeacherLessons(call.params)
       case "free_teachers":         return await runFreeTeachers(call.params)
       case "search_school_data":    return await runSearchSchoolData(call.params, userId, role)
       case "search_knowledge_base": return await runSearchKnowledgeBase(call.params, userId)
@@ -71,6 +73,53 @@ async function runSearchKnowledgeBase(params: Record<string, unknown>, userId: s
     return `語義搜尋「${query}」：無相關教材內容。請向用戶說明知識庫暫時未有相關資料，唔好虛構答案。`
   }
   return `語義搜尋「${query}」：找到 ${chunks.length} 個相關教材片段：\n\n${formatRetrievedChunks(chunks)}`
+}
+
+// 「X 老師星期三要上咩堂」 — the question timetable_query cannot answer.
+async function runTeacherLessons(params: Record<string, unknown>): Promise<string> {
+  const query = typeof params.teacher === "string" ? params.teacher.trim() : ""
+  if (!query) return "缺少 teacher 參數。請問清楚用戶想查邊位老師嘅時間表。"
+
+  const dayRaw = params.day
+  const day = typeof dayRaw === "number" ? dayRaw
+            : typeof dayRaw === "string" && /^[1-5]$/.test(dayRaw) ? parseInt(dayRaw, 10)
+            : undefined
+
+  const term = typeof params.term === "string" && params.term ? params.term : await getLatestTerm()
+  if (!term) return "系統尚未上載任何時間表，請建議用戶聯絡管理員上載 CSV。切勿自行推測時間表內容。"
+
+  const allTeachers = await getAllTeachers(term)
+  const m = matchTeacher(query, allTeachers)
+  if (m.notFound) {
+    return `時間表搵唔到「${query}」。現有老師：${allTeachers.join("、")}。\n` +
+      "請如實告訴用戶搵唔到，並請佢確認姓名。切勿自行編造時間表。"
+  }
+  if (m.candidates) {
+    return `「${query}」有多個匹配：${m.candidates.join("、")}，請問用戶係邊位。`
+  }
+
+  const name    = m.matched!
+  const lessons = await getTeacherLessons(name, term, day)
+  const dayText = day ? `星期${WEEKDAY_NAMES[day]}` : "全星期"
+
+  if (lessons.length === 0) {
+    return `${name} 老師喺${dayText}（學期 ${term}）冇任何課堂記錄。\n` +
+      "請如實回覆冇課堂，切勿自行編造。"
+  }
+
+  const rows = lessons.map((l) =>
+    `| 星期${WEEKDAY_NAMES[l.dayOfWeek]} | ${periodLabelOf(l)} | ${l.classCode ?? "—"} | ${l.subject ?? "—"} |`)
+
+  return [
+    `${name} 老師${dayText}嘅課堂（學期 ${term}，共 ${lessons.length} 節）：`,
+    "",
+    "| 星期 | 節次 | 班別 | 科目 |",
+    "|---|---|---|---|",
+    ...rows,
+    "",
+    "以上係系統實際紀錄。請完全按呢啲資料回覆，" +
+    "唔好改動班別或科目，亦唔好加入任何未列出嘅課堂。",
+  ].join("\n")
 }
 
 async function runTimetableQuery(params: Record<string, unknown>): Promise<string> {
