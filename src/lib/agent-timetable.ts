@@ -9,6 +9,7 @@ export interface TimetableRow {
   teacherName: string
   dayOfWeek:   number
   period:      number
+  periodLabel: string | null
   classCode:   string | null
   subject:     string | null
 }
@@ -41,11 +42,24 @@ export function parseTimetableCsv(text: string): ParseResult {
     if (!Number.isInteger(dayOfWeek) || dayOfWeek < 1 || dayOfWeek > MAX_DAY) {
       errors.push({ line: i + 1, reason: `星期必須為 1-${MAX_DAY}（收到「${dayStr}」）` }); return
     }
-    if (!Number.isInteger(period) || period < 1 || period > MAX_PERIOD) {
+    // A named slot (周會, 早會…) is a real commitment, so keep it as period 0
+    // with its label rather than rejecting the row. Only a blank or an
+    // out-of-range NUMBER is an error.
+    const isNumeric = /^\d+$/.test(periodStr)
+    if (isNumeric && (period < 1 || period > MAX_PERIOD)) {
       errors.push({ line: i + 1, reason: `節次必須為 1-${MAX_PERIOD}（收到「${periodStr}」）` }); return
     }
+    if (!isNumeric && !periodStr) {
+      errors.push({ line: i + 1, reason: "節次為空" }); return
+    }
 
-    rows.push({ teacherName, dayOfWeek, period, classCode: classCode || null, subject: subject || null })
+    rows.push({
+      teacherName, dayOfWeek,
+      period:      isNumeric ? period : 0,
+      periodLabel: isNumeric ? null : periodStr,
+      classCode:   classCode || null,
+      subject:     subject || null,
+    })
   })
 
   return { rows, errors }
@@ -123,4 +137,39 @@ export function formatSlotsTable(slots: FreeSlot[]): string {
     return `| 第${p + 1}節 | ${cells.join(" | ")} |`
   })
   return [header, divider, ...rows].join("\n")
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// A teacher's actual lessons.
+//
+// timetable_query returns common FREE slots and free_teachers returns who is
+// free — neither can answer 「X 老師星期三要上咩堂」. With no tool for that
+// question the model simply invented an answer, so this closes the gap.
+// ─────────────────────────────────────────────────────────────
+
+export interface Lesson {
+  dayOfWeek:   number
+  period:      number
+  periodLabel: string | null
+  classCode:   string | null
+  subject:     string | null
+}
+
+export async function getTeacherLessons(
+  teacherName: string,
+  term: string,
+  day?: number,
+): Promise<Lesson[]> {
+  const rows = await prisma.agentTimetable.findMany({
+    where: { teacherName, term, ...(day ? { dayOfWeek: day } : {}) },
+    select: { dayOfWeek: true, period: true, periodLabel: true, classCode: true, subject: true },
+    orderBy: [{ dayOfWeek: "asc" }, { period: "asc" }],
+  })
+  return rows
+}
+
+/** "第3節" / "周會" — named slots have no number. */
+export function periodLabelOf(l: Pick<Lesson, "period" | "periodLabel">): string {
+  return l.periodLabel ?? `第${l.period}節`
 }

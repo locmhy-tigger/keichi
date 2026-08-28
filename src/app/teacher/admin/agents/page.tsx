@@ -353,7 +353,7 @@ function TimetableTab() {
         <ul className="mt-2 space-y-0.5">
           {[
             "dayOfWeek：1-5（星期一至五）",
-            "period：1-10",
+            "period：1-10，或填名稱（如「周會」）",
             "classCode、subject 可留空",
             "上載後會清除同一學期的舊資料再重新匯入",
           ].map((s) => (

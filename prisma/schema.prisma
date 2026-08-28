@@ -245,6 +245,11 @@ model User {
   // AI 教學資源
   resourcesCreated TeachingResource[] @relation("ResourcesCreated")
 
+  // 教師進修 (professional development)
+  pdApplications  PdApplication[] @relation("PdTeacher")
+  pdCreated       PdApplication[] @relation("PdCreated")
+  pdReviewed      PdApplication[] @relation("PdReviewed")
+
   // 活動通告 (activity notices)
   noticesCreated  ActivityNotice[] @relation("NoticesCreated")
   noticesReviewed ActivityNotice[] @relation("NoticesReviewed")
@@ -915,6 +920,79 @@ model TeachingResource {
   @@index([createdById])
 }
 
+enum PdStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NonTeachingType {
+  HOLIDAY // 假期 — no teaching at all
+  EXAM // 考試期 — free from `freeFrom` onwards
+}
+
+// 節次時間 — AgentTimetable stores bare period numbers (1-10) with no clock
+// times, so nothing could compare a real request against a timetable. This
+// supplies the missing mapping; an admin fills it in once.
+model SchoolPeriod {
+  period    Int    @id // matches AgentTimetable.period
+  startTime String // "08:00"
+  endTime   String // "08:40"
+}
+
+// 非上課日／考試期 — the schema had no concept of school being out.
+model NonTeachingPeriod {
+  id        String          @id @default(cuid())
+  name      String // 暑假 / 上學期考試
+  type      NonTeachingType
+  startDate DateTime
+  endDate   DateTime // inclusive
+  freeFrom  String? // EXAM only, e.g. "13:00"
+  createdAt DateTime        @default(now())
+
+  @@index([startDate, endDate])
+}
+
+// 行政文件連結 — Drive links shown in 板面 2. Links rather than uploads,
+// because this app has no file storage.
+model AdminDocLink {
+  id    String @id @default(cuid())
+  label String // 校曆表(教師版) / 委員會 / 教師名單
+  url   String @db.Text
+  order Int    @default(0)
+
+  @@index([order])
+}
+
+// 教師進修申請
+model PdApplication {
+  id                String    @id @default(cuid())
+  teacherId         String
+  teacherName       String // snapshot; also the key matched against AgentTimetable
+  title             String // 進修名稱
+  organiser         String?
+  startDate         DateTime // HK day
+  endDate           DateTime // == startDate for a single-day request
+  startTime         String // "HH:MM", half-hour steps
+  endTime           String
+  status            PdStatus  @default(PENDING)
+  clashSummary      String?   @db.Text // what the checker found when decided
+  approvedWithClash Boolean   @default(false)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  rejectionReason   String?   @db.Text
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  teacher    User  @relation("PdTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  createdBy  User  @relation("PdCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("PdReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([teacherId, startDate])
+}
+
 // Fixed-window rate-limit counters (survives serverless cold starts).
 model RateLimit {
   key         String   @id // e.g. "login:email@x.com:1.2.3.4" or "ai:userId"
@@ -1186,7 +1264,11 @@ model AgentTimetable {
   id          String  @id @default(cuid())
   teacherName String
   dayOfWeek   Int
+  // 0 = a named slot that isn't one of the numbered periods (周會, 早會…);
+  // its text is kept in periodLabel. Previously such rows were rejected on
+  // import and silently lost.
   period      Int
+  periodLabel String?
   classCode   String?
   subject     String?
   term        String
