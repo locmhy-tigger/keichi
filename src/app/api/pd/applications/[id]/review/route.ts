@@ -52,8 +52,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     app.startDate.toISOString().slice(0, 10),
     app.endDate.toISOString().slice(0, 10),
   )
+  // Resolve against the live account so a later 時間表姓名 correction takes
+  // effect; fall back to the name snapshotted on the application.
+  const teacherAccount = await prisma.user.findUnique({
+    where:  { id: app.teacherId },
+    select: { name: true, nameEn: true, timetableName: true },
+  })
   const checks   = await checkPdClashes({
-    teacherName: app.teacherName, dates, startTime: app.startTime, endTime: app.endTime,
+    teacher: teacherAccount ?? { name: app.teacherName, nameEn: null, timetableName: null },
+    dates, startTime: app.startTime, endTime: app.endTime,
   })
   const blocking = hasBlocking(checks)
 
