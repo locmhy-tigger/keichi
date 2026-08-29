@@ -11,7 +11,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const [periods, nonTeaching, docs] = await Promise.all([
-    prisma.schoolPeriod.findMany({ orderBy: { period: "asc" } }),
+    prisma.schoolPeriod.findMany({ orderBy: [{ period: "asc" }, { startTime: "asc" }] }),
     prisma.nonTeachingPeriod.findMany({ orderBy: { startDate: "asc" } }),
     prisma.adminDocLink.findMany({ orderBy: { order: "asc" } }),
   ])
@@ -21,10 +21,14 @@ export async function GET() {
 const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
 
 const schema = z.object({
+  // A row is either a numbered lesson or a named slot (早會/周會), never both.
   periods: z.array(z.object({
-    period:    z.number().int().min(1).max(10),
+    period:    z.number().int().min(1).max(10).nullable().optional(),
+    label:     z.string().max(20).nullable().optional(),
     startTime: z.string().regex(HHMM),
     endTime:   z.string().regex(HHMM),
+  }).refine((p) => p.period != null || !!p.label?.trim(), {
+    message: "節次必須有節數或名稱",
   })).optional(),
   nonTeaching: z.array(z.object({
     name:      z.string().min(1).max(100),
@@ -50,7 +54,14 @@ export async function PUT(req: NextRequest) {
   if (d.periods) {
     await prisma.$transaction([
       prisma.schoolPeriod.deleteMany({}),
-      prisma.schoolPeriod.createMany({ data: d.periods }),
+      prisma.schoolPeriod.createMany({
+        data: d.periods.map((p) => ({
+          period:    p.period ?? null,
+          label:     p.period != null ? null : (p.label?.trim() || null),
+          startTime: p.startTime,
+          endTime:   p.endTime,
+        })),
+      }),
     ])
   }
   if (d.nonTeaching) {

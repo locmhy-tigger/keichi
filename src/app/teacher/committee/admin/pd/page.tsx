@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { StaffPicker } from "@/components/teacher/StaffPicker"
+import { DEFAULT_PERIODS } from "@/lib/school-periods"
 
 type Staff = { id: string; name: string | null; email: string | null; image: string | null }
 
@@ -22,7 +23,7 @@ type Application = {
   reviewedBy: { id: string; name: string | null } | null
 }
 
-type Period      = { period: number; startTime: string; endTime: string }
+type Period      = { period: number | null; label: string | null; startTime: string; endTime: string }
 type NonTeaching = { id?: string; name: string; type: "HOLIDAY" | "EXAM"; startDate: string; endDate: string; freeFrom: string | null }
 type DocLink     = { id?: string; label: string; url: string }
 
@@ -238,7 +239,9 @@ function CheckLine({ c }: { c: Check }) {
   if (c.kind === "no-data") {
     // Never shown as "冇衝突" — an unmatched name means we simply don't know.
     return <span className="text-caption" style={{ color: "var(--color-admin)" }}>
-      ⚠ {c.date}　找不到「{c.teacherName}」的時間表，未能檢查（請確認時間表已上載，且姓名一致）
+      ⚠ {c.date}　找不到「{c.teacherName}」的時間表，未能檢查（
+      <Link href="/teacher/admin/teachers" className="underline">教師資料</Link>
+      　可設定「時間表姓名」）
     </span>
   }
   return <span className="text-caption" style={{ color: "var(--color-admin)" }}>
@@ -473,11 +476,45 @@ function SettingsTab({ inputCls, inputStyle }: { inputCls: string; inputStyle: R
   const [docs, setDocs]       = useState<DocLink[]>([])
   const [msg, setMsg]         = useState<string | null>(null)
   const [saving, setSaving]   = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+
+  // Pull 學校活動及假期 events in as *candidate* 假期 rows. They are only
+  // appended to the editable list — nothing is written until 儲存設定 — because
+  // not every SCHOOL event is a non-teaching day (陸運會, 家長日…).
+  async function importHolidays(all: boolean) {
+    setImporting(true); setImportMsg(null)
+    const res = await fetch("/api/pd/settings/calendar-holidays")
+    if (!res.ok) {
+      setImporting(false)
+      setImportMsg(`匯入失敗 (${res.status})`)
+      return
+    }
+    const { candidates } = await res.json() as {
+      candidates: (NonTeaching & { likely: boolean })[]
+    }
+    const picked = candidates.filter((c) => all || c.likely)
+    let added = 0
+    setNt((prev) => {
+      const seen = new Set(prev.map((x) => `${x.name}|${x.startDate}`))
+      const fresh = picked
+        .filter((c) => !seen.has(`${c.name}|${c.startDate}`))
+        .map(({ name, type, startDate, endDate, freeFrom }) => ({ name, type, startDate, endDate, freeFrom }))
+      added = fresh.length
+      return [...prev, ...fresh]
+    })
+    setImporting(false)
+    setImportMsg(added === 0
+      ? "冇新的日期可匯入。"
+      : `已加入 ${added} 項，請檢查後按「儲存設定」。`)
+  }
 
   useEffect(() => {
     fetch("/api/pd/settings").then((r) => r.ok ? r.json() : null).then((d) => {
       if (!d) return
-      setPeriods(d.periods?.length ? d.periods : Array.from({ length: 10 }, (_, i) => ({ period: i + 1, startTime: "", endTime: "" })))
+      setPeriods(d.periods?.length
+        ? d.periods.map((p: any) => ({ period: p.period ?? null, label: p.label ?? null, startTime: p.startTime, endTime: p.endTime }))
+        : Array.from({ length: 10 }, (_, i) => ({ period: i + 1, label: null, startTime: "", endTime: "" })))
       setNt((d.nonTeaching ?? []).map((x: any) => ({
         name: x.name, type: x.type, freeFrom: x.freeFrom,
         startDate: String(x.startDate).slice(0, 10), endDate: String(x.endDate).slice(0, 10),
@@ -491,7 +528,7 @@ function SettingsTab({ inputCls, inputStyle }: { inputCls: string; inputStyle: R
     const res = await fetch("/api/pd/settings", {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        periods: periods.filter((p) => p.startTime && p.endTime),
+        periods: periods.filter((p) => p.startTime && p.endTime && (p.period !== null || p.label?.trim())),
         nonTeaching: nt.filter((n) => n.name && n.startDate && n.endDate),
         docs: docs.filter((d) => d.label && d.url),
       }),
@@ -504,28 +541,57 @@ function SettingsTab({ inputCls, inputStyle }: { inputCls: string; inputStyle: R
   return (
     <div className="space-y-5">
       <div className="card p-5">
-        <h3 className="text-h3 mb-1">節次時間</h3>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <h3 className="text-h3">節次時間</h3>
+          <button onClick={() => setPeriods(DEFAULT_PERIODS.map((p) => ({ ...p })))}
+            className="text-caption font-medium shrink-0" style={{ color: "var(--color-admin)" }}>
+            使用預設時間
+          </button>
+        </div>
         <p className="text-caption mb-3" style={{ color: "var(--color-ink-400)" }}>
           時間表只記錄「第幾節」，必須填上實際時間，衝突檢查先可以運作。留空的節次會被略過。
+          早會、周會等有名無節數的時段，喺「名稱」欄填上時間表上的寫法（例如 周會）。
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {periods.map((p, i) => (
-            <div key={p.period} className="flex items-center gap-2">
-              <span className="text-caption w-12 shrink-0" style={{ color: "var(--color-ink-500)" }}>第{p.period}節</span>
+            <div key={i} className="flex items-center gap-2">
+              {p.period !== null ? (
+                <span className="text-caption w-16 shrink-0" style={{ color: "var(--color-ink-500)" }}>第{p.period}節</span>
+              ) : (
+                <input placeholder="名稱" value={p.label ?? ""} className={inputCls} style={{ ...inputStyle, width: 64 }}
+                  onChange={(e) => setPeriods((prev) => prev.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+              )}
               <input type="time" value={p.startTime} className={inputCls} style={inputStyle}
                 onChange={(e) => setPeriods((prev) => prev.map((x, j) => j === i ? { ...x, startTime: e.target.value } : x))} />
               <input type="time" value={p.endTime} className={inputCls} style={inputStyle}
                 onChange={(e) => setPeriods((prev) => prev.map((x, j) => j === i ? { ...x, endTime: e.target.value } : x))} />
+              {p.period === null && (
+                <button onClick={() => setPeriods((prev) => prev.filter((_, j) => j !== i))}
+                  className="text-caption shrink-0" style={{ color: "var(--color-discipline)" }}>✕</button>
+              )}
             </div>
           ))}
         </div>
+        <button onClick={() => setPeriods((prev) => [...prev, { period: null, label: "", startTime: "", endTime: "" }])}
+          className="text-caption font-medium mt-2" style={{ color: "var(--color-admin)" }}>+ 新增特別時段</button>
       </div>
 
       <div className="card p-5">
         <h3 className="text-h3 mb-1">假期／考試期</h3>
-        <p className="text-caption mb-3" style={{ color: "var(--color-ink-400)" }}>
-          假期＝全日無課；考試期可設定「幾點後可外出」（例如 13:00）。
+        <p className="text-caption mb-2" style={{ color: "var(--color-ink-400)" }}>
+          假期＝全日無課；考試期可設定「幾點後可外出」（例如 13:00）。考試期請自行輸入。
         </p>
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <button onClick={() => importHolidays(false)} disabled={importing}
+            className="text-caption font-medium" style={{ color: "var(--color-admin)" }}>
+            {importing ? "匯入中…" : "從行事曆匯入假期"}
+          </button>
+          <button onClick={() => importHolidays(true)} disabled={importing}
+            className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+            匯入全部學校活動及假期
+          </button>
+          {importMsg && <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>{importMsg}</span>}
+        </div>
         <div className="space-y-2">
           {nt.map((n, i) => (
             <div key={i} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-center">

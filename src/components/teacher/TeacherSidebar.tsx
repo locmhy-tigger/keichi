@@ -41,6 +41,7 @@ const COMMITTEE_NAV = [
 const ADMIN_NAV: NavItem[] = [
   { href: "/teacher/admin/users",    label: "用戶管理", icon: UsersIcon  },
   { href: "/teacher/admin/students", label: "學生資料", icon: StudentIcon },
+  { href: "/teacher/admin/teachers", label: "教師資料", icon: UsersIcon },
   { href: "/teacher/admin/groups",   label: "群組管理", icon: GroupsIcon },
   { href: "/teacher/admin/agents",   label: "AI 助理管理", icon: AgentIcon },
   { href: "/teacher/admin/broadcast", label: "推送訊息", icon: BroadcastIcon },

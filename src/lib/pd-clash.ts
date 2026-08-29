@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { overlaps, type Window } from "@/lib/clash"
-import { getAllTeachers, getLatestTerm, matchTeacher, periodLabelOf, WEEKDAY_NAMES } from "@/lib/agent-timetable"
+import { getAllTeachers, getLatestTerm, periodLabelOf, WEEKDAY_NAMES } from "@/lib/agent-timetable"
+import { resolveAgainstTimetable } from "@/lib/teacher-match"
 
 // ─────────────────────────────────────────────────────────────
 // 教師進修 clash checking.
@@ -51,7 +52,8 @@ function hkWeekday(ymd: string): number {
 }
 
 export type CheckInput = {
-  teacherName: string
+  /** The account being checked — all three name fields are tried. */
+  teacher: { name: string | null; nameEn: string | null; timetableName: string | null }
   dates:       string[]   // YYYY-MM-DD
   startTime:   string     // "HH:MM"
   endTime:     string
@@ -78,19 +80,24 @@ export async function checkPdClashes(input: CheckInput): Promise<PdDayCheck[]> {
   }
 
   const periodWindow = new Map<number, Window>()
+  const namedWindow  = new Map<string, { window: Window; startTime: string; endTime: string }>()
   for (const p of periods) {
     const s = toMinutes(p.startTime), e = toMinutes(p.endTime)
-    if (s !== null && e !== null && e > s) periodWindow.set(p.period, windowFromMinutes(s, e))
+    if (s === null || e === null || e <= s) continue
+    const w = windowFromMinutes(s, e)
+    if (p.period !== null)  periodWindow.set(p.period, w)
+    else if (p.label)       namedWindow.set(p.label, { window: w, startTime: p.startTime, endTime: p.endTime })
   }
 
   // Timetables are keyed by free-text name. A teacher whose account name
   // differs from the CSV yields nothing — which must NOT read as "free".
   const allTeachers = term ? await getAllTeachers(term) : []
-  const match = matchTeacher(input.teacherName, allTeachers)
-  if (!term || match.notFound || match.candidates) {
-    return input.dates.map((date) => ({ date, kind: "no-data" as const, teacherName: input.teacherName }))
+  const match = resolveAgainstTimetable(input.teacher, allTeachers)
+  if (!term || !match.ok) {
+    const shown = input.teacher.name ?? input.teacher.nameEn ?? "—"
+    return input.dates.map((date) => ({ date, kind: "no-data" as const, teacherName: shown }))
   }
-  const resolved = match.matched!
+  const resolved = match.timetableName
 
   const lessons = await prisma.agentTimetable.findMany({
     where:  { teacherName: resolved, term },
@@ -122,9 +129,14 @@ export async function checkPdClashes(input: CheckInput): Promise<PdDayCheck[]> {
     for (const l of lessons.filter((x) => x.dayOfWeek === wd)) {
       const where = `${l.classCode ?? "—"} ${l.subject ?? ""}`.trim()
       if (l.period === 0) {
-        // A named slot (周會) has no clock time, so overlap can't be computed.
-        // Flag it rather than pass silently — the safe direction.
-        hits.push(`${periodLabelOf(l)}　${where}（時間未設定，請自行確認）`)
+        // Named slot (早會/周會): look its time up by label. If the admin
+        // hasn't given it one, flag it rather than pass silently.
+        const named = l.periodLabel ? namedWindow.get(l.periodLabel) : undefined
+        if (!named) {
+          hits.push(`${periodLabelOf(l)}　${where}（時間未設定，請自行確認）`)
+        } else if (overlaps(named.window, requested)) {
+          hits.push(`${periodLabelOf(l)}　${where}（${named.startTime}–${named.endTime}）`)
+        }
         continue
       }
       const w = periodWindow.get(l.period)

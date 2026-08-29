@@ -20,12 +20,13 @@ export async function POST(req: NextRequest) {
   const { teacherId, startDate, endDate, startTime, endTime } = schema.parse(await req.json())
 
   const teacher = await prisma.user.findUnique({
-    where: { id: teacherId }, select: { id: true, name: true },
+    where: { id: teacherId },
+    select: { id: true, name: true, nameEn: true, timetableName: true },
   })
   if (!teacher?.name) return NextResponse.json({ error: "找不到教師" }, { status: 404 })
 
   const dates  = datesInRange(startDate, endDate || startDate)
-  const checks = await checkPdClashes({ teacherName: teacher.name, dates, startTime, endTime })
+  const checks = await checkPdClashes({ teacher, dates, startTime, endTime })
 
   return NextResponse.json({ teacherName: teacher.name, checks })
 }

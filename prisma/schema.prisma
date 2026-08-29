@@ -170,6 +170,10 @@ model User {
   email         String    @unique
   name          String? // 中文姓名 (primary display name)
   nameEn        String? // 英文姓名 — helps match rosters pasted in either language
+  department    String? // 科組（電腦科、數學科…）
+  // Exact name used in the timetable CSV, when it differs from name/nameEn.
+  // AgentTimetable is keyed by free text, so this is the reliable bridge.
+  timetableName String?
   image         String?
   role          Role      @default(STUDENT)
   emailVerified DateTime?
@@ -935,9 +939,15 @@ enum NonTeachingType {
 // times, so nothing could compare a real request against a timetable. This
 // supplies the missing mapping; an admin fills it in once.
 model SchoolPeriod {
-  period    Int    @id // matches AgentTimetable.period
-  startTime String // "08:00"
-  endTime   String // "08:40"
+  id        String  @id @default(cuid())
+  // 1-10 for a numbered lesson; null for a named slot such as 早會 / 周會,
+  // which have real times but no lesson number.
+  period    Int?    @unique
+  label     String? // matches AgentTimetable.periodLabel for named slots
+  startTime String // "08:25"
+  endTime   String // "09:00"
+
+  @@index([label])
 }
 
 // 非上課日／考試期 — the schema had no concept of school being out.

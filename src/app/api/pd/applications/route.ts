@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
 
   const d = createSchema.parse(await req.json())
   const teacher = await prisma.user.findUnique({
-    where: { id: d.teacherId }, select: { id: true, name: true },
+    where: { id: d.teacherId },
+    select: { id: true, name: true, nameEn: true, timetableName: true },
   })
   if (!teacher?.name) return NextResponse.json({ error: "找不到教師" }, { status: 404 })
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   // read in context even if the timetable is re-uploaded afterwards.
   const dates  = datesInRange(d.startDate, d.endDate || d.startDate)
   const checks = await checkPdClashes({
-    teacherName: teacher.name, dates, startTime: d.startTime, endTime: d.endTime,
+    teacher, dates, startTime: d.startTime, endTime: d.endTime,
   })
 
   const created = await prisma.pdApplication.create({
