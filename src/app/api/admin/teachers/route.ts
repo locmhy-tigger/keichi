@@ -18,8 +18,8 @@ export async function GET() {
   const [teachers, term] = await Promise.all([
     prisma.user.findMany({
       where:   { role: { in: ["TEACHER", "ADMIN"] } },
-      select:  { id: true, name: true, nameEn: true, email: true, department: true, timetableName: true, role: true },
-      orderBy: [{ department: "asc" }, { name: "asc" }],
+      select:  { id: true, name: true, nameEn: true, email: true, departments: true, committees: true, timetableName: true, role: true },
+      orderBy: [{ name: "asc" }],
     }),
     getLatestTerm(),
   ])
