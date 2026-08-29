@@ -3,8 +3,9 @@ import { auth } from "@/lib/auth"
 import { isAdmin } from "@/lib/roles"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { splitTags } from "@/lib/school-org"
 
-// Bulk staff upsert (中文姓名 / 英文姓名 / 電郵 / 科組 / 時間表姓名).
+// Bulk staff upsert (中文姓名 / 英文姓名 / 電郵 / 科組 / 委員會 / 時間表姓名).
 // Keyed on email like the student importer, so re-pasting an updated sheet
 // edits the same accounts. New accounts are created as TEACHER; an existing
 // ADMIN keeps its role.
@@ -15,7 +16,10 @@ const schema = z.object({
     nameZh:        z.string().trim().max(100).optional().default(""),
     nameEn:        z.string().trim().max(100).optional().default(""),
     email:         z.string().trim().max(200).optional().default(""),
-    department:    z.string().trim().max(50).optional().default(""),
+    // 科組 and 委員會 arrive as one cell each so they survive an Excel paste;
+    // splitTags turns 「中文、電腦」 into a list.
+    departments:   z.string().trim().max(300).optional().default(""),
+    committees:    z.string().trim().max(600).optional().default(""),
     timetableName: z.string().trim().max(50).optional().default(""),
   })).max(300),
 })
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   for (const r of rows) {
     const email = r.email.toLowerCase()
-    if (!email && !r.nameZh && !r.nameEn && !r.department) continue
+    if (!email && !r.nameZh && !r.nameEn && !r.departments && !r.committees) continue
 
     if (!email) { results.push({ id: r.id, ok: false, message: "缺少電郵" }); continue }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -45,6 +49,9 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      const departments = splitTags(r.departments).slice(0, 20)
+      const committees  = splitTags(r.committees).slice(0, 40)
+
       const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true } })
 
       // Don't quietly promote a student account into staff.
@@ -59,7 +66,8 @@ export async function POST(req: NextRequest) {
           data: {
             ...(r.nameZh ? { name: r.nameZh } : {}),
             ...(r.nameEn ? { nameEn: r.nameEn } : {}),
-            department:    r.department    || null,
+            departments,
+            committees,
             timetableName: r.timetableName || null,
           },
         })
@@ -70,7 +78,8 @@ export async function POST(req: NextRequest) {
             email,
             name:          r.nameZh || r.nameEn,
             nameEn:        r.nameEn || null,
-            department:    r.department    || null,
+            departments,
+            committees,
             timetableName: r.timetableName || null,
             role:          "TEACHER",
           },

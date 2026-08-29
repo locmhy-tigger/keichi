@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { COMMITTEE_GROUPS, SUBJECTS, joinTags, splitTags } from "@/lib/school-org"
 
 // 教師資料 — the staff counterpart of 學生資料.
 // Columns: 中文姓名 → 英文姓名 → 電郵 → 科組 → 時間表姓名
@@ -21,16 +22,17 @@ type Row = {
   nameZh:        string
   nameEn:        string
   email:         string
-  department:    string
+  departments:   string
+  committees:    string
   timetableName: string
   match?:        Match
   status?:       { ok: boolean; message: string }
 }
 
-const FIELDS: Array<keyof Row> = ["nameZh", "nameEn", "email", "department", "timetableName"]
+const FIELDS: Array<keyof Row> = ["nameZh", "nameEn", "email", "departments", "committees", "timetableName"]
 
 const blank = (id: number): Row =>
-  ({ id, nameZh: "", nameEn: "", email: "", department: "", timetableName: "" })
+  ({ id, nameZh: "", nameEn: "", email: "", departments: "", committees: "", timetableName: "" })
 
 const VIA = { override: "指定", name: "中文姓名", nameEn: "英文姓名" } as const
 
@@ -61,7 +63,8 @@ export default function AdminTeachersPage() {
       nameZh:        t.name ?? "",
       nameEn:        t.nameEn ?? "",
       email:         t.email ?? "",
-      department:    t.department ?? "",
+      departments:   joinTags(t.departments ?? []),
+      committees:    joinTags(t.committees ?? []),
       timetableName: t.timetableName ?? "",
       match:         t.match,
     }))
@@ -116,8 +119,8 @@ export default function AdminTeachersPage() {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          rows: rows.map(({ id, nameZh, nameEn, email, department, timetableName }) =>
-            ({ id, nameZh, nameEn, email, department, timetableName })),
+          rows: rows.map(({ id, nameZh, nameEn, email, departments, committees, timetableName }) =>
+            ({ id, nameZh, nameEn, email, departments, committees, timetableName })),
         }),
       })
       if (!res.ok) {
@@ -167,7 +170,8 @@ export default function AdminTeachersPage() {
           <span>🧑‍🏫</span>
           <span>
             從 Excel 複製後，<strong>點擊任何一格再按 Ctrl+V</strong>。欄位順序：
-            <strong>中文姓名 → 英文姓名 → 電郵 → 科組 → 時間表姓名</strong>。
+            <strong>中文姓名 → 英文姓名 → 電郵 → 科組 → 委員會 → 時間表姓名</strong>。
+            科組同委員會可以揀多過一個 — 撳「＋」喺清單揀，或者直接打字（用「、」分隔）。
             {term
               ? <> 現時對照學期 <strong>{term}</strong>（{names.length} 個時間表姓名）。</>
               : <> 尚未上載時間表，未能顯示配對狀態。</>}
@@ -192,6 +196,7 @@ export default function AdminTeachersPage() {
                 <th className={th}>英文姓名</th>
                 <th className={th}>電郵</th>
                 <th className={th}>科組</th>
+                <th className={th}>委員會</th>
                 <th className={th}>時間表姓名</th>
                 <th className={th}>時間表配對</th>
                 <th className={th}>狀態</th>
@@ -202,14 +207,22 @@ export default function AdminTeachersPage() {
               {rows.map((r, idx) => (
                 <tr key={r.id} className={idx % 2 === 1 ? "bg-gray-50" : "bg-white"}>
                   <td className="text-center text-xs text-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="px-1 py-0.5"><input className={cell} placeholder="盧智明"
+                  <td className="px-1 py-0.5"><input className={cell} placeholder="陳大文"
                     value={r.nameZh} onChange={e => update(r.id, "nameZh", e.target.value)} /></td>
-                  <td className="px-1 py-0.5"><input className={cell} placeholder="LO CHI MING"
+                  <td className="px-1 py-0.5"><input className={cell} placeholder="CHAN TAI MAN"
                     value={r.nameEn} onChange={e => update(r.id, "nameEn", e.target.value)} /></td>
                   <td className="px-1 py-0.5"><input className={cell} placeholder="name@ga.keichi.edu.hk"
                     value={r.email} onChange={e => update(r.id, "email", e.target.value)} /></td>
-                  <td className="px-1 py-0.5"><input className={cell} style={{ minWidth: 80 }} placeholder="電腦科"
-                    value={r.department} onChange={e => update(r.id, "department", e.target.value)} /></td>
+                  <td className="px-1 py-0.5">
+                    <TagCell value={r.departments} placeholder="中文、電腦" minWidth={140}
+                      groups={[{ division: "科組", items: [...SUBJECTS] }]}
+                      onChange={v => update(r.id, "departments", v)} />
+                  </td>
+                  <td className="px-1 py-0.5">
+                    <TagCell value={r.committees} placeholder="訓育委員會" minWidth={180}
+                      groups={COMMITTEE_GROUPS}
+                      onChange={v => update(r.id, "committees", v)} />
+                  </td>
                   <td className="px-1 py-0.5">
                     <input className={cell} list="timetable-names" placeholder="（自動配對）"
                       value={r.timetableName} onChange={e => update(r.id, "timetableName", e.target.value)} />
@@ -275,6 +288,72 @@ export default function AdminTeachersPage() {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// 科組／委員會 — several values in one cell.
+//
+// Kept as a plain text input so an Excel paste still lands correctly and an
+// admin can type something that isn't on the list (a new 科組, a committee the
+// chart doesn't show). The ＋ button is a convenience on top of that, not a
+// replacement for it: ticking a box just edits the same text.
+function TagCell({ value, onChange, groups, placeholder, minWidth }: {
+  value:       string
+  onChange:    (v: string) => void
+  groups:      { division: string; items: string[] }[]
+  placeholder: string
+  minWidth:    number
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = splitTags(value)
+
+  function toggle(item: string) {
+    const next = selected.includes(item)
+      ? selected.filter(s => s !== item)
+      : [...selected, item]
+    onChange(joinTags(next))
+  }
+
+  return (
+    <div className="relative flex items-center gap-1">
+      <input
+        className="w-full bg-transparent px-2 py-1 text-sm rounded focus:bg-white focus:outline-2 focus:outline-[var(--color-accent)]"
+        style={{ minWidth }}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-6 h-6 shrink-0 flex items-center justify-center rounded text-xs"
+        style={{ color: open ? "var(--color-accent)" : "var(--color-ink-300)", background: open ? "#f0f4ff" : "transparent" }}
+        title="從清單選擇">＋</button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 top-full right-0 mt-1 p-2 rounded-lg border bg-white shadow-lg"
+            style={{ width: 280, maxHeight: 320, overflowY: "auto", borderColor: "var(--color-border)" }}>
+            {groups.map(g => (
+              <div key={g.division} className="mb-2">
+                {groups.length > 1 && (
+                  <p className="text-[10px] font-bold px-1 mb-1" style={{ color: "var(--color-ink-400)" }}>{g.division}</p>
+                )}
+                {g.items.map(item => (
+                  <label key={item} className="flex items-center gap-2 px-1 py-0.5 text-xs rounded cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={selected.includes(item)} onChange={() => toggle(item)} />
+                    <span style={{ color: "var(--color-ink-900)" }}>{item}</span>
+                  </label>
+                ))}
+              </div>
+            ))}
+            <button type="button" onClick={() => setOpen(false)}
+              className="w-full mt-1 py-1 text-xs rounded" style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}>
+              完成
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
