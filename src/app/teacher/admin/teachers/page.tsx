@@ -202,9 +202,9 @@ export default function AdminTeachersPage() {
               {rows.map((r, idx) => (
                 <tr key={r.id} className={idx % 2 === 1 ? "bg-gray-50" : "bg-white"}>
                   <td className="text-center text-xs text-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="px-1 py-0.5"><input className={cell} placeholder="盧智明"
+                  <td className="px-1 py-0.5"><input className={cell} placeholder="陳大文"
                     value={r.nameZh} onChange={e => update(r.id, "nameZh", e.target.value)} /></td>
-                  <td className="px-1 py-0.5"><input className={cell} placeholder="LO CHI MING"
+                  <td className="px-1 py-0.5"><input className={cell} placeholder="CHAN TAI MAN"
                     value={r.nameEn} onChange={e => update(r.id, "nameEn", e.target.value)} /></td>
                   <td className="px-1 py-0.5"><input className={cell} placeholder="name@ga.keichi.edu.hk"
                     value={r.email} onChange={e => update(r.id, "email", e.target.value)} /></td>
