@@ -5,7 +5,7 @@ import Link from "next/link"
 import { StaffPicker } from "@/components/teacher/StaffPicker"
 import { DEFAULT_PERIODS } from "@/lib/school-periods"
 
-type Staff = { id: string; name: string | null; email: string | null; image: string | null }
+type Staff = { id: string; name: string | null; nameEn: string | null; email: string | null; image: string | null }
 
 type Check =
   | { date: string; kind: "clear";          reason: string }
@@ -47,7 +47,9 @@ export default function PdPage() {
   const [denied, setDenied] = useState(false)
 
   useEffect(() => {
-    fetch("/api/users").then((r) => r.ok ? r.json() : []).then((d) => setStaff(Array.isArray(d) ? d : []))
+    // Loaded once and filtered in the browser, so ask for the whole staff list —
+    // the default limit is sized for a server-side type-ahead.
+    fetch("/api/users?take=500").then((r) => r.ok ? r.json() : []).then((d) => setStaff(Array.isArray(d) ? d : []))
     fetch("/api/pd/settings").then((r) => { if (r.status === 403) setDenied(true) })
   }, [])
 
