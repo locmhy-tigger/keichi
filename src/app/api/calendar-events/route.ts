@@ -1,9 +1,11 @@
-import { exec } from 'child_process'
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isTeacherOrAdmin } from "@/lib/roles"
+import { logToObsidian } from "@/lib/obsidian-log"
+import { createGoogleEvent, isConnected, fanOutCommitteeEvent } from "@/lib/google-calendar"
 import { z } from "zod"
+import { calendarVisibilityWhere } from "@/lib/committee"
 
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
@@ -11,7 +13,7 @@ const createSchema = z.object({
   endDate:     z.string().optional(),
   allDay:      z.boolean().default(true),
   description: z.string().optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT", "SCHOOL"]).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -32,11 +34,17 @@ export async function GET(req: NextRequest) {
     endFilter   = new Date(y, m, 1)
   }
 
+  // Audience filtering happens here, not in the UI, so events a user may not
+  // see never reach the client at all. Covers both the student cap
+  // (school-wide + 課外活動) and restricted committees such as 學生支援.
+  const visibility = await calendarVisibilityWhere(session.user.id, session.user.role)
+
   const events = await prisma.calendarEvent.findMany({
     where: {
       ...(startFilter && endFilter
         ? { startDate: { gte: startFilter, lt: endFilter } }
         : {}),
+      ...visibility,
     },
     orderBy: { startDate: "asc" },
     include: { author: { select: { id: true, name: true } } },
@@ -64,10 +72,29 @@ export async function POST(req: NextRequest) {
     include: { author: { select: { id: true, name: true } } },
   })
 
-  const logTitle = "Calendar Event Created"
-  const logContent = `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
-  const scriptPath = require('path').join(process.cwd(), "scripts", "save_to_obsidian.js")
-  exec(`node "${scriptPath}" "${logTitle}" "${logContent}"`)
+  logToObsidian(
+    "Calendar Event Created",
+    `Event "${event.title}" created by ${session.user.name} (${session.user.id})`
+  )
+
+  // Google Calendar sync — best-effort, but AWAITED. Fire-and-forget here
+  // silently breaks sync: the response ends the request context, so the
+  // promise gets dropped part-way through — the event reaches Google, but the
+  // googleEventId write-back never lands, leaving the event unlinked and
+  // impossible to update/delete on Google later.
+  try {
+    if (await isConnected(session.user.id)) {
+      await createGoogleEvent(session.user.id, event)
+    }
+    // Committee events also fan out to every other relevant connected teacher
+    // (SCHOOL → everyone; other committees → that committee's members)
+    if (event.committee) {
+      await fanOutCommitteeEvent(event)
+    }
+  } catch (err) {
+    // Never fail the request over a Google problem — the event is already saved.
+    console.error("[GCal] create sync error:", err)
+  }
 
   return NextResponse.json(event, { status: 201 })
 }

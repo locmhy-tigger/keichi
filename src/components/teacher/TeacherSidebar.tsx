@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
+import { NotificationBell } from "@/components/NotificationBell"
 
 type User = {
   name?: string | null
@@ -13,15 +14,18 @@ type User = {
   role?: string | null
 }
 
-const MAIN_NAV = [
-  { href: "/teacher",               label: "主頁",     icon: HomeIcon     },
-  { href: "/teacher/todos",         label: "待辦事項", icon: CheckIcon    },
-  { href: "/teacher/announcements", label: "公告",     icon: MegaphoneIcon},
-  { href: "/teacher/calendar",      label: "行事曆",   icon: CalendarIcon },
-  { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon },
-  { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon},
-  { href: "/teacher/points",        label: "積點",     icon: StarIcon     },
-  { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon    },
+type NavItem = { href: string; label: string; icon: ComponentType<{ color?: string }>; hidden?: boolean }
+
+const MAIN_NAV: NavItem[] = [
+  { href: "/teacher",               label: "主頁",     icon: HomeIcon       },
+  { href: "/teacher/todos",         label: "待辦事項", icon: CheckIcon      },
+  { href: "/teacher/announcements", label: "公告",     icon: MegaphoneIcon, hidden: true },
+  { href: "/teacher/calendar",      label: "行事曆",   icon: CalendarIcon   },
+  { href: "/teacher/activities",    label: "活動管理", icon: ActivityIcon,  hidden: true },
+  { href: "/teacher/missions",      label: "任務管理", icon: ClipboardIcon, hidden: true },
+  { href: "/teacher/points",        label: "積點",     icon: StarIcon,      hidden: true },
+  { href: "/teacher/prompts",       label: "提示詞庫", icon: PromptIcon     },
+  { href: "/teacher/agents",        label: "AI 助理",  icon: AgentIcon      },
 ]
 
 const COMMITTEE_NAV = [
@@ -30,15 +34,24 @@ const COMMITTEE_NAV = [
   { href: "/teacher/committee/it",         label: "資訊科技", icon: MonitorIcon,   color: "var(--color-it)"         },
   { href: "/teacher/committee/curriculum", label: "課程發展", icon: BookIcon,      color: "var(--color-curriculum)" },
   { href: "/teacher/committee/eca",        label: "課外活動", icon: ActivityIcon,  color: "var(--color-eca)"        },
+  // Only rendered for members/admins — see visibleRestricted below.
+  { href: "/teacher/committee/student-support", label: "學生支援", icon: SupportIcon, color: "var(--color-student-support)", restricted: "STUDENT_SUPPORT" },
 ]
 
-const ADMIN_NAV = [
-  { href: "/teacher/admin/users",   label: "用戶管理", icon: UsersIcon  },
-  { href: "/teacher/admin/groups",  label: "群組管理", icon: GroupsIcon },
-  { href: "/teacher/admin/agents",  label: "AI 助理管理", icon: AgentIcon },
+const ADMIN_NAV: NavItem[] = [
+  { href: "/teacher/admin/users",    label: "用戶管理", icon: UsersIcon  },
+  { href: "/teacher/admin/students", label: "學生資料", icon: StudentIcon },
+  { href: "/teacher/admin/teachers", label: "教師資料", icon: UsersIcon },
+  { href: "/teacher/admin/groups",   label: "群組管理", icon: GroupsIcon },
+  { href: "/teacher/admin/agents",   label: "AI 助理管理", icon: AgentIcon },
+  { href: "/teacher/admin/broadcast", label: "推送訊息", icon: BroadcastIcon },
+  { href: "/teacher/admin/audit",    label: "操作紀錄", icon: AuditIcon  },
+  { href: "/teacher/admin/settings", label: "系統設定", icon: SettingsIcon },
 ]
 
-export function TeacherSidebar({ user }: { user: User }) {
+export function TeacherSidebar(
+  { user, visibleRestricted = [] }: { user: User; visibleRestricted?: string[] },
+) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
@@ -56,21 +69,18 @@ export function TeacherSidebar({ user }: { user: User }) {
       className="flex flex-col h-full"
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
-      {/* Logo — replace /logo-placeholder.svg with your actual logo */}
+      {/* Logo */}
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
         <Image
           src="/logo.png"
-          alt="ICHI Logo"
+          alt="基智行政平台 Logo"
           width={32}
           height={32}
           priority
         />
         <div className="flex items-end gap-1.5">
           <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
-            基智若愚
-          </span>
-          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-            ICHI
+            基智行政平台
           </span>
         </div>
       </div>
@@ -81,7 +91,7 @@ export function TeacherSidebar({ user }: { user: User }) {
           導覽 · MENU
         </p>
         <ul className="space-y-0.5">
-          {MAIN_NAV.map(({ href, label, icon: Icon }) => (
+          {MAIN_NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -100,7 +110,9 @@ export function TeacherSidebar({ user }: { user: User }) {
           各組 · COMMITTEES
         </p>
         <ul className="space-y-0.5">
-          {COMMITTEE_NAV.map(({ href, label, icon: Icon, color }) => (
+          {COMMITTEE_NAV
+            .filter((n) => !("restricted" in n) || visibleRestricted.includes(n.restricted as string))
+            .map(({ href, label, icon: Icon, color }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -121,7 +133,7 @@ export function TeacherSidebar({ user }: { user: User }) {
               管理 · ADMIN
             </p>
             <ul className="space-y-0.5">
-              {ADMIN_NAV.map(({ href, label, icon: Icon }) => (
+              {ADMIN_NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
                 <li key={href}>
                   <Link
                     href={href}
@@ -166,6 +178,7 @@ export function TeacherSidebar({ user }: { user: User }) {
             {user.role === "ADMIN" ? "管理員" : "老師"}
           </p>
         </div>
+        <NotificationBell />
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           title="登出"
@@ -199,16 +212,14 @@ export function TeacherSidebar({ user }: { user: User }) {
           <MenuIcon />
         </button>
         <Image
-          src="/logo-placeholder.svg"
-          alt="ICHI Logo"
+          src="/logo.png"
+          alt="基智行政平台 Logo"
           width={24}
           height={24}
+          priority
         />
         <span className="font-semibold text-base" style={{ color: "var(--color-ink-900)" }}>
-          基智若愚
-        </span>
-        <span className="text-xs font-semibold" style={{ color: "var(--color-accent)" }}>
-          ICHI
+          基智行政平台
         </span>
       </div>
 
@@ -400,3 +411,60 @@ function AgentIcon() {
     </svg>
   )
 }
+
+function AuditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <path d="M14 2v6h6"/>
+      <path d="M9 13h6M9 17h4"/>
+    </svg>
+  )
+}
+
+function StudentIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+      <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+    </svg>
+  )
+}
+
+function SupportIcon({ color }: { color?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+    </svg>
+  )
+}
+
+function BroadcastIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 11v3a1 1 0 0 0 1 1h3l4 3V7L7 10H4a1 1 0 0 0-1 1z"/>
+      <path d="M16 9a4 4 0 0 1 0 6"/>
+      <path d="M19 6a8 8 0 0 1 0 12"/>
+    </svg>
+  )
+}
+
+function PromptIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6"/>
+      <path d="M10 22h4"/>
+      <path d="M12 2a6 6 0 0 0-4 10.47c.42.4.68.94.75 1.53H15.25c.07-.6.33-1.13.75-1.53A6 6 0 0 0 12 2z"/>
+    </svg>
+  )
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  )
+}
+

@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, type ComponentType } from "react"
 import { signOut } from "next-auth/react"
 import Image from "next/image"
+import { NotificationBell } from "@/components/NotificationBell"
 
 type User = {
   name?:  string | null
@@ -12,13 +13,16 @@ type User = {
   image?: string | null
 }
 
-const NAV = [
-  { href: "/student",            label: "主頁",     icon: HomeIcon     },
-  { href: "/student/activities", label: "我的活動", icon: CalendarIcon },
-  { href: "/student/calendar",   label: "行事曆",   icon: GridIcon     },
-  { href: "/student/missions",   label: "任務",     icon: MapIcon      },
-  { href: "/student/flashcards", label: "閃卡",     icon: CardIcon     },
-  { href: "/student/points",     label: "積點",     icon: StarIcon     },
+type NavItem = { href: string; label: string; icon: ComponentType<{ color?: string }>; hidden?: boolean }
+
+const NAV: NavItem[] = [
+  { href: "/student",            label: "主頁",     icon: HomeIcon      },
+  { href: "/student/activities", label: "我的活動", icon: CalendarIcon, hidden: true },
+  { href: "/student/calendar",   label: "行事曆",   icon: GridIcon      },
+  { href: "/student/missions",   label: "任務",     icon: MapIcon,      hidden: true },
+  { href: "/student/flashcards", label: "閃卡",     icon: CardIcon      },
+  { href: "/student/points",     label: "積點",     icon: StarIcon,     hidden: true },
+  { href: "/student/records",    label: "行為記錄", icon: RecordIcon    },
 ]
 
 export function StudentSidebar({ user }: { user: User }) {
@@ -40,13 +44,10 @@ export function StudentSidebar({ user }: { user: User }) {
       style={{ background: "var(--color-surface)", borderRight: "1px solid var(--color-border)" }}
     >
       <div className="px-5 pt-6 pb-4 flex items-center gap-2.5">
-        <Image src="/logo-placeholder.svg" alt="ICHI Logo" width={32} height={32} priority />
+        <Image src="/logo.png" alt="基智行政平台 Logo" width={32} height={32} priority />
         <div className="flex items-end gap-1.5">
           <span className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-ink-900)" }}>
-            基智若愚
-          </span>
-          <span className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-accent)", letterSpacing: "0.08em" }}>
-            ICHI
+            基智行政平台
           </span>
         </div>
       </div>
@@ -56,7 +57,7 @@ export function StudentSidebar({ user }: { user: User }) {
           導覽 · MENU
         </p>
         <ul className="space-y-0.5">
-          {NAV.map(({ href, label, icon: Icon }) => (
+          {NAV.filter((n) => !n.hidden).map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
@@ -91,6 +92,7 @@ export function StudentSidebar({ user }: { user: User }) {
             </p>
             <p className="text-[10px] truncate" style={{ color: "var(--color-ink-400)" }}>學生</p>
           </div>
+          <NotificationBell />
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             className="text-caption shrink-0 hover:opacity-70 transition-opacity"
@@ -122,8 +124,8 @@ export function StudentSidebar({ user }: { user: User }) {
             <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <Image src="/logo.png" alt="ICHI Logo" width={24} height={24} />
-        <span className="text-body font-semibold" style={{ color: "var(--color-ink-900)" }}>基智若愚</span>
+        <Image src="/logo.png" alt="基智行政平台 Logo" width={24} height={24} />
+        <span className="text-body font-semibold" style={{ color: "var(--color-ink-900)" }}>基智行政平台</span>
       </div>
 
       {/* Mobile drawer */}
@@ -144,3 +146,4 @@ function GridIcon()     { return <svg width="16" height="16" viewBox="0 0 24 24"
 function MapIcon()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg> }
 function CardIcon()     { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg> }
 function StarIcon()     { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg> }
+function RecordIcon()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 15l2 2 4-4" /></svg> }

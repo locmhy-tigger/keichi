@@ -7,7 +7,7 @@ import { z } from "zod"
 const createSchema = z.object({
   title:       z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]).optional(),
+  committee:   z.enum(["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]).optional(),
   dueDate:     z.string().datetime().optional(),
   assigneeIds: z.array(z.string()).default([]),
   classId:     z.string().optional(),
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   
   const { searchParams } = new URL(req.url)
   const status    = searchParams.get("status") as "OPEN" | "IN_PROGRESS" | "DONE" | null
-  const committee = searchParams.get("committee") as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | null
+  const committee = searchParams.get("committee") as "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | null
   const view      = searchParams.get("view") // "mine" | "assigned" | null (all)
 
   const statusFilter    = status    ? { status }    : {}
@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
 
   let whereClause: any = {}
 
-  if (session.user.role === "TEACHER") {
+  // STUDENT 只能看見分配給自己的待辦；TEACHER / ADMIN（教職員）則看自己建立或分配給自己的
+  const isStaff = isTeacherOrAdmin(session.user.role)
+
+  if (isStaff) {
     if (view === "mine") {
       whereClause = { createdById: session.user.id, ...statusFilter, ...committeeFilter }
     } else if (view === "assigned") {

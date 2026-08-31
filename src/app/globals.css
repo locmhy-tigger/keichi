@@ -50,6 +50,17 @@
   --color-eca-soft:   oklch(95% 0.025 300);
   --color-eca-border: oklch(82% 0.05 300);
 
+  /* Committee — 校曆及假期 (School events & holidays): blue */
+  --color-school:        oklch(52% 0.11 250);
+  --color-school-soft:   oklch(95% 0.025 250);
+  --color-school-border: oklch(82% 0.05 250);
+
+  /* 學生支援 — teal-green, clear of admin 55 / discipline 15 / it 195
+     / curriculum 145 / eca 300 / school 250 */
+  --color-student-support:        oklch(52% 0.11 170);
+  --color-student-support-soft:   oklch(95% 0.025 170);
+  --color-student-support-border: oklch(82% 0.05 170);
+
   /* Sidebar */
   --sidebar-width: 220px;
 }
@@ -93,6 +104,15 @@
   }
   .committee-border-eca {
     border-left: 3px solid var(--color-eca);
+  }
+  .committee-border-student-support {
+    border-left: 3px solid var(--color-student-support);
+  }
+  .committee-border-school {
+    border-left: 3px solid var(--color-school);
+  }
+  .committee-border-none {
+    border-left: 3px solid var(--color-border);
   }
 
   /* Sidebar nav item */

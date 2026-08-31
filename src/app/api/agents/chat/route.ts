@@ -5,16 +5,30 @@ import { streamLLM, completeLLM, type LLMMessage } from "@/lib/llm"
 import {
   loadCharter, parseRoute, parseDocReady, parseDocType,
   parseNeedsApproval, parseDocTitle, agentId, inferTitleFromContent,
-  parseNeedTool, stripToolMarkers, AGENT_DOC_TYPES, type AgentKey,
+  parseNeedTool, stripToolMarkers, parseDraft, stripDraftMarkers,
+  AGENT_DOC_TYPES, type AgentKey,
 } from "@/lib/agents"
 import { runAgentTool } from "@/lib/agent-tools"
+import { indexDocument } from "@/lib/knowledge-base"
+import { getRecentMemories, formatRecentMemories } from "@/lib/agent-memory"
 import { prisma } from "@/lib/prisma"
 import { pusherServer } from "@/lib/pusher"
+import { aiRateLimit } from "@/lib/rate-limit"
+import { hkNowLabel, hkYmd } from "@/lib/hk-date"
 
 async function pushEvent(userId: string, event: string, data: object) {
   try {
     await pusherServer.trigger(`private-user-${userId}`, event, data)
   } catch {}
+}
+
+
+// The model has no clock. Without this it cannot resolve 「下星期五」,
+// 「今個月」 or 「聽日」 at all — the single biggest reason date questions
+// used to fail. Hong Kong time, because the server runs UTC.
+function nowContext(): string {
+  return `\n\n---\n[現在時間]\n今日是 ${hkNowLabel()}（${hkYmd()}，香港時間）。` +
+    `\n處理「今日」「聽日」「下星期」「今個月」等相對日期時，一律以此為準，並在需要時換算成 YYYY-MM-DD。`
 }
 
 export async function POST(req: NextRequest) {
@@ -26,6 +40,9 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return new Response(JSON.stringify({ error: "伺服器未設定 ANTHROPIC_API_KEY，請聯絡 IT 主任。" }), { status: 503 })
   }
+
+  const limited = await aiRateLimit(session.user.id, session.user.role, "agents")
+  if (limited) return new Response(JSON.stringify(limited.body), { status: 429, headers: { ...limited.headers, "Content-Type": "application/json" } })
 
   const { messages } = (await req.json()) as { messages: LLMMessage[] }
 
@@ -44,7 +61,7 @@ export async function POST(req: NextRequest) {
         send({ agentId: "A01", status: "running" })
 
         const dispatcherReply = await completeLLM("claude", messages, {
-          system: loadCharter("dispatcher"), maxTokens: 512,
+          system: loadCharter("dispatcher") + nowContext(), maxTokens: 512,
         })
 
         await pushEvent(userId, "agent-status", { agentId: "A01", status: "done" })
@@ -64,7 +81,17 @@ export async function POST(req: NextRequest) {
         await pushEvent(userId, "agent-status", { agentId: specId, status: "running" })
         send({ agentId: specId, status: "running", route: routeKey })
 
-        let specialistSystem = loadCharter(routeKey)
+        let specialistSystem = loadCharter(routeKey) + nowContext()
+
+        // Cross-conversation memory: let the specialist see recent summaries
+        // from this teacher's other conversations. Best-effort — a failure
+        // here should never block the chat response.
+        try {
+          const recentMemories = await getRecentMemories(userId)
+          specialistSystem += formatRecentMemories(recentMemories)
+        } catch (err) {
+          console.error("[agents/chat] memory injection failed:", err)
+        }
 
         // Inject default templates for this agent's docTypes
         try {
@@ -96,7 +123,7 @@ export async function POST(req: NextRequest) {
           send({ agentId: specId, status: "running", tool: toolCall.tool })
           await pushEvent(userId, "agent-status", { agentId: specId, status: "running", tool: toolCall.tool })
 
-          const toolResult = await runAgentTool(toolCall)
+          const toolResult = await runAgentTool(toolCall, userId, session.user.role)
 
           workingMessages = [
             ...workingMessages,
@@ -119,14 +146,15 @@ export async function POST(req: NextRequest) {
         const docType       = parseDocType(fullText)
         const needsApproval = parseNeedsApproval(fullText)
         const docTitleTag   = parseDocTitle(fullText)
+        const draft         = parseDraft(fullText)   // proposed quick-create record (no DB write here)
 
-        const cleanContent = stripToolMarkers(
+        const cleanContent = stripDraftMarkers(stripToolMarkers(
           fullText
             .replace(/\[DOCREADY\]/g, "")
             .replace(/\[DOCTYPE:[^\]]+\]/g, "")
             .replace(/\[TITLE:[^\]]+\]/g, "")
             .replace(/\[NEEDS_APPROVAL\]/g, ""),
-        ).trim()
+        )).trim()
 
         const docTitle = docTitleTag ?? inferTitleFromContent(docType, cleanContent)
 
@@ -149,6 +177,23 @@ export async function POST(req: NextRequest) {
             })
             documentId = doc.id
 
+            // Fire-and-forget: index into the knowledge base for future RAG
+            // retrieval (search_knowledge_base tool, quiz-gen auto-retrieval).
+            // Never await — indexing must not add latency or failure risk to
+            // the chat response. isStudentData defaults false here: most
+            // agent-generated documents (exam papers, admin notices, meeting
+            // minutes) aren't student-identifying, but this is a judgment
+            // call — revisit if a docType that regularly embeds student names
+            // (e.g. individual parent notices) turns out to need it true.
+            indexDocument({
+              title: docTitle,
+              sourceType: "AGENT_DOCUMENT",
+              sourceId: doc.id,
+              ownerId: userId,
+              content: cleanContent,
+              isStudentData: false,
+            }).catch((err) => console.error("[agents/chat] knowledge-base indexing failed:", err))
+
             await prisma.agentAuditLog.create({
               data: { userId, action: "GENERATE", agentId: specId, engine: "claude", docType },
             })
@@ -159,7 +204,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        send({ agentId: specId, status: "done", docReady, documentId, docType, needsApproval, final: true })
+        send({ agentId: specId, status: "done", docReady, documentId, docType, needsApproval, draft, final: true })
         controller.close()
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)

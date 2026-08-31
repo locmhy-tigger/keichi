@@ -4,6 +4,24 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import type { LLMMessage } from "@/lib/llm"
 import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
+import { DraftActionCard, type Draft } from "@/components/teacher/DraftActionCard"
+import { KEIDA_SUGGESTIONS } from "@/lib/keida-suggestions"
+
+// Strip agent metadata markers from text shown to the user. Markers can
+// appear mid-stream (e.g. [NEED_TOOL:...] before a tool result and more
+// reply text follow) so each occurrence must be removed in place — cutting
+// at the first marker would discard everything the agent says afterward.
+function visibleText(raw: string): string {
+  return raw
+    .replace(/\[DRAFT:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[NEED_TOOL:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[DOCREADY\]/g, "")
+    .replace(/\[DOCTYPE:[^\]]+\]/g, "")
+    .replace(/\[TITLE:[^\]]+\]/g, "")
+    .replace(/\[NEEDS_APPROVAL\]/g, "")
+    .replace(/\[ROUTE:\w+\]/g, "")
+    .trim()
+}
 
 type AgentId = "A01" | "A02" | "A03" | "A04" | "A05" | "A06"
 
@@ -27,6 +45,7 @@ type StreamEvent = {
   documentId?: string
   docType?:   string
   needsApproval?: boolean
+  draft?:     Draft | null
   error?:     string
   route?:     string
 }
@@ -39,6 +58,7 @@ type DisplayMessage = {
   documentId?: string
   docType?: string
   needsApproval?: boolean
+  draft?:   Draft | null
 }
 
 export default function AgentsPage() {
@@ -124,7 +144,7 @@ export default function AgentsPage() {
               accumulated += ev.text
               setDisplay((prev) => {
                 const next = [...prev]
-                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: accumulated }
+                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: visibleText(accumulated) }
                 return next
               })
             }
@@ -135,17 +155,19 @@ export default function AgentsPage() {
       }
 
       if (finalEvent) {
-        setMessages((prev) => [...prev, { role: "assistant", content: accumulated }])
+        const cleanText = visibleText(accumulated)
+        setMessages((prev) => [...prev, { role: "assistant", content: cleanText }])
         setDisplay((prev) => {
           const next = [...prev]
           next[next.length - 1] = {
             role:          "agent",
             agentId:       lastAgentId ?? undefined,
-            text:          accumulated,
+            text:          cleanText,
             docReady:      finalEvent!.docReady,
             documentId:    finalEvent!.documentId,
             docType:       finalEvent!.docType,
             needsApproval: finalEvent!.needsApproval,
+            draft:         finalEvent!.draft ?? null,
           }
           return next
         })
@@ -203,12 +225,7 @@ export default function AgentsPage() {
           <div className="card p-6 text-center space-y-3">
             <p className="text-h3" style={{ color: "var(--color-ink-700)" }}>你好！有什麼可以幫到你？</p>
             <div className="flex flex-wrap gap-2 justify-center pt-2">
-              {[
-                "幫我出一份數學測驗",
-                "安排代課通告",
-                "夾 IT 組會議時間",
-                "製作課程單元計劃",
-              ].map((s) => (
+              {KEIDA_SUGGESTIONS.map((s) => (
                 <button key={s} onClick={() => { setInput(s); inputRef.current?.focus() }}
                   className="text-caption px-3 py-1.5 rounded-pill"
                   style={{ background: "var(--color-surface-2)", color: "var(--color-ink-600)" }}>
@@ -250,6 +267,7 @@ export default function AgentsPage() {
                   </Link>
                 </div>
               )}
+              {msg.draft && <DraftActionCard draft={msg.draft} />}
             </div>
           </div>
         ))}

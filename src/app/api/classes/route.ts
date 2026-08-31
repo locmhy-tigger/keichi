@@ -5,27 +5,36 @@ import { prisma } from "@/lib/prisma"
 import { generateClassCode } from "@/lib/class-code"
 import { z } from "zod"
 
-const createSchema = z.object({ name: z.string().min(1).max(50) })
+const createSchema = z.object({
+  name: z.string().min(1).max(50),
+  homeroomTeacherId: z.string().nullable().optional(),
+})
 
-// GET — list my classes (teacher: owned, student: enrolled)
+// GET — list classes (admin: all; teacher: owned; student: enrolled)
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  if (session.user.role === "TEACHER") {
-    const classes = await prisma.class.findMany({
-      where: { teacherId: session.user.id },
-      include: { _count: { select: { enrollments: true } } },
-      orderBy: { createdAt: "desc" },
+  // STUDENT：只看自己已加入的班
+  if (session.user.role === "STUDENT") {
+    const enrollments = await prisma.classEnrollment.findMany({
+      where: { studentId: session.user.id },
+      include: { class: { include: { teacher: { select: { name: true } } } } },
     })
-    return NextResponse.json(classes)
+    return NextResponse.json(enrollments.map((e) => e.class))
   }
 
-  const enrollments = await prisma.classEnrollment.findMany({
-    where: { studentId: session.user.id },
-    include: { class: { include: { teacher: { select: { name: true } } } } },
+  // TEACHER：自己擁有的班；ADMIN：全部班（群組管理用）
+  const where = session.user.role === "ADMIN" ? {} : { teacherId: session.user.id }
+  const classes = await prisma.class.findMany({
+    where,
+    include: {
+      _count: { select: { enrollments: true } },
+      homeroomTeacher: { select: { id: true, name: true, image: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
   })
-  return NextResponse.json(enrollments.map((e) => e.class))
+  return NextResponse.json(classes)
 }
 
 // POST — create class (teacher only)
@@ -36,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { name } = createSchema.parse(body)
+  const { name, homeroomTeacherId } = createSchema.parse(body)
 
   // Retry until unique code is generated
   let classCode: string
@@ -49,7 +58,15 @@ export async function POST(req: NextRequest) {
   } while (attempts < 10)
 
   const newClass = await prisma.class.create({
-    data: { name, classCode: classCode!, teacherId: session.user.id },
+    data: {
+      name,
+      classCode: classCode!,
+      teacherId: session.user.id,
+      homeroomTeacherId: homeroomTeacherId || undefined,
+    },
+    include: {
+      homeroomTeacher: { select: { id: true, name: true, image: true, email: true } },
+    },
   })
 
   return NextResponse.json(newClass, { status: 201 })

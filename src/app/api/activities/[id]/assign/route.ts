@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { findClashes, windowOf } from "@/lib/clash"
 
 const schema = z.object({
   studentIds:  z.array(z.string()).optional(),
@@ -83,28 +84,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ assigned: [], clashes: [] })
   }
 
-  // Clash detection
-  const activityEnd = activity.endTime ?? new Date(activity.startTime.getTime() + 60 * 60 * 1000)
+  // Clash detection — shared helper, which unlike the previous inline query
+  // also catches activities saved with a NULL endTime (SQL NULL never matched
+  // the old `endTime: { gt: ... }` filter, so those were silently ignored).
+  const hits = await findClashes(
+    targetStudentIds,
+    [windowOf(activity.startTime, activity.endTime)],
+    params.id,
+  )
 
-  const clashingAssignments = await prisma.activityAssignment.findMany({
-    where: {
-      studentId: { in: targetStudentIds },
-      activity: {
-        id:        { not: params.id },
-        startTime: { lt: activityEnd },
-        endTime:   { gt: activity.startTime },
-      },
-    },
-    include: {
-      student:  { select: { id: true, name: true } },
-      activity: { select: { id: true, title: true, startTime: true } },
-    },
-  })
+  const nameById = new Map(
+    (await prisma.user.findMany({
+      where:  { id: { in: hits.map((h) => h.studentId) } },
+      select: { id: true, name: true },
+    })).map((u) => [u.id, u.name]),
+  )
 
-  const clashes = clashingAssignments.map((a) => ({
-    studentId:   a.studentId,
-    studentName: a.student.name,
-    activity:    { id: a.activity.id, title: a.activity.title, startTime: a.activity.startTime },
+  const clashes = hits.map((h) => ({
+    studentId:   h.studentId,
+    studentName: nameById.get(h.studentId) ?? null,
+    activity:    { id: h.activityId, title: h.title, startTime: h.startTime },
   }))
 
   const clashingStudentIds = new Set(clashes.map((c) => c.studentId))

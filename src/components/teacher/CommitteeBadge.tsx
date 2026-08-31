@@ -1,4 +1,4 @@
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 
 const LABELS: Record<CommitteeType, string> = {
   ADMIN:      "行政",
@@ -6,6 +6,7 @@ const LABELS: Record<CommitteeType, string> = {
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
   ECA:        "課外活動",
+  STUDENT_SUPPORT: "學生支援",
 }
 
 const COLORS: Record<CommitteeType, { bg: string; text: string }> = {
@@ -14,9 +15,11 @@ const COLORS: Record<CommitteeType, { bg: string; text: string }> = {
   IT:         { bg: "var(--color-it-soft)",         text: "var(--color-it)"         },
   CURRICULUM: { bg: "var(--color-curriculum-soft)", text: "var(--color-curriculum)" },
   ECA:        { bg: "var(--color-eca-soft)",        text: "var(--color-eca)"        },
+  STUDENT_SUPPORT: { bg: "var(--color-student-support-soft)", text: "var(--color-student-support)" },
 }
 
-export function CommitteeBadge({ committee }: { committee: CommitteeType }) {
+export function CommitteeBadge({ committee }: { committee?: CommitteeType | null }) {
+  if (!committee || !COLORS[committee]) return null
   const { bg, text } = COLORS[committee]
   return (
     <span

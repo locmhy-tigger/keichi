@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -288,7 +289,12 @@ function TimetableTab() {
   const [term,     setTerm]     = useState("")
   const [csv,      setCsv]      = useState("")
   const [uploading, setUploading] = useState(false)
-  const [result,   setResult]   = useState<{ imported: number; errors: string[] } | null>(null)
+  // parseTimetableCsv returns {line, reason} objects, not strings — the old
+  // string[] annotation was wrong, so rendering them crashed the page
+  // (React error #31: objects are not valid as a React child).
+  type ParseError = { line: number; reason: string }
+  const [result,   setResult]   = useState<{ imported: number; errors: ParseError[] } | null>(null)
+  const [rejected, setRejected] = useState<ParseError[]>([])
   const [error,    setError]    = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -306,6 +312,7 @@ function TimetableTab() {
     setUploading(true)
     setResult(null)
     setError(null)
+    setRejected([])
 
     const res = await fetch("/api/agents/timetable/upload", {
       method:  "POST",
@@ -314,8 +321,14 @@ function TimetableTab() {
     })
 
     const data = await res.json()
-    if (res.ok) setResult(data)
-    else setError(data?.error ?? `錯誤 ${res.status}`)
+    if (res.ok) {
+      setResult(data); setRejected([])
+    } else {
+      setError(data?.error ?? `錯誤 ${res.status}`)
+      // A 400 carries the parse errors too; showing them is far more useful
+      // than "CSV 沒有有效資料" on its own.
+      setRejected(Array.isArray(data?.errors) ? data.errors : [])
+    }
     setUploading(false)
   }
 
@@ -340,7 +353,7 @@ function TimetableTab() {
         <ul className="mt-2 space-y-0.5">
           {[
             "dayOfWeek：1-5（星期一至五）",
-            "period：1-10",
+            "period：1-10，或填名稱（如「周會」）",
             "classCode、subject 可留空",
             "上載後會清除同一學期的舊資料再重新匯入",
           ].map((s) => (
@@ -379,7 +392,30 @@ function TimetableTab() {
           </div>
         )}
 
-        {error  && <p className="text-caption" style={{ color: "var(--color-discipline)" }}>{error}</p>}
+        {error && (
+          <div className="card p-3" style={{ borderLeft: "3px solid var(--color-discipline)" }}>
+            <p className="text-caption" style={{ color: "var(--color-discipline)" }}>{error}</p>
+            {rejected.length > 0 && (
+              <>
+                <p className="text-caption mt-2" style={{ color: "var(--color-ink-500)" }}>
+                  以下 {rejected.length} 行未能解析：
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {rejected.slice(0, 10).map((e, i) => (
+                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>
+                      第 {e.line} 行：{e.reason}
+                    </li>
+                  ))}
+                </ul>
+                {rejected.length > 10 && (
+                  <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>
+                    …另有 {rejected.length - 10} 行
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {result && (
           <div className="card p-4" style={{ borderLeft: "3px solid var(--color-curriculum)" }}>
@@ -392,10 +428,17 @@ function TimetableTab() {
                   {result.errors.length} 行有問題（已略過）：
                 </p>
                 <ul className="mt-1 space-y-0.5">
-                  {result.errors.slice(0, 5).map((e, i) => (
-                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>{e}</li>
+                  {result.errors.slice(0, 10).map((e, i) => (
+                    <li key={i} className="text-caption font-mono" style={{ color: "var(--color-ink-500)" }}>
+                      第 {e.line} 行：{e.reason}
+                    </li>
                   ))}
                 </ul>
+                {result.errors.length > 10 && (
+                  <p className="text-caption mt-1" style={{ color: "var(--color-ink-400)" }}>
+                    …另有 {result.errors.length - 10} 行
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -419,6 +462,8 @@ function ApprovalsTab() {
   const [actioning, setActioning] = useState<string | null>(null)
   const [rejectId,  setRejectId]  = useState<string | null>(null)
   const [reason,    setReason]    = useState("")
+  const [expanded,  setExpanded]  = useState<string | null>(null)
+  const [bodies,    setBodies]    = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch("/api/agents/approvals")
@@ -426,6 +471,18 @@ function ApprovalsTab() {
       .then(setApprovals)
       .finally(() => setLoading(false))
   }, [])
+
+  async function toggleBody(id: string) {
+    if (expanded === id) { setExpanded(null); return }
+    setExpanded(id)
+    if (!bodies[id]) {
+      const res = await fetch(`/api/agents/documents/${id}`)
+      if (res.ok) {
+        const doc = await res.json()
+        setBodies((prev) => ({ ...prev, [id]: doc.content ?? "" }))
+      }
+    }
+  }
 
   async function approve(id: string) {
     setActioning(id)
@@ -506,25 +563,44 @@ function ApprovalsTab() {
                   )}
                 </div>
 
-                {a.approvalStatus === "PENDING" && (
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => approve(a.id)}
-                      disabled={actioning === a.id}
-                      className="text-caption px-3 py-1.5 rounded-input text-white"
-                      style={{ background: "var(--color-curriculum)", opacity: actioning === a.id ? 0.6 : 1 }}>
-                      批核
-                    </button>
-                    <button
-                      onClick={() => { setRejectId(a.id); setReason("") }}
-                      disabled={actioning === a.id}
-                      className="text-caption px-3 py-1.5 rounded-input"
-                      style={{ background: "var(--color-discipline)15", color: "var(--color-discipline)" }}>
-                      退回
-                    </button>
-                  </div>
-                )}
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => toggleBody(a.id)}
+                    className="text-caption px-3 py-1.5 rounded-input border"
+                    style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}>
+                    {expanded === a.id ? "收合" : "檢視內容"}
+                  </button>
+                  {a.approvalStatus === "PENDING" && (
+                    <>
+                      <button
+                        onClick={() => approve(a.id)}
+                        disabled={actioning === a.id}
+                        className="text-caption px-3 py-1.5 rounded-input text-white"
+                        style={{ background: "var(--color-curriculum)", opacity: actioning === a.id ? 0.6 : 1 }}>
+                        批核
+                      </button>
+                      <button
+                        onClick={() => { setRejectId(a.id); setReason("") }}
+                        disabled={actioning === a.id}
+                        className="text-caption px-3 py-1.5 rounded-input"
+                        style={{ background: "var(--color-discipline)15", color: "var(--color-discipline)" }}>
+                        退回
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* Inline document body */}
+              {expanded === a.id && (
+                <div className="mt-3 pt-3 border-t rounded-input p-3" style={{ borderColor: "var(--color-border)", background: "var(--color-surface-2)" }}>
+                  {bodies[a.id] === undefined ? (
+                    <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>載入內容中…</p>
+                  ) : (
+                    <AgentMarkdown>{bodies[a.id]}</AgentMarkdown>
+                  )}
+                </div>
+              )}
 
               {/* Inline reject reason input */}
               {rejectId === a.id && (

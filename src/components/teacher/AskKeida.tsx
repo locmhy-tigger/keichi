@@ -4,8 +4,26 @@ import { useRef, useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { KEIDA_GREETING, isGreeting } from "@/lib/keida-greeting"
+import { KEIDA_SUGGESTIONS as SUGGESTIONS } from "@/lib/keida-suggestions"
 import type { LLMMessage } from "@/lib/llm"
 import { AgentMarkdown } from "@/components/teacher/AgentMarkdown"
+import { DraftActionCard, type Draft } from "@/components/teacher/DraftActionCard"
+
+// Strip agent metadata markers from text shown to the user. Markers can
+// appear mid-stream (e.g. [NEED_TOOL:...] before a tool result and more
+// reply text follow) so each occurrence must be removed in place — cutting
+// at the first marker would discard everything the agent says afterward.
+function visibleText(raw: string): string {
+  return raw
+    .replace(/\[DRAFT:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[NEED_TOOL:\w+\](\s*\{[\s\S]*?\})?/g, "")
+    .replace(/\[DOCREADY\]/g, "")
+    .replace(/\[DOCTYPE:[^\]]+\]/g, "")
+    .replace(/\[TITLE:[^\]]+\]/g, "")
+    .replace(/\[NEEDS_APPROVAL\]/g, "")
+    .replace(/\[ROUTE:\w+\]/g, "")
+    .trim()
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +49,7 @@ type StreamEvent = {
   documentId?:    string
   docType?:       string
   needsApproval?: boolean
+  draft?:         Draft | null
   error?:         string
 }
 
@@ -42,6 +61,7 @@ type DisplayMsg = {
   documentId?:    string
   docType?:       string
   needsApproval?: boolean
+  draft?:         Draft | null
 }
 
 type ConvoSummary = {
@@ -52,13 +72,6 @@ type ConvoSummary = {
 }
 
 type View = "chat" | "history"
-
-const SUGGESTIONS = [
-  "幫我出一份數學測驗",
-  "安排代課通告",
-  "夾 IT 組會議時間",
-  "製作課程單元計劃",
-]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -251,7 +264,7 @@ export function AskKeida() {
               accumulated += ev.text
               setDisplay((prev) => {
                 const next = [...prev]
-                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: accumulated }
+                next[next.length - 1] = { role: "agent", agentId: ev.agentId, text: visibleText(accumulated) }
                 return next
               })
             }
@@ -262,16 +275,18 @@ export function AskKeida() {
       }
 
       if (finalEvent) {
+        const cleanText = visibleText(accumulated)
         const finalMsg: DisplayMsg = {
           role:          "agent",
           agentId:       lastAgentId ?? undefined,
-          text:          accumulated,
+          text:          cleanText,
           docReady:      finalEvent.docReady,
           documentId:    finalEvent.documentId,
           docType:       finalEvent.docType,
           needsApproval: finalEvent.needsApproval,
+          draft:         finalEvent.draft ?? null,
         }
-        setMessages((prev) => [...prev, { role: "assistant", content: accumulated }])
+        setMessages((prev) => [...prev, { role: "assistant", content: cleanText }])
         setDisplay((prev) => {
           const next = [...prev]
           next[next.length - 1] = finalMsg
@@ -279,11 +294,11 @@ export function AskKeida() {
         })
 
         // Save assistant message
-        if (convId && accumulated) {
+        if (convId && cleanText) {
           await fetch(`/api/agents/conversations/${convId}/messages`, {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ role: "assistant", content: accumulated, agentId: lastAgentId }),
+            body:    JSON.stringify({ role: "assistant", content: cleanText, agentId: lastAgentId }),
           }).catch(() => {})
         }
       }
@@ -497,6 +512,9 @@ export function AskKeida() {
                               </Link>
                             </div>
                           )}
+
+                          {/* Quick-create confirmation card */}
+                          {msg.draft && <DraftActionCard draft={msg.draft} />}
                         </div>
                       </div>
                     ))}

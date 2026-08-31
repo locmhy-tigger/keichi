@@ -1,4 +1,4 @@
-import { isTeacherOrAdmin, canEditCommittee } from "@/lib/roles"
+import { isTeacherOrAdmin, isAdmin, canEditCommittee } from "@/lib/roles"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -39,6 +39,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const data = patchSchema.parse(await req.json())
+
+  // SECURITY: only ADMIN may create, become, or edit an HTML tool's markup.
+  if ((tool.type === "HTML" || data.type === "HTML") && !isAdmin(session.user.role)) {
+    return NextResponse.json({ error: "HTML 工具僅限管理員編輯" }, { status: 403 })
+  }
+
   const updated = await prisma.committeeTool.update({
     where: { id: params.id },
     data,

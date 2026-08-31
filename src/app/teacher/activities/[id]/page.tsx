@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
@@ -26,15 +26,26 @@ type Assignment = {
   student:    Student
 }
 
+type ActivityType = "ECA" | "ACADEMIC"
+
 type Activity = {
   id:          string
   title:       string
+  committee?:  string | null
+  approval?:   "PENDING" | "APPROVED" | "REJECTED"
+  rejectionReason?: string | null
   description: string | null
   startTime:   string
   endTime:     string | null
   location:    string | null
+  activityType: ActivityType | null
   assignments: Assignment[]
 }
+
+type DateSuggestion = { startTime: string; endTime: string | null; weekday: number }
+
+const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = { ECA: "課外活動", ACADEMIC: "學科活動" }
+const WEEKDAY_LABEL = ["日", "一", "二", "三", "四", "五", "六"]
 
 type Clash = {
   studentId:   string
@@ -71,16 +82,20 @@ function StudentSearch({ onAssign, existingIds }: {
   const [results, setResults] = useState<Student[]>([])
   const [selected, setSelected] = useState<Student[]>([])
   const [assigning, setAssigning] = useState(false)
+  // The dropdown is only shown once the teacher actually searches — it used to
+  // open on load (an empty query matches every student) and cover the page.
+  const [open, setOpen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const boxRef   = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch("/api/admin/classes").then(r => r.ok && r.json()).then(setClasses)
   }, [])
 
   const search = useCallback(async (q: string, cid: string) => {
-    let url = "/api/admin/users?"
-    if (q) url += `q=${encodeURIComponent(q)}&`
-    if (cid) url += `classId=${cid}`
+    // Nothing typed and no class picked: show nothing rather than the entire
+    // student body.
+    if (!q.trim() && !cid) { setResults([]); return }
     
     // We'll update the /api/admin/users to support these filters or use a search endpoint
     // For now, let's assume we use the admin users list and filter client-side if q/cid is small
@@ -110,6 +125,20 @@ function StudentSearch({ onAssign, existingIds }: {
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [query, classId, search])
 
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false) }
+    document.addEventListener("mousedown", onClick)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onClick)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [open])
+
   const inputStyle = { border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }
 
   return (
@@ -137,7 +166,7 @@ function StudentSearch({ onAssign, existingIds }: {
         <div className="w-full sm:w-40">
           <select
             value={classId}
-            onChange={(e) => setClassId(e.target.value)}
+            onChange={(e) => { setClassId(e.target.value); setOpen(true) }}
             className="w-full px-3 py-2 text-caption rounded-input border outline-none h-[38px]"
             style={inputStyle}
           >
@@ -145,20 +174,21 @@ function StudentSearch({ onAssign, existingIds }: {
             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={boxRef}>
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
             placeholder="搜尋姓名或學號…"
             className="w-full px-3 py-2 text-body rounded-input border outline-none text-caption h-[38px]"
             style={inputStyle}
           />
-          {results.length > 0 && (
+          {open && results.length > 0 && (
             <div className="absolute z-10 w-full mt-1 rounded-input shadow-card overflow-hidden max-h-60 overflow-y-auto"
               style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
               {results.slice(0, 20).map((u) => (
                 <button key={u.id} type="button"
-                  onClick={() => { setSelected((prev) => [...prev, u]); setQuery(""); setResults([]) }}
+                  onClick={() => { setSelected((prev) => [...prev, u]); setQuery(""); setResults([]); setOpen(false) }}
                   className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[var(--color-surface-2)] transition-colors">
                   <div>
                     <span className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>{u.name ?? u.email}</span>
@@ -273,12 +303,22 @@ function BulkAssignModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
 export default function ActivityDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+  const [deleting,  setDeleting]  = useState(false)
   const [activity,  setActivity]  = useState<Activity | null>(null)
   const [loading,   setLoading]   = useState(true)
   const [clashes,   setClashes]   = useState<Clash[]>([])
   const [alerting,  setAlerting]  = useState(false)
   const [alertDone, setAlertDone] = useState(false)
   const [showBulk,  setShowBulk]  = useState(false)
+
+  // Date suggestions (改期)
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestType, setSuggestType] = useState<ActivityType | "">("")
+  const [suggestions, setSuggestions] = useState<DateSuggestion[] | null>(null)
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [suggestMsg, setSuggestMsg] = useState<string | null>(null)
+  const [rescheduling, setRescheduling] = useState<string | null>(null)
 
   async function load() {
     const res = await fetch(`/api/activities/${id}`)
@@ -303,17 +343,146 @@ export default function ActivityDetailPage() {
     }
   }
 
+  // Deleting cascades to the attendance list, so say how many students are
+  // affected rather than a bare "are you sure".
+  async function deleteActivity() {
+    if (!activity) return
+    const n = activity.assignments.length
+    const warn = n > 0
+      ? `確定刪除「${activity.title}」？\n\n此活動的 ${n} 位學生出席記錄會一併刪除，且無法復原。`
+      : `確定刪除「${activity.title}」？此操作無法復原。`
+    if (!confirm(warn)) return
+
+    setDeleting(true)
+    const res = await fetch(`/api/activities/${id}`, { method: "DELETE" })
+    setDeleting(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? `刪除失敗 (${res.status})`)
+      return
+    }
+    router.push("/teacher/activities")
+  }
+
+  // Chair / admin sign-off for a directly-created activity.
+  async function review(action: "approve" | "reject") {
+    let reason: string | undefined
+    if (action === "reject") {
+      const r = window.prompt("退回原因（會通知建立者）：")
+      if (!r?.trim()) return
+      reason = r.trim()
+    } else if (!confirm("批核後學生即可看到此活動，並可發送提醒。確定批核？")) return
+
+    const res = await fetch(`/api/activities/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, rejectionReason: reason }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? "操作失敗")
+      return
+    }
+    window.alert(action === "approve" ? "已批核。" : "已退回。")
+    load()
+  }
+
   async function sendAlert() {
     setAlerting(true)
-    await fetch(`/api/activities/${id}/alert`, { method: "POST" })
+    const res = await fetch(`/api/activities/${id}/alert`, { method: "POST" })
     setAlerting(false)
+    if (!res.ok) {
+      // Don't show success for a send that reached nobody.
+      const d = await res.json().catch(() => ({}))
+      window.alert(d?.error ?? `發送失敗 (${res.status})`)
+      return
+    }
+    const { alerted } = await res.json().catch(() => ({ alerted: 0 }))
     setAlertDone(true)
+    window.alert(`已發送提醒給 ${alerted} 位學生。`)
   }
 
   function handleAssign(assigned: any, newClashes: Clash[]) {
     setClashes(newClashes)
     load()
     setShowBulk(false)
+  }
+
+  async function fetchSuggestions(typeOverride?: ActivityType) {
+    setSuggestLoading(true)
+    setSuggestMsg(null)
+    setSuggestions(null)
+    const qs = typeOverride ? `?type=${typeOverride}` : ""
+    const res = await fetch(`/api/activities/${id}/suggest-dates${qs}`)
+    setSuggestLoading(false)
+    if (res.status === 400) {
+      // Activity has no type set yet — ask the user to pick one.
+      setSuggestMsg("請先選擇活動類型，系統會依「課外→星期一二／學科→星期三至五」建議日期。")
+      return
+    }
+    if (!res.ok) { setSuggestMsg("暫時無法取得建議，請稍後再試。"); return }
+    const data = await res.json()
+    setSuggestions(data.suggestions ?? [])
+    if ((data.suggestions ?? []).length === 0) {
+      setSuggestMsg("未來 12 週內找不到「全部學生都有空」的合適日期，可嘗試調整名單或手動選日期。")
+    }
+  }
+
+  function openSuggest() {
+    setSuggestOpen(true)
+    setSuggestions(null)
+    setSuggestMsg(null)
+    if (activity?.activityType) {
+      setSuggestType(activity.activityType)
+      fetchSuggestions()
+    } else {
+      setSuggestType("")
+    }
+  }
+
+  async function rescheduleTo(s: DateSuggestion) {
+    if (!activity) return
+    setRescheduling(s.startTime)
+    // 1) Move the activity to the suggested date (keep time-of-day).
+    const patch = await fetch(`/api/activities/${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ startTime: s.startTime, endTime: s.endTime }),
+    })
+    if (!patch.ok) {
+      setRescheduling(null)
+      setSuggestMsg("改期失敗（可能非活動建立者）。")
+      return
+    }
+    // 2) Re-run clash detection for the existing roster at the new time.
+    const studentIds = activity.assignments.map((a) => a.studentId)
+    if (studentIds.length > 0) {
+      const res = await fetch(`/api/activities/${id}/assign`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ studentIds }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setClashes(data.clashes ?? [])
+      }
+    } else {
+      setClashes([])
+    }
+    setRescheduling(null)
+    setSuggestOpen(false)
+    setSuggestions(null)
+    load()
+  }
+
+  function formatSuggestion(s: DateSuggestion) {
+    const d = new Date(s.startTime)
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    let out = `${d.getMonth() + 1}月${d.getDate()}日（星期${WEEKDAY_LABEL[s.weekday]}）${time}`
+    if (s.endTime) {
+      const e = new Date(s.endTime)
+      out += `–${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}`
+    }
+    return out
   }
 
   if (loading) return <div className="p-6 text-center text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
@@ -327,8 +496,16 @@ export default function ActivityDetailPage() {
       <div>
         <Link href="/teacher/activities" className="text-caption mb-2 inline-block"
           style={{ color: "var(--color-ink-400)" }}>← 活動管理</Link>
-        <h1 className="text-h1">{activity.title}</h1>
-        <div className="flex gap-4 mt-1 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-h1">{activity.title}</h1>
+          {activity.activityType && (
+            <span className="text-caption px-2 py-0.5 rounded-pill"
+              style={{ background: "var(--color-accent-soft, #eff6ff)", color: "var(--color-accent)" }}>
+              {ACTIVITY_TYPE_LABEL[activity.activityType]}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-4 mt-1 flex-wrap items-center">
           <p className="text-body" style={{ color: "var(--color-ink-500)" }}>
             📅 {formatDateTime(activity.startTime)}
             {activity.endTime && ` — ${formatDateTime(activity.endTime)}`}
@@ -336,6 +513,16 @@ export default function ActivityDetailPage() {
           {activity.location && (
             <p className="text-body" style={{ color: "var(--color-ink-500)" }}>📍 {activity.location}</p>
           )}
+          <button onClick={openSuggest}
+            className="text-caption px-3 py-1 rounded-input border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-accent)" }}>
+            🗓 建議改期
+          </button>
+          <button onClick={deleteActivity} disabled={deleting}
+            className="text-caption px-3 py-1 rounded-input border"
+            style={{ border: "1px solid var(--color-discipline)", color: "var(--color-discipline)", opacity: deleting ? 0.5 : 1 }}>
+            {deleting ? "刪除中…" : "🗑 刪除活動"}
+          </button>
         </div>
         {activity.description && (
           <p className="text-body mt-2" style={{ color: "var(--color-ink-700)" }}>{activity.description}</p>
@@ -353,7 +540,63 @@ export default function ActivityDetailPage() {
               {c.studentName} — 與「{c.activity.title}」衝突
             </p>
           ))}
-          <button onClick={() => setClashes([])} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          <div className="flex gap-3 pt-1">
+            <button onClick={openSuggest} className="text-caption font-medium px-3 py-1 rounded-input text-white"
+              style={{ background: "var(--color-admin)" }}>
+              🗓 建議其他日期
+            </button>
+            <button onClick={() => setClashes([])} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          </div>
+        </div>
+      )}
+
+      {/* Date suggestion panel */}
+      {suggestOpen && (
+        <div className="card p-4 space-y-3" style={{ borderLeft: "4px solid var(--color-accent)" }}>
+          <div className="flex items-center justify-between">
+            <p className="text-body font-medium" style={{ color: "var(--color-ink-900)" }}>建議舉行日期</p>
+            <button onClick={() => setSuggestOpen(false)} className="text-caption" style={{ color: "var(--color-ink-400)" }}>關閉</button>
+          </div>
+
+          {/* If the activity has no type, ask the teacher to pick one first. */}
+          {!activity.activityType && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>活動類型：</span>
+              {(["ECA", "ACADEMIC"] as ActivityType[]).map((t) => (
+                <button key={t}
+                  onClick={() => { setSuggestType(t); fetchSuggestions(t) }}
+                  className="text-caption px-3 py-1 rounded-input border"
+                  style={{
+                    border: `1px solid ${suggestType === t ? "var(--color-accent)" : "var(--color-border)"}`,
+                    color:  suggestType === t ? "var(--color-accent)" : "var(--color-ink-700)",
+                  }}>
+                  {ACTIVITY_TYPE_LABEL[t]}（星期{t === "ECA" ? "一、二" : "三至五"}）
+                </button>
+              ))}
+            </div>
+          )}
+
+          {suggestLoading && <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>計算中…</p>}
+          {suggestMsg && <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>{suggestMsg}</p>}
+
+          {suggestions && suggestions.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>
+                以下日期全部學生都有空（保持原時間），撳一下即改期：
+              </p>
+              {suggestions.map((s) => (
+                <div key={s.startTime} className="flex items-center justify-between gap-3 p-2 rounded-input"
+                  style={{ background: "var(--color-surface-2)" }}>
+                  <span className="text-body" style={{ color: "var(--color-ink-900)" }}>{formatSuggestion(s)}</span>
+                  <button onClick={() => rescheduleTo(s)} disabled={rescheduling === s.startTime}
+                    className="text-caption font-medium px-3 py-1 rounded-input text-white shrink-0"
+                    style={{ background: "var(--color-accent)", opacity: rescheduling === s.startTime ? 0.6 : 1 }}>
+                    {rescheduling === s.startTime ? "改期中…" : "改到此日期"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -371,6 +614,39 @@ export default function ActivityDetailPage() {
         </div>
         <StudentSearch onAssign={handleAssign} existingIds={existingIds} />
       </div>
+
+      {/* Approval state — directly-created activities need a chair's sign-off
+          before students can see them. */}
+      {activity.approval && activity.approval !== "APPROVED" && (
+        <div className="card p-4 mb-4" style={{
+          borderLeft: `3px solid ${activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)"}`,
+        }}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-caption px-2 py-0.5 rounded-pill"
+              style={{
+                background: (activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)") + "20",
+                color:       activity.approval === "PENDING" ? "var(--color-admin)" : "var(--color-discipline)",
+              }}>
+              {activity.approval === "PENDING" ? "待批核" : "已退回"}
+            </span>
+            <p className="text-caption flex-1 min-w-0" style={{ color: "var(--color-ink-500)" }}>
+              {activity.approval === "PENDING"
+                ? "學生暫時看不到此活動，亦未能發送提醒。需由該組別主席或管理員批核。"
+                : `已退回：${activity.rejectionReason ?? "—"}`}
+            </p>
+            {activity.approval === "PENDING" && (
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => review("approve")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input text-white"
+                  style={{ background: "var(--color-curriculum)" }}>批核</button>
+                <button onClick={() => review("reject")}
+                  className="text-caption font-medium px-3 py-1.5 rounded-input"
+                  style={{ color: "var(--color-discipline)" }}>退回</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Student attendance list */}
       <div>

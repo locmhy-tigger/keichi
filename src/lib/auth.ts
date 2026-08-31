@@ -3,9 +3,25 @@ import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 import type { Role } from "@prisma/client"
 import type { Adapter } from "next-auth/adapters"
+
+// Bootstrap admins: emails listed in the ADMIN_EMAILS env var (comma-separated)
+// are always granted ADMIN on login — handy for Google Workspace SSO where
+// accounts are created on first sign-in. Kept out of source (public repo);
+// configure per-environment (e.g. Zeabur env vars).
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+)
+
+function isBootstrapAdmin(email?: string | null): boolean {
+  return !!email && ADMIN_EMAILS.has(email.toLowerCase())
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
@@ -19,6 +35,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId:  process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Request offline access so Google issues a refresh_token
+          access_type: "offline",
+          prompt: "consent",
+          scope: [
+            "openid",
+            "email",
+            "profile",
+          ].join(" "),
+        },
+      },
     }),
     Credentials({
       name: "帳號密碼",
@@ -29,9 +57,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
+        const email = credentials.email as string
+
+        // Throttle credential brute-force: max 10 attempts per email / 15 min.
+        const rl = await checkRateLimit(`login:${email.toLowerCase()}`, 10, 15 * 60 * 1000)
+        if (!rl.allowed) return null
+
+        const user = await prisma.user.findUnique({ where: { email } })
         if (!user?.password) return null
 
         const valid = await bcrypt.compare(
@@ -103,15 +135,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 refresh_token:     account.refresh_token ?? null,
               },
             })
+          } else if (account.refresh_token) {
+            // Update tokens on re-sign-in so we always have a fresh refresh_token
+            await prisma.account.update({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              data: {
+                access_token:  account.access_token,
+                expires_at:    account.expires_at,
+                refresh_token: account.refresh_token,
+              },
+            })
           }
         }
       }
       return true
     },
-    jwt({ token, user, account }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id   = user.id
-        token.role = (user as { role: Role }).role
+        let role   = (user as { role: Role }).role
+        // Bootstrap allowlist wins — force ADMIN and promote the DB row so
+        // other queries (which read User.role) see it too.
+        if (isBootstrapAdmin((user as { email?: string | null }).email)) {
+          role = "ADMIN"
+          if ((user as { role: Role }).role !== "ADMIN" && user.id) {
+            await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } }).catch(() => {})
+          }
+        }
+        token.role = role
       }
       if (account?.provider === "google") {
         token.accessToken = account.access_token

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { StaffPicker } from "@/components/teacher/StaffPicker"
 
 type GroupType = "FORM_CLASS" | "SUBJECT_CLASS" | "SPECIFIC"
 
@@ -16,14 +17,16 @@ const GROUP_TYPE_COLORS: Record<GroupType, string> = {
   SPECIFIC:      "bg-amber-50 text-amber-700 border-amber-200",
 }
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 const COMMITTEE_LABELS: Record<CommitteeType, string> = {
   ADMIN: "行政", DISCIPLINE: "訓育", IT: "資訊科技", CURRICULUM: "課程發展", ECA: "課外活動",
+  STUDENT_SUPPORT: "學生支援",
 }
 const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   ADMIN: "bg-blue-50 text-blue-700", DISCIPLINE: "bg-red-50 text-red-700",
   IT: "bg-green-50 text-green-700", CURRICULUM: "bg-yellow-50 text-yellow-700",
   ECA: "bg-purple-50 text-purple-700",
+  STUDENT_SUPPORT: "bg-teal-50 text-teal-700",
 }
 
 type CommitteeRole = { committee: CommitteeType; isChair: boolean }
@@ -46,18 +49,21 @@ type Group = {
   id: string
   name: string
   type: GroupType
+  committee?: CommitteeType | null
   description: string | null
   isClass?: boolean
   classCode?: string
+  homeroomTeacher?: { id: string; name: string | null; email: string | null; image: string | null } | null
+  teacher?: { id: string; name: string | null; email: string | null; image: string | null } | null
   _count: { members: number }
 }
 
-type GroupDetail = Group & { members: GroupMember[] }
+type GroupDetail = Group & { members: GroupMember[]; teacher?: { id: string; name: string | null; email: string | null; image: string | null } | null }
 
-type Student = { 
-  id: string; 
-  name: string | null; 
-  email: string | null; 
+type Student = {
+  id: string;
+  name: string | null;
+  email: string | null;
   image: string | null;
   enrollments?: {
     classNumber: string | null;
@@ -81,6 +87,7 @@ function Avatar({ name, image, size = 28 }: { name?: string | null; image?: stri
 export default function AdminGroupsPage() {
   const [tab, setTab] = useState<Tab>("COMMITTEE")
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [staff, setStaff] = useState<Teacher[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +100,7 @@ export default function AdminGroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupDetail | null>(null)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [showManageMembers, setShowManageMembers] = useState(false)
-  const [newGroup, setNewGroup] = useState({ name: "", type: "FORM_CLASS" as GroupType, description: "" })
+  const [newGroup, setNewGroup] = useState({ name: "", type: "FORM_CLASS" as GroupType, description: "", homeroomTeacherId: "", teacherId: "" })
   const [toast, setToast] = useState<string | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
@@ -108,9 +115,10 @@ export default function AdminGroupsPage() {
     if (uRes.ok) {
       const users = await uRes.json()
       setTeachers(users.filter((u: { role: string }) => u.role === "TEACHER"))
+      setStaff(users.filter((u: { role: string }) => u.role === "TEACHER" || u.role === "ADMIN"))
       setStudents(users.filter((u: { role: string }) => u.role === "STUDENT"))
     }
-    
+
     let allGroups: any[] = []
     if (gRes.ok) allGroups = [...await gRes.json()]
     if (cRes.ok) {
@@ -125,6 +133,7 @@ export default function AdminGroupsPage() {
           type: isFormClass ? "FORM_CLASS" : "SUBJECT_CLASS",
           isClass: true,
           classCode: c.classCode,
+          homeroomTeacher: c.homeroomTeacher ?? null,
           _count: { members: c._count?.enrollments ?? 0 }
         }
       })
@@ -138,36 +147,39 @@ export default function AdminGroupsPage() {
 
   async function createGroup() {
     if (!newGroup.name.trim()) return
-    
+
     // If it's a class type, we create a Class to ensure sync with points/missions
     const isClassType = newGroup.type === "FORM_CLASS" || newGroup.type === "SUBJECT_CLASS"
     const endpoint = isClassType ? "/api/classes" : "/api/admin/groups"
-    
+
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newGroup.name,
-        ...(isClassType ? {} : { type: newGroup.type, description: newGroup.description })
+        ...(isClassType
+          ? { homeroomTeacherId: newGroup.homeroomTeacherId || undefined }
+          : { type: newGroup.type, description: newGroup.description, teacherId: newGroup.teacherId || undefined })
       }),
     })
 
     if (res.ok) {
       const result = await res.json()
       if (isClassType) {
-        setGroups((prev) => [...prev, { 
-          id: result.id, 
-          name: result.name, 
-          type: newGroup.type, 
+        setGroups((prev) => [...prev, {
+          id: result.id,
+          name: result.name,
+          type: newGroup.type,
           description: null, // Ensure Group type consistency
           isClass: true,
           classCode: result.classCode,
-          _count: { members: 0 } 
+          homeroomTeacher: result.homeroomTeacher ?? null,
+          _count: { members: 0 }
         }])
       } else {
         setGroups((prev) => [...prev, { ...result, _count: { members: 0 } }])
       }
-      setNewGroup({ name: "", type: newGroup.type, description: "" })
+      setNewGroup({ name: "", type: newGroup.type, description: "", homeroomTeacherId: "", teacherId: "" })
       setShowCreateGroup(false)
       showToast(isClassType ? "班別已建立（具備積點與任務功能）" : "群組已建立")
     } else {
@@ -188,11 +200,16 @@ export default function AdminGroupsPage() {
 
   async function openManageMembers(group: any) {
     if (group.isClass) {
-      const res = await fetch(`/api/classes/${group.id}/members`)
-      if (res.ok) {
-        const members = await res.json()
+      const [memRes, clsRes] = await Promise.all([
+        fetch(`/api/classes/${group.id}/members`),
+        fetch(`/api/classes/${group.id}`),
+      ])
+      if (memRes.ok) {
+        const members = await memRes.json()
+        const cls = clsRes.ok ? await clsRes.json() : null
         setSelectedGroup({
           ...group,
+          homeroomTeacher: cls?.homeroomTeacher ?? null,
           members: members.map((m: any) => ({
             id: m.id,
             user: m.student
@@ -211,10 +228,10 @@ export default function AdminGroupsPage() {
 
   async function addMember(userId: string) {
     if (!selectedGroup) return
-    const endpoint = selectedGroup.isClass 
-      ? `/api/classes/${selectedGroup.id}/members` 
+    const endpoint = selectedGroup.isClass
+      ? `/api/classes/${selectedGroup.id}/members`
       : `/api/admin/groups/${selectedGroup.id}/members`
-    
+
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -223,9 +240,9 @@ export default function AdminGroupsPage() {
     if (res.ok) {
       const result = await res.json()
       const newUser = selectedGroup.isClass ? result.student : result.user
-      setSelectedGroup((prev: any) => prev ? { 
-        ...prev, 
-        members: [...prev.members, { id: result.id, user: newUser }] 
+      setSelectedGroup((prev: any) => prev ? {
+        ...prev,
+        members: [...prev.members, { id: result.id, user: newUser }]
       } : null)
       setGroups((prev) => prev.map((g) => g.id === selectedGroup.id ? { ...g, _count: { members: g._count.members + 1 } } : g))
     }
@@ -236,11 +253,62 @@ export default function AdminGroupsPage() {
     const endpoint = selectedGroup.isClass
       ? `/api/classes/${selectedGroup.id}/members?userId=${userId}`
       : `/api/admin/groups/${selectedGroup.id}/members?userId=${userId}`
-    
+
     const res = await fetch(endpoint, { method: "DELETE" })
     if (res.status === 204 || res.ok) {
       setSelectedGroup((prev: any) => prev ? { ...prev, members: prev.members.filter((m: any) => m.user.id !== userId) } : null)
       setGroups((prev) => prev.map((g) => g.id === selectedGroup.id ? { ...g, _count: { members: g._count.members - 1 } } : g))
+    }
+  }
+
+  async function setHomeroom(teacherId: string | null) {
+    if (!selectedGroup?.isClass) return
+    const res = await fetch(`/api/classes/${selectedGroup.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ homeroomTeacherId: teacherId }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setSelectedGroup((prev: any) => prev ? { ...prev, homeroomTeacher: updated.homeroomTeacher ?? null } : prev)
+      showToast(teacherId ? "已指派班主任" : "已清除班主任")
+    } else {
+      showToast("更新失敗，請重試")
+    }
+  }
+
+  async function setGroupTeacher(teacherId: string | null) {
+    if (!selectedGroup || selectedGroup.isClass) return
+    const res = await fetch(`/api/admin/groups/${selectedGroup.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teacherId }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setSelectedGroup((prev: any) => prev ? { ...prev, teacher: updated.teacher ?? null } : prev)
+      showToast(teacherId ? "已指派負責老師" : "已清除負責老師")
+    } else {
+      showToast("更新失敗，請重試")
+    }
+  }
+
+  // Tag the group with a committee — this is what grants its members access to
+  // that committee's calendar (see visibleRestrictedCommittees in lib/committee).
+  async function setGroupCommittee(committee: string | null) {
+    if (!selectedGroup || selectedGroup.isClass) return
+    const res = await fetch(`/api/admin/groups/${selectedGroup.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ committee }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setSelectedGroup((prev: any) => prev ? { ...prev, committee: updated.committee ?? null } : prev)
+      setGroups((prev: any[]) => prev.map((g) => g.id === selectedGroup.id ? { ...g, committee: updated.committee ?? null } : g))
+      showToast(committee ? "已設定所屬組別" : "已清除所屬組別")
+    } else {
+      showToast("更新失敗，請重試")
     }
   }
 
@@ -279,7 +347,7 @@ export default function AdminGroupsPage() {
   }
 
   const filteredGroups = groups.filter((g) => g.type === activeGroupType)
-  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA"]
+  const COMMITTEES: CommitteeType[] = ["ADMIN", "DISCIPLINE", "IT", "CURRICULUM", "ECA", "STUDENT_SUPPORT"]
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -292,7 +360,7 @@ export default function AdminGroupsPage() {
       <div className="mb-6">
         <h1 className="text-h1">群組管理</h1>
         <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>
-          管理委員會成員及學生分組
+          管理委員會成員及班級分組
         </p>
       </div>
 
@@ -309,7 +377,7 @@ export default function AdminGroupsPage() {
             }`}
             style={{ color: tab === t ? "var(--color-accent)" : "var(--color-ink-500)", borderBottomColor: tab === t ? "var(--color-accent)" : "transparent" }}
           >
-            {t === "COMMITTEE" ? "委員會成員" : "學生分組"}
+            {t === "COMMITTEE" ? "委員會成員" : "班級分組"}
           </button>
         ))}
       </div>
@@ -447,6 +515,16 @@ export default function AdminGroupsPage() {
                   ) : null}
                   <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
                     {group._count.members} 位成員
+                    {group.isClass && group.homeroomTeacher && (
+                      <span className="ml-2" style={{ color: "var(--color-accent)" }}>
+                        · 班主任：{group.homeroomTeacher.name ?? group.homeroomTeacher.email}
+                      </span>
+                    )}
+                    {!group.isClass && group.teacher && (
+                      <span className="ml-2" style={{ color: "var(--color-accent)" }}>
+                        · 負責老師：{group.teacher.name ?? group.teacher.email}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -482,13 +560,34 @@ export default function AdminGroupsPage() {
                 className="w-full border rounded-input px-3 py-2 text-body"
                 style={{ borderColor: "var(--color-border)" }}
               />
-              <input
-                value={newGroup.description}
-                onChange={(e) => setNewGroup((v) => ({ ...v, description: e.target.value }))}
-                placeholder="備注說明（選填）"
-                className="w-full border rounded-input px-3 py-2 text-body"
-                style={{ borderColor: "var(--color-border)" }}
-              />
+              {(activeGroupType === "FORM_CLASS" || activeGroupType === "SUBJECT_CLASS") ? (
+                <StaffPicker
+                  staff={staff}
+                  selectedId={newGroup.homeroomTeacherId}
+                  onSelect={(id) => setNewGroup((v) => ({ ...v, homeroomTeacherId: id }))}
+                  placeholder="指派班主任"
+                  emptyHint="點擊從教職員中選擇"
+                  badge="班主任"
+                />
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    value={newGroup.description}
+                    onChange={(e) => setNewGroup((v) => ({ ...v, description: e.target.value }))}
+                    placeholder="備注說明（選填）"
+                    className="w-full border rounded-input px-3 py-2 text-body"
+                    style={{ borderColor: "var(--color-border)" }}
+                  />
+                  <StaffPicker
+                    staff={staff}
+                    selectedId={newGroup.teacherId}
+                    onSelect={(id) => setNewGroup((v) => ({ ...v, teacherId: id }))}
+                    placeholder="指派負責老師"
+                    emptyHint="點擊從教職員中選擇"
+                    badge="負責老師"
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <button onClick={() => setShowCreateGroup(false)} className="flex-1 py-2 rounded-input border text-sm" style={{ borderColor: "var(--color-border)" }}>
                   取消
@@ -520,9 +619,13 @@ export default function AdminGroupsPage() {
         <ManageMembersModal
           group={selectedGroup}
           allStudents={students}
+          allStaff={staff}
           onClose={() => { setShowManageMembers(false); setSelectedGroup(null) }}
           onAdd={addMember}
           onRemove={removeMember}
+          onSetHomeroom={setHomeroom}
+          onSetGroupTeacher={setGroupTeacher}
+          onSetGroupCommittee={setGroupCommittee}
         />
       )}
     </div>
@@ -530,13 +633,17 @@ export default function AdminGroupsPage() {
 }
 
 function ManageMembersModal({
-  group, allStudents, onClose, onAdd, onRemove,
+  group, allStudents, allStaff, onClose, onAdd, onRemove, onSetHomeroom, onSetGroupTeacher, onSetGroupCommittee,
 }: {
   group: GroupDetail
   allStudents: Student[]
+  allStaff: Teacher[]
   onClose: () => void
   onAdd: (userId: string) => Promise<void>
   onRemove: (userId: string) => Promise<void>
+  onSetHomeroom: (teacherId: string | null) => Promise<void>
+  onSetGroupTeacher: (teacherId: string | null) => Promise<void>
+  onSetGroupCommittee: (committee: string | null) => Promise<void>
 }) {
   const [search, setSearch] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
@@ -578,6 +685,60 @@ function ManageMembersModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* 班主任（僅 Class-backed 班別；每班一位） */}
+          {group.isClass && (
+            <div>
+              <p className="text-caption font-medium mb-2" style={{ color: "var(--color-ink-500)" }}>
+                班主任
+              </p>
+              <StaffPicker
+                staff={allStaff}
+                selectedId={group.homeroomTeacher?.id ?? ""}
+                onSelect={(id) => onSetHomeroom(id || null)}
+                badge="班主任"
+              />
+            </div>
+          )}
+
+          {/* 負責老師（非 Class 群組） */}
+          {!group.isClass && (
+            <div>
+              <p className="text-caption font-medium mb-2" style={{ color: "var(--color-ink-500)" }}>
+                負責老師
+              </p>
+              <StaffPicker
+                staff={allStaff}
+                selectedId={group.teacher?.id ?? ""}
+                onSelect={(id) => onSetGroupTeacher(id || null)}
+                badge="負責老師"
+              />
+            </div>
+          )}
+
+          {/* 所屬組別 — tagging a group with a committee grants its members
+              access to that committee's calendar (e.g. 學生支援). */}
+          {!group.isClass && (
+            <div>
+              <p className="text-caption font-medium mb-2" style={{ color: "var(--color-ink-500)" }}>
+                所屬組別（行事曆權限）
+              </p>
+              <select
+                value={group.committee ?? ""}
+                onChange={(e) => onSetGroupCommittee(e.target.value || null)}
+                className="w-full px-3 py-2 text-body rounded-input border"
+                style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
+              >
+                <option value="">— 沒有 —</option>
+                {(Object.keys(COMMITTEE_LABELS) as CommitteeType[]).map((c) => (
+                  <option key={c} value={c}>{COMMITTEE_LABELS[c]}</option>
+                ))}
+              </select>
+              <p className="text-[11px] mt-1" style={{ color: "var(--color-ink-400)" }}>
+                設定後，此群組的成員可查看該組別的行事曆項目（如「學生支援」等私隱組別）。
+              </p>
+            </div>
+          )}
+
           {/* Current members */}
           <div>
             <p className="text-caption font-medium mb-2" style={{ color: "var(--color-ink-500)" }}>

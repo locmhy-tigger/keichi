@@ -1,9 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, Suspense } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+const GoogleCalendarSettings = dynamic(
+  () => import("@/components/GoogleCalendarSettings"),
+  { ssr: false, loading: () => null }
+)
+
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "SCHOOL"
 
 type CalendarEvent = {
   id:          string
@@ -23,6 +29,8 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
   ECA:        "var(--color-eca)",
+  STUDENT_SUPPORT: "var(--color-student-support)",
+  SCHOOL:     "var(--color-school)",
 }
 
 const COMMITTEE_LABELS: Record<CommitteeType, string> = {
@@ -31,6 +39,8 @@ const COMMITTEE_LABELS: Record<CommitteeType, string> = {
   IT:         "資訊科技",
   CURRICULUM: "課程發展",
   ECA:        "課外活動",
+  STUDENT_SUPPORT: "學生支援",
+  SCHOOL:     "學校活動及假期",
 }
 
 const DAYS = ["日", "一", "二", "三", "四", "五", "六"]
@@ -107,9 +117,20 @@ export default function CalendarPage() {
   const icsInputRef  = useRef<HTMLInputElement>(null)
   const [importCommittee, setImportCommittee] = useState<CommitteeType | "">("")
   const [importing,    setImporting]    = useState(false)
+  // Committee options come from the server: 學生支援 must only be offered to
+  // its members, or a teacher could tag an event they then cannot see.
+  const [committeeOptions, setCommitteeOptions] = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    fetch("/api/committees")
+      .then((r) => r.ok ? r.json() : { committees: [] })
+      .then((d) => setCommitteeOptions(d.committees ?? []))
+      .catch(() => {})
+  }, [])
   const [importResult, setImportResult] = useState<IcsImportResult | null>(null)
 
   // Modal state
+  const [showGCalPanel, setShowGCalPanel] = useState(false)
   const [showCreate, setShowCreate]   = useState(false)
   const [selectedDay, setSelectedDay] = useState("")
   const [editEvent,   setEditEvent]   = useState<CalendarEvent | null>(null)
@@ -175,6 +196,11 @@ export default function CalendarPage() {
       if (res.ok) {
         const updated: CalendarEvent = await res.json()
         setEvents((prev) => prev.map((ev) => ev.id === updated.id ? updated : ev))
+      } else {
+        // Surface the failure — silently closing the form looks like it saved.
+        setSaving(false)
+        window.alert(res.status === 403 ? "你沒有權限編輯此活動。" : `儲存失敗 (${res.status})`)
+        return
       }
     } else {
       const res = await fetch("/api/calendar-events", {
@@ -185,6 +211,10 @@ export default function CalendarPage() {
       if (res.ok) {
         const created: CalendarEvent = await res.json()
         setEvents((prev) => [...prev, created])
+      } else {
+        setSaving(false)
+        window.alert(res.status === 403 ? "你沒有權限新增活動。" : `儲存失敗 (${res.status})`)
+        return
       }
     }
     setSaving(false)
@@ -192,8 +222,15 @@ export default function CalendarPage() {
   }
 
   async function deleteEvent(id: string) {
+    // Remove from the UI only after the server confirms — an optimistic
+    // removal makes a failed delete (e.g. 403) look like it worked until
+    // the next refresh.
+    const res = await fetch(`/api/calendar-events/${id}`, { method: "DELETE" })
+    if (!res.ok) {
+      window.alert(res.status === 403 ? "你沒有權限刪除此活動。" : `刪除失敗 (${res.status})`)
+      return
+    }
     setEvents((prev) => prev.filter((ev) => ev.id !== id))
-    await fetch(`/api/calendar-events/${id}`, { method: "DELETE" })
     setShowCreate(false)
   }
 
@@ -296,7 +333,7 @@ export default function CalendarPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-h1">全校行事曆</h1>
           <p className="text-body mt-0.5" style={{ color: "var(--color-ink-500)" }}>共 {events.length} 個活動</p>
@@ -310,12 +347,10 @@ export default function CalendarPage() {
               className="bg-transparent text-caption py-1.5 outline-none font-medium"
               style={{ color: "var(--color-ink-700)" }}
             >
-              <option value="">— 全校 —</option>
-              <option value="ADMIN">行政</option>
-              <option value="DISCIPLINE">訓育</option>
-              <option value="IT">資訊科技</option>
-              <option value="CURRICULUM">課程發展</option>
-              <option value="ECA">課外活動</option>
+              <option value="">— 沒有 —</option>
+              {committeeOptions.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
             </select>
             <button
               onClick={() => icsInputRef.current?.click()}
@@ -341,6 +376,27 @@ export default function CalendarPage() {
             匯出 .ics
           </button>
           <button
+            onClick={() => setShowGCalPanel((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-input text-body border transition-colors"
+            style={{
+              border: "1px solid var(--color-border)",
+              color: showGCalPanel ? "var(--color-accent)" : "var(--color-ink-700)",
+              background: showGCalPanel ? "var(--color-accent-soft)" : "var(--color-surface)",
+            }}
+            title="Google Calendar 同步設定"
+          >
+            {/* Google Calendar icon */}
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="3" fill="#1a73e8"/>
+              <rect x="3.5" y="5.5" width="17" height="15" rx="1" fill="white"/>
+              <rect x="3.5" y="5.5" width="17" height="4.5" rx="1" fill="#1a73e8"/>
+              <rect x="7" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <rect x="15" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <text x="12" y="18" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#1a73e8">{new Date().getDate()}</text>
+            </svg>
+            <span className="hidden sm:inline">Google 同步</span>
+          </button>
+          <button
             onClick={() => openCreate()}
             className="px-4 py-2 rounded-input text-body font-medium text-white"
             style={{ background: "var(--color-accent)" }}
@@ -349,6 +405,15 @@ export default function CalendarPage() {
           </button>
         </div>
       </div>
+
+      {/* Google Calendar settings panel — slides in under header */}
+      {showGCalPanel && (
+        <div className="mb-6">
+          <Suspense fallback={null}>
+            <GoogleCalendarSettings />
+          </Suspense>
+        </div>
+      )}
 
       {/* Import result */}
       {importResult && (
@@ -577,12 +642,10 @@ export default function CalendarPage() {
               <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>所屬組別（選填）</label>
               <select value={formCommittee} onChange={(e) => setFormCommittee(e.target.value as CommitteeType | "")}
                 className={inputCls} style={inputStyle}>
-                <option value="">— 全校 —</option>
-                <option value="ADMIN">行政</option>
-                <option value="DISCIPLINE">訓育</option>
-                <option value="IT">資訊科技</option>
-                <option value="CURRICULUM">課程發展</option>
-                <option value="ECA">課外活動</option>
+                <option value="">— 沒有 —</option>
+                {committeeOptions.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
               </select>
             </div>
 
@@ -621,7 +684,7 @@ export default function CalendarPage() {
       <div className="flex gap-4 flex-wrap mt-4">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm" style={{ background: "var(--color-accent)" }} />
-          <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>全校</span>
+          <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>沒有</span>
         </div>
         {(Object.keys(COMMITTEE_COLORS) as CommitteeType[]).map((c) => (
           <div key={c} className="flex items-center gap-1.5">

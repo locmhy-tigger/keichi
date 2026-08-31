@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CommitteeBadge } from "@/components/teacher/CommitteeBadge"
 
-type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT"
 type TodoStatus    = "OPEN" | "IN_PROGRESS" | "DONE"
 type ViewMode      = "all" | "mine" | "assigned"
 
@@ -23,7 +23,7 @@ type Todo = {
   id:          string
   title:       string
   description: string | null
-  committee:   CommitteeType
+  committee:   CommitteeType | null
   status:      TodoStatus
   dueDate:     string | null
   assignees:   TodoAssignee[]
@@ -59,6 +59,7 @@ const BORDER: Record<CommitteeType, string> = {
   IT:         "committee-border-it",
   CURRICULUM: "committee-border-curriculum",
   ECA:        "committee-border-eca",
+  STUDENT_SUPPORT: "committee-border-student-support",
 }
 
 const NEXT_STATUS: Record<TodoStatus, TodoStatus> = {
@@ -453,7 +454,7 @@ export default function TodosPage() {
             return (
               <li
                 key={todo.id}
-                className={`card ${BORDER[todo.committee]} pl-4 pr-4 py-3 flex items-start gap-3`}
+                className={`card ${todo.committee ? BORDER[todo.committee] : "committee-border-none"} pl-4 pr-4 py-3 flex items-start gap-3`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

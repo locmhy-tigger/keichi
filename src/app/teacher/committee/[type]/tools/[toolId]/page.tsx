@@ -123,9 +123,13 @@ export default function ToolViewerPage() {
           />
         )}
         {tool.type === "HTML" && (
+          // SECURITY: sandbox WITHOUT allow-same-origin — scripts run in a
+          // null origin with no access to app cookies/localStorage and cannot
+          // call authenticated same-origin APIs. Never add allow-same-origin
+          // here; combined with allow-scripts it voids the sandbox entirely.
           <iframe
             srcDoc={tool.content}
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
             className="w-full h-full border-none"
           />
         )}

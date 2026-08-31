@@ -1,9 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
+import dynamic from "next/dynamic"
+
+const GoogleCalendarSettings = dynamic(
+  () => import("@/components/GoogleCalendarSettings"),
+  { ssr: false, loading: () => null }
+)
 
 type AttendanceStatus = "PENDING" | "CONFIRMED" | "ATTENDED" | "ABSENT"
-type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA"
+type CommitteeType    = "ADMIN" | "DISCIPLINE" | "IT" | "CURRICULUM" | "ECA" | "STUDENT_SUPPORT" | "SCHOOL"
 
 type Activity = {
   id:          string
@@ -43,6 +49,8 @@ const COMMITTEE_COLORS: Record<CommitteeType, string> = {
   IT:         "var(--color-it)",
   CURRICULUM: "var(--color-curriculum)",
   ECA:        "var(--color-eca)",
+  STUDENT_SUPPORT: "var(--color-student-support)",
+  SCHOOL:     "var(--color-school)",
 }
 
 function formatTime(iso: string) {
@@ -95,12 +103,13 @@ function isActivity(item: Activity | SchoolEvent): item is Activity {
 }
 
 export default function StudentCalendarPage() {
-  const [activities,   setActivities]   = useState<Activity[]>([])
-  const [schoolEvents, setSchoolEvents] = useState<SchoolEvent[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [current,      setCurrent]      = useState(() => new Date())
-  const [selected,     setSelected]     = useState<Activity | SchoolEvent | null>(null)
-  const [overflowDay,  setOverflowDay]  = useState<string | null>(null)
+  const [activities,    setActivities]   = useState<Activity[]>([])
+  const [schoolEvents,  setSchoolEvents] = useState<SchoolEvent[]>([])
+  const [loading,       setLoading]      = useState(true)
+  const [current,       setCurrent]      = useState(() => new Date())
+  const [selected,      setSelected]     = useState<Activity | SchoolEvent | null>(null)
+  const [overflowDay,   setOverflowDay]  = useState<string | null>(null)
+  const [showGCalPanel, setShowGCalPanel] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -162,14 +171,43 @@ export default function StudentCalendarPage() {
             你的指派活動及全校學校活動
           </p>
         </div>
-        <button
-          onClick={exportIcs}
-          className="px-4 py-2 rounded-input text-body border shrink-0"
-          style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
-        >
-          匯出 .ics
-        </button>
+        <div className="flex gap-2 flex-wrap shrink-0">
+          <button
+            onClick={() => setShowGCalPanel((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-input text-body border transition-colors"
+            style={{
+              border: "1px solid var(--color-border)",
+              color: showGCalPanel ? "var(--color-accent)" : "var(--color-ink-700)",
+              background: showGCalPanel ? "var(--color-accent-soft)" : "var(--color-surface)",
+            }}
+            title="Google Calendar 同步設定"
+          >
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="3" fill="#1a73e8"/>
+              <rect x="3.5" y="5.5" width="17" height="15" rx="1" fill="white"/>
+              <rect x="3.5" y="5.5" width="17" height="4.5" rx="1" fill="#1a73e8"/>
+              <rect x="7" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <rect x="15" y="3.5" width="2" height="4" rx="1" fill="#1a73e8"/>
+              <text x="12" y="18" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#1a73e8">{new Date().getDate()}</text>
+            </svg>
+            <span className="hidden sm:inline">Google 同步</span>
+          </button>
+          <button
+            onClick={exportIcs}
+            className="px-4 py-2 rounded-input text-body border"
+            style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)" }}
+          >
+            匯出 .ics
+          </button>
+        </div>
       </div>
+
+      {/* Google Calendar settings panel */}
+      {showGCalPanel && (
+        <Suspense fallback={null}>
+          <GoogleCalendarSettings />
+        </Suspense>
+      )}
 
       <div className="card overflow-hidden">
         {/* Month header */}

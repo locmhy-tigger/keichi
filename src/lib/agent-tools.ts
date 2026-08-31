@@ -1,5 +1,6 @@
 import type { ToolCall } from "@/lib/agents"
 import {
+  getTeacherLessons, periodLabelOf,
   getAllTeachers,
   getCommonFreeSlots,
   getFreeTeachers,
@@ -10,19 +11,115 @@ import {
   MAX_DAY,
   MAX_PERIOD,
 } from "@/lib/agent-timetable"
+import { searchSchoolData, formatSearchResults } from "@/lib/agent-search"
+import { hybridSearch, formatRetrievedChunks } from "@/lib/knowledge-base"
+import { prisma } from "@/lib/prisma"
+import type { Role } from "@prisma/client"
 
-export async function runAgentTool(call: ToolCall): Promise<string> {
+export async function runAgentTool(call: ToolCall, userId: string, role?: Role): Promise<string> {
   try {
     switch (call.tool) {
-      case "timetable_query": return await runTimetableQuery(call.params)
-      case "free_teachers":   return await runFreeTeachers(call.params)
+      case "timetable_query":       return await runTimetableQuery(call.params)
+      case "teacher_lessons":       return await runTeacherLessons(call.params)
+      case "free_teachers":         return await runFreeTeachers(call.params)
+      case "search_school_data":    return await runSearchSchoolData(call.params, userId, role)
+      case "search_knowledge_base": return await runSearchKnowledgeBase(call.params, userId)
+      case "get_student_profile":   return await runGetStudentProfile(call.params)
       default:
-        return `工具「${call.tool}」不存在。可用工具：timetable_query（夾空堂）、free_teachers（找空堂老師）。`
+        return `工具「${call.tool}」不存在。可用工具：timetable_query（夾空堂）、free_teachers（找空堂老師）、search_school_data（搜尋學校紀錄：公告/行為記錄/行事曆/待辦/活動/AI 生成文件）、search_knowledge_base（語義搜尋已上載嘅教材/文件內容）、get_student_profile（學生學習概況：平均分/強弱範疇）。`
     }
   } catch (err) {
     console.error("[agent-tools]", call.tool, err)
     return "工具執行失敗（系統錯誤），請向用戶道歉並建議稍後再試。"
   }
+}
+
+async function runGetStudentProfile(params: Record<string, unknown>): Promise<string> {
+  const studentName = typeof params.studentName === "string" ? params.studentName.trim() : ""
+  if (!studentName) return "缺少 studentName 參數。請先問清楚用戶想查邊位學生，再重新調用。"
+
+  const matches = await prisma.user.findMany({
+    where: { role: "STUDENT", name: { contains: studentName } },
+    select: { id: true, name: true },
+    take: 5,
+  })
+  if (matches.length === 0) return `搵唔到名叫「${studentName}」嘅學生。`
+  if (matches.length > 1) {
+    return `「${studentName}」有多個匹配：${matches.map((m) => m.name).join("、")}，請問用戶係邊位。`
+  }
+
+  const profile = await prisma.studentLearningProfile.findUnique({
+    where: { studentId: matches[0].id },
+  })
+  if (!profile) return `${matches[0].name} 暫時未有學習概況數據（可能未提交過任何有 AI 評分嘅任務）。`
+
+  return `${matches[0].name} 嘅學習概況：${profile.summary}`
+}
+
+async function runSearchSchoolData(params: Record<string, unknown>, userId: string, role?: Role): Promise<string> {
+  const query = typeof params.query === "string" ? params.query.trim() : ""
+  if (!query) return "缺少 query 參數。請先問清楚用戶想搜尋咩，再重新調用（例如學生姓名、活動名稱、關鍵字）。"
+
+  const results = await searchSchoolData(query, userId, role)
+  return formatSearchResults(query, results)
+}
+
+async function runSearchKnowledgeBase(params: Record<string, unknown>, userId: string): Promise<string> {
+  const query = typeof params.query === "string" ? params.query.trim() : ""
+  if (!query) return "缺少 query 參數。請先問清楚用戶想搵咩教材內容，再重新調用。"
+
+  const chunks = await hybridSearch(query, userId)
+  if (chunks.length === 0) {
+    return `語義搜尋「${query}」：無相關教材內容。請向用戶說明知識庫暫時未有相關資料，唔好虛構答案。`
+  }
+  return `語義搜尋「${query}」：找到 ${chunks.length} 個相關教材片段：\n\n${formatRetrievedChunks(chunks)}`
+}
+
+// 「X 老師星期三要上咩堂」 — the question timetable_query cannot answer.
+async function runTeacherLessons(params: Record<string, unknown>): Promise<string> {
+  const query = typeof params.teacher === "string" ? params.teacher.trim() : ""
+  if (!query) return "缺少 teacher 參數。請問清楚用戶想查邊位老師嘅時間表。"
+
+  const dayRaw = params.day
+  const day = typeof dayRaw === "number" ? dayRaw
+            : typeof dayRaw === "string" && /^[1-5]$/.test(dayRaw) ? parseInt(dayRaw, 10)
+            : undefined
+
+  const term = typeof params.term === "string" && params.term ? params.term : await getLatestTerm()
+  if (!term) return "系統尚未上載任何時間表，請建議用戶聯絡管理員上載 CSV。切勿自行推測時間表內容。"
+
+  const allTeachers = await getAllTeachers(term)
+  const m = matchTeacher(query, allTeachers)
+  if (m.notFound) {
+    return `時間表搵唔到「${query}」。現有老師：${allTeachers.join("、")}。\n` +
+      "請如實告訴用戶搵唔到，並請佢確認姓名。切勿自行編造時間表。"
+  }
+  if (m.candidates) {
+    return `「${query}」有多個匹配：${m.candidates.join("、")}，請問用戶係邊位。`
+  }
+
+  const name    = m.matched!
+  const lessons = await getTeacherLessons(name, term, day)
+  const dayText = day ? `星期${WEEKDAY_NAMES[day]}` : "全星期"
+
+  if (lessons.length === 0) {
+    return `${name} 老師喺${dayText}（學期 ${term}）冇任何課堂記錄。\n` +
+      "請如實回覆冇課堂，切勿自行編造。"
+  }
+
+  const rows = lessons.map((l) =>
+    `| 星期${WEEKDAY_NAMES[l.dayOfWeek]} | ${periodLabelOf(l)} | ${l.classCode ?? "—"} | ${l.subject ?? "—"} |`)
+
+  return [
+    `${name} 老師${dayText}嘅課堂（學期 ${term}，共 ${lessons.length} 節）：`,
+    "",
+    "| 星期 | 節次 | 班別 | 科目 |",
+    "|---|---|---|---|",
+    ...rows,
+    "",
+    "以上係系統實際紀錄。請完全按呢啲資料回覆，" +
+    "唔好改動班別或科目，亦唔好加入任何未列出嘅課堂。",
+  ].join("\n")
 }
 
 async function runTimetableQuery(params: Record<string, unknown>): Promise<string> {
