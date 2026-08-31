@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react"
 type StaffUser = {
   id: string
   name: string | null
+  /** Optional — lets a search match an English name when the account shows Chinese. */
+  nameEn?: string | null
   email: string | null
   image: string | null
 }
@@ -151,11 +153,13 @@ export function StaffPicker({
 
   const selected = selectedId ? staff.find((s) => s.id === selectedId) : undefined
 
+  const q = search.trim().toLowerCase()
   const filtered = staff.filter(
     (s) =>
-      !search ||
-      (s.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (s.email ?? "").toLowerCase().includes(search.toLowerCase())
+      !q ||
+      (s.name   ?? "").toLowerCase().includes(q) ||
+      (s.nameEn ?? "").toLowerCase().includes(q) ||
+      (s.email  ?? "").toLowerCase().includes(q)
   )
 
   return (
@@ -222,7 +226,7 @@ export function StaffPicker({
             style={{ borderColor: "var(--color-border)", color: "var(--color-ink-900)" }}
           />
 
-          <div className="max-h-48 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="text-caption italic py-3 text-center" style={{ color: "var(--color-ink-300)" }}>
                 {search ? "找不到相符教職員" : "尚無教職員"}
