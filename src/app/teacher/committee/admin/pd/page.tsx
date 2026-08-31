@@ -23,6 +23,11 @@ type Application = {
   reviewedBy: { id: string; name: string | null } | null
 }
 
+type Profile = {
+  id: string; name: string | null; nameEn: string | null; email: string | null
+  departments: string[]; committees: string[]; pdCount: number
+}
+
 type Period      = { period: number | null; label: string | null; startTime: string; endTime: string }
 type NonTeaching = { id?: string; name: string; type: "HOLIDAY" | "EXAM"; startDate: string; endDate: string; freeFrom: string | null }
 type DocLink     = { id?: string; label: string; url: string }
@@ -156,6 +161,7 @@ function ApplyTab({ staff, inputCls, inputStyle }: {
       <div>
         <label className="text-caption block mb-1" style={{ color: "var(--color-ink-700)" }}>教師 *</label>
         <StaffPicker staff={staff} selectedId={teacherId} onSelect={setTeacherId} placeholder="搜尋教師姓名…" />
+        <TeacherCard teacherId={teacherId} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -357,7 +363,7 @@ function RecordsTab() {
 // ─── 板面 2：資料 ────────────────────────────────────────────
 function InfoTab({ staff }: { staff: Staff[] }) {
   const [teacherId, setTeacherId] = useState("")
-  const [data, setData] = useState<{ term: string | null; matched: string | null; lessons: any[]; periods: Period[] } | null>(null)
+  const [data, setData] = useState<{ term: string | null; matched: string | null; lessons: any[]; periods: Period[]; profile?: Profile } | null>(null)
   const [docs, setDocs] = useState<DocLink[]>([])
   const [openDoc, setOpenDoc] = useState<DocLink | null>(null)
 
@@ -378,6 +384,7 @@ function InfoTab({ staff }: { staff: Staff[] }) {
       <div className="card p-5">
         <h3 className="text-h3 mb-2">教師上課表</h3>
         <StaffPicker staff={staff} selectedId={teacherId} onSelect={setTeacherId} placeholder="搜尋教師姓名…" />
+        {data?.profile && <ProfileCard p={data.profile} matched={data.matched} term={data.term} />}
 
         {data && (
           data.matched ? (
@@ -650,6 +657,71 @@ function SettingsTab({ inputCls, inputStyle }: { inputCls: string; inputStyle: R
         </button>
         {msg && <span className="text-caption" style={{ color: "var(--color-ink-500)" }}>{msg}</span>}
       </div>
+    </div>
+  )
+}
+
+// 教師資料卡 — who this teacher is, beyond the name on the picker.
+//
+// The 時間表 line is here on purpose: an unresolved name is the one thing that
+// silently makes the whole clash check meaningless, and this puts it in front
+// of you at the moment you pick someone rather than after you file.
+function TeacherCard({ teacherId }: { teacherId: string }) {
+  const [data, setData] = useState<{ matched: string | null; term: string | null; profile?: Profile } | null>(null)
+
+  useEffect(() => {
+    if (!teacherId) { setData(null); return }
+    let cancelled = false
+    fetch(`/api/pd/timetable?teacherId=${teacherId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (!cancelled) setData(d) })
+    return () => { cancelled = true }
+  }, [teacherId])
+
+  if (!data?.profile) return null
+  return <ProfileCard p={data.profile} matched={data.matched} term={data.term} />
+}
+
+function Chips({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="flex items-baseline gap-2 flex-wrap">
+      <span className="text-caption shrink-0" style={{ color: "var(--color-ink-400)" }}>{label}</span>
+      {items.length === 0 ? (
+        <span className="text-caption" style={{ color: "var(--color-ink-300)" }}>未填寫</span>
+      ) : items.map((x) => (
+        <span key={x} className="text-caption px-1.5 py-0.5 rounded-pill"
+          style={{ background: "var(--color-surface-2)", color: "var(--color-ink-600)" }}>{x}</span>
+      ))}
+    </div>
+  )
+}
+
+function ProfileCard({ p, matched, term }: { p: Profile; matched: string | null; term: string | null }) {
+  return (
+    <div className="mt-2 p-3 rounded-input space-y-1.5" style={{ background: "var(--color-surface-2)" }}>
+      <Chips label="科組" items={p.departments} />
+      <Chips label="委員會" items={p.committees} />
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>時間表</span>
+        {matched ? (
+          <span className="text-caption" style={{ color: "var(--color-curriculum)" }}>
+            ✓ {matched}{term ? `（學期 ${term}）` : ""}
+          </span>
+        ) : (
+          <span className="text-caption" style={{ color: "var(--color-admin)" }}>
+            ⚠ 找不到　
+            <Link href="/teacher/admin/teachers" className="underline">教師資料</Link>
+          </span>
+        )}
+        <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+          本學年已申請 {p.pdCount} 次
+        </span>
+      </div>
+      {(p.departments.length === 0 && p.committees.length === 0) && (
+        <p className="text-caption" style={{ color: "var(--color-ink-300)" }}>
+          科組及委員會可喺 <Link href="/teacher/admin/teachers" className="underline">教師資料</Link> 填寫。
+        </p>
+      )}
     </div>
   )
 }
