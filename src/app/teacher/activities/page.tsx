@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { StudentRosterInput, makeRow, type RosterRow } from "@/components/teacher/StudentRosterInput"
 import { BatchCalendarModal } from "@/components/teacher/BatchDateModal"
@@ -67,6 +67,13 @@ function classNumberOf(a: Assignment): string | null {
   return hit?.classNumber ?? a.student?.enrollments?.[0]?.classNumber ?? null
 }
 
+const FORMS = ["中一", "中二", "中三", "中四", "中五", "中六"]
+/** "1A" → "中一". Anything else has no form. */
+function formOf(cls: string | null): string | null {
+  const n = cls?.trim().match(/^([1-6])[A-Z]$/)?.[1]
+  return n ? FORMS[parseInt(n, 10) - 1] : null
+}
+
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
 }
@@ -99,7 +106,23 @@ export default function TeacherActivitiesPage() {
   const [sortBy,     setSortBy]       = useState<"date" | "students" | "title">("date")
   const [view,       setView]         = useState<ViewMode>("all")
   const [pickedDate, setPickedDate]   = useState<string>("")
-  const [studentQ,   setStudentQ]     = useState("")
+  const [formFilter,  setFormFilter]  = useState<string | null>(null)
+  const [classFilter, setClassFilter] = useState<string | null>(null)
+
+  // 按班別／按學生 group by people, so they get the class chips and a search
+  // that looks at names — the other views list activities and don't.
+  const byPerson = view === "class" || view === "student"
+
+  const allClasses = useMemo(() => {
+    const set = new Set<string>()
+    for (const act of activities) {
+      for (const a of act.assignments) {
+        const cls = a.student ? formClassOf(a) : null
+        if (cls) set.add(cls)
+      }
+    }
+    return Array.from(set).sort()
+  }, [activities])
 
   // Form state
   const [title,   setTitle]   = useState("")
@@ -573,12 +596,6 @@ export default function TeacherActivitiesPage() {
               <button onClick={() => setPickedDate("")} className="text-caption" style={{ color: "var(--color-accent)" }}>清除</button>
             )}
           </div>
-          {view === "student" && (
-            <input value={studentQ} onChange={(e) => setStudentQ(e.target.value)}
-              placeholder="搜尋學生姓名…"
-              className="text-caption px-2 py-1 rounded-input border flex-1 min-w-[160px]"
-              style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }} />
-          )}
         </div>
       )}
 
@@ -589,7 +606,7 @@ export default function TeacherActivitiesPage() {
           <input
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="搜尋活動名稱或地點…"
+            placeholder={byPerson ? "搜尋學生姓名、班別或活動…" : "搜尋活動名稱或地點…"}
             className="w-full px-3 py-2 text-body rounded-input border outline-none"
             style={{ border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }}
           />
@@ -625,6 +642,46 @@ export default function TeacherActivitiesPage() {
               </select>
             </div>
           </div>
+
+          {/* 級別／班別 chips — only meaningful when the list is grouped by
+              people rather than by activity. */}
+          {byPerson && allClasses.length > 0 && (
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>級別：</span>
+              {FORMS.filter((f) => allClasses.some((c) => formOf(c) === f)).map((f) => (
+                <button key={f}
+                  onClick={() => { setFormFilter(formFilter === f ? null : f); setClassFilter(null) }}
+                  className="text-caption px-2.5 py-1 rounded-full border transition-colors"
+                  style={{
+                    background:  formFilter === f ? "var(--color-accent)" : "var(--color-surface)",
+                    color:       formFilter === f ? "#fff" : "var(--color-ink-700)",
+                    borderColor: formFilter === f ? "var(--color-accent)" : "var(--color-border)",
+                  }}>
+                  {f}
+                </button>
+              ))}
+
+              <span className="text-caption ml-2" style={{ color: "var(--color-ink-400)" }}>班別：</span>
+              {allClasses
+                .filter((c) => !formFilter || formOf(c) === formFilter)
+                .map((c) => (
+                  <button key={c} onClick={() => setClassFilter(classFilter === c ? null : c)}
+                    className="text-caption px-2.5 py-1 rounded-full border transition-colors"
+                    style={{
+                      background:  classFilter === c ? "var(--color-accent)" : "var(--color-surface)",
+                      color:       classFilter === c ? "#fff" : "var(--color-ink-700)",
+                      borderColor: classFilter === c ? "var(--color-accent)" : "var(--color-border)",
+                    }}>
+                    {c}
+                  </button>
+                ))}
+
+              {(formFilter || classFilter) && (
+                <button onClick={() => { setFormFilter(null); setClassFilter(null) }}
+                  className="text-caption" style={{ color: "var(--color-accent)" }}>清除</button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -673,7 +730,11 @@ export default function TeacherActivitiesPage() {
         const filtered = activities
           .filter((a) => {
             const q = searchQ.toLowerCase()
-            const matchQ = !q || a.title.toLowerCase().includes(q) || (a.location ?? "").toLowerCase().includes(q)
+            // In the people views the same box also matches student names and
+            // classes, so it is applied per row below rather than dropping the
+            // whole activity here.
+            const matchQ = byPerson || !q
+              || a.title.toLowerCase().includes(q) || (a.location ?? "").toLowerCase().includes(q)
             const matchDay = weekdayFilter === null || new Date(a.startTime).getDay() === weekdayFilter
 
             const start = new Date(a.startTime)
@@ -704,45 +765,73 @@ export default function TeacherActivitiesPage() {
           return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>沒有符合的活動</div>
         }
 
-        // 按班別 — one card per class, listing who from it has to attend what.
+        // 按班別 — one card per class. Rows are grouped by activity inside the
+        // card: a whole-form activity used to render 34 near-identical lines,
+        // one per student, which buried the one thing you came to read.
         if (view === "class") {
+          const q = searchQ.trim().toLowerCase()
           const byClass = new Map<string, { act: Activity; a: Assignment }[]>()
           for (const act of filtered) {
             for (const a of act.assignments) {
               if (!a.student) continue
               const cls = formClassOf(a) ?? "未分班"
+              if (classFilter && cls !== classFilter) continue
+              if (formFilter && formOf(cls) !== formFilter) continue
+              if (q && !(
+                (a.student.name ?? "").toLowerCase().includes(q) ||
+                cls.toLowerCase().includes(q) ||
+                act.title.toLowerCase().includes(q) ||
+                (act.location ?? "").toLowerCase().includes(q)
+              )) continue
               const list = byClass.get(cls) ?? []
               list.push({ act, a })
               byClass.set(cls, list)
             }
           }
           if (byClass.size === 0) {
-            return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>此範圍內的活動未有學生名單</div>
+            return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>
+              {q || classFilter || formFilter ? "沒有符合的班別或學生" : "此範圍內的活動未有學生名單"}
+            </div>
           }
           return (
             <div className="space-y-4">
               {Array.from(byClass.keys()).sort().map((cls) => {
                 const rows = byClass.get(cls)!
+                // Group this class's rows by activity.
+                const acts = new Map<string, { act: Activity; students: Assignment[] }>()
+                for (const { act, a } of rows) {
+                  const cur = acts.get(act.id) ?? { act, students: [] }
+                  cur.students.push(a)
+                  acts.set(act.id, cur)
+                }
                 return (
                   <div key={cls} className="card p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-h3">{cls}</h3>
-                      <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>{rows.length} 人次</span>
+                      <span className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                        {acts.size} 項活動 · {rows.length} 人次
+                      </span>
                     </div>
                     <ul className="divide-y" style={{ borderColor: "var(--color-border)" }}>
-                      {rows
+                      {Array.from(acts.values())
                         .sort((x, y) => new Date(x.act.startTime).getTime() - new Date(y.act.startTime).getTime())
-                        .map(({ act, a }) => (
-                          <li key={`${act.id}-${a.id}`} className="py-2 flex items-center gap-2 text-body">
-                            <span style={{ color: "var(--color-ink-900)" }}>
-                              {classNumberOf(a) ? `${classNumberOf(a)}. ` : ""}{a.student!.name ?? "—"}
-                            </span>
-                            <Link href={`/teacher/activities/${act.id}`} className="truncate" style={{ color: "var(--color-accent)" }}>
-                              {act.title}
-                            </Link>
-                            <span className="text-caption ml-auto shrink-0" style={{ color: "var(--color-ink-400)" }}>
-                              {formatDateTime(act.startTime)}{whenLabel(act.startTime) ? ` · ${whenLabel(act.startTime)}` : ""}
-                            </span>
+                        .map(({ act, students }) => (
+                          <li key={act.id} className="py-2">
+                            <div className="flex items-baseline gap-2">
+                              <Link href={`/teacher/activities/${act.id}`} className="text-body truncate" style={{ color: "var(--color-accent)" }}>
+                                {act.title}
+                              </Link>
+                              <span className="text-caption shrink-0" style={{ color: "var(--color-ink-400)" }}>{students.length} 人</span>
+                              <span className="text-caption ml-auto shrink-0" style={{ color: "var(--color-ink-400)" }}>
+                                {formatDateTime(act.startTime)}{whenLabel(act.startTime) ? ` · ${whenLabel(act.startTime)}` : ""}
+                              </span>
+                            </div>
+                            <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-600)" }}>
+                              {students
+                                .sort((x, y) => (classNumberOf(x) ?? "").localeCompare(classNumberOf(y) ?? ""))
+                                .map((a) => `${classNumberOf(a) ? `${classNumberOf(a)}. ` : ""}${a.student!.name ?? "—"}`)
+                                .join("、")}
+                            </p>
                           </li>
                         ))}
                     </ul>
@@ -755,21 +844,29 @@ export default function TeacherActivitiesPage() {
 
         // 按學生 — what one student has to attend.
         if (view === "student") {
-          const q = studentQ.trim().toLowerCase()
-          const byStudent = new Map<string, { name: string; cls: string | null; items: Activity[] }>()
+          const q = searchQ.trim().toLowerCase()
+          const byStudent = new Map<string, { name: string; cls: string | null; no: string | null; items: Activity[] }>()
           for (const act of filtered) {
             for (const a of act.assignments) {
               if (!a.student) continue
               const name = a.student.name ?? "—"
-              if (q && !name.toLowerCase().includes(q)) continue
-              const cur = byStudent.get(a.student.id) ?? { name, cls: formClassOf(a), items: [] }
+              const cls  = formClassOf(a)
+              if (classFilter && cls !== classFilter) continue
+              if (formFilter && formOf(cls) !== formFilter) continue
+              if (q && !(
+                name.toLowerCase().includes(q) ||
+                (cls ?? "").toLowerCase().includes(q) ||
+                act.title.toLowerCase().includes(q) ||
+                (act.location ?? "").toLowerCase().includes(q)
+              )) continue
+              const cur = byStudent.get(a.student.id) ?? { name, cls, no: classNumberOf(a), items: [] }
               cur.items.push(act)
               byStudent.set(a.student.id, cur)
             }
           }
           if (byStudent.size === 0) {
             return <div className="text-center py-12 text-body" style={{ color: "var(--color-ink-300)" }}>
-              {q ? "沒有符合的學生" : "此範圍內的活動未有學生名單"}
+              {q || classFilter || formFilter ? "沒有符合的學生" : "此範圍內的活動未有學生名單"}
             </div>
           }
           return (
@@ -781,7 +878,9 @@ export default function TeacherActivitiesPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-h3">{st.name}</h3>
                       {st.cls && <span className="text-caption px-2 py-0.5 rounded-pill"
-                        style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}>{st.cls}</span>}
+                        style={{ background: "var(--color-surface-2)", color: "var(--color-ink-500)" }}>
+                        {st.cls}{st.no ? ` (${st.no})` : ""}
+                      </span>}
                       <span className="text-caption ml-auto" style={{ color: "var(--color-ink-400)" }}>{st.items.length} 項活動</span>
                     </div>
                     <ul className="space-y-1">
