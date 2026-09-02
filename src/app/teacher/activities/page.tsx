@@ -140,7 +140,12 @@ export default function TeacherActivitiesPage() {
   // Extra dates — an Activity holds ONE startTime, so a repeated activity
   // becomes one row per date (the same shape notice approval produces, and
   // what attendance needs since it is taken per occasion).
-  const [extraDates, setExtraDates] = useState<string[]>([])
+  // Each extra date carries its own time. It defaults to the main 開始／結束
+  // time — the common case is "same session repeated" — but a series often has
+  // one date that runs at a different hour, and forcing a separate activity for
+  // that date was the only way to express it.
+  type Session = { date: string; start: string; end: string } // "HH:MM"
+  const [sessions, setSessions] = useState<Session[]>([])
   const [showDates,  setShowDates]  = useState(false)
 
   // 匯入文件 — AI reads an existing notice and fills this form.
@@ -178,18 +183,27 @@ export default function TeacherActivitiesPage() {
       if (p.activityName) setTitle(p.activityName)
       if (p.bodyText)     setDesc(p.bodyText)
 
-      const sessions: any[] = Array.isArray(p.sessions) ? p.sessions.filter((x: any) => x?.date) : []
-      if (sessions.length > 0) {
-        const first = sessions[0]
+      const parsed: any[] = Array.isArray(p.sessions) ? p.sessions.filter((x: any) => x?.date) : []
+      if (parsed.length > 0) {
+        const first = parsed[0]
         if (first.location) setLocation(first.location)
-        // The first dated session becomes 開始時間; the rest become extra dates,
-        // which is exactly the multi-date shape this form already handles.
-        const t = /^\d{1,2}:\d{2}$/.test(first.arriveTime ?? "") ? first.arriveTime : "00:00"
-        setStart(`${first.date}T${String(t).padStart(5, "0")}`)
-        if (/^\d{1,2}:\d{2}$/.test(first.leaveTime ?? "")) {
-          setEnd(`${first.date}T${String(first.leaveTime).padStart(5, "0")}`)
-        }
-        setExtraDates(Array.from(new Set(sessions.slice(1).map((x: any) => x.date))).sort() as string[])
+        const hhmm = (v: unknown, fallback = "") =>
+          /^\d{1,2}:\d{2}$/.test(String(v ?? "")) ? String(v).padStart(5, "0") : fallback
+        // The first dated session becomes 開始時間; the rest become extra dates.
+        setStart(`${first.date}T${hhmm(first.arriveTime, "00:00")}`)
+        const firstEnd = hhmm(first.leaveTime)
+        if (firstEnd) setEnd(`${first.date}T${firstEnd}`)
+        // Each session keeps its own times — the document often has a different
+        // hour for one of the dates, and those used to be thrown away.
+        const seen = new Set<string>([first.date])
+        setSessions(parsed.slice(1).filter((x: any) => {
+          if (seen.has(x.date)) return false
+          seen.add(x.date); return true
+        }).map((x: any) => ({
+          date:  x.date,
+          start: hhmm(x.arriveTime, hhmm(first.arriveTime, "00:00")),
+          end:   hhmm(x.leaveTime,  firstEnd),
+        })).sort((a: any, b: any) => a.date.localeCompare(b.date)))
       }
 
       if (Array.isArray(p.students) && p.students.length) {
@@ -200,7 +214,7 @@ export default function TeacherActivitiesPage() {
       }
 
       const bits = [
-        sessions.length ? `${sessions.length} 個日期` : null,
+        parsed.length ? `${parsed.length} 個日期` : null,
         Array.isArray(p.students) && p.students.length ? `${p.students.length} 位學生` : null,
       ].filter(Boolean)
       setFormError(null)
@@ -328,25 +342,27 @@ export default function TeacherActivitiesPage() {
       ids = resolved
     }
 
-    // Every chosen date gets its own activity, keeping the time-of-day from
-    // the 開始/結束時間 fields.
-    const allStarts = [start, ...extraDates.map((d) => `${d}T${start.slice(11)}`)]
+    // Every chosen date gets its own activity, each with its own time.
+    const plan: { start: string; end?: string }[] = [
+      { start, end: end || undefined },
+      ...sessions.map((s) => ({
+        start: `${s.date}T${s.start}`,
+        end:   s.end ? `${s.date}T${s.end}` : undefined,
+      })),
+    ]
 
     try {
       const createdAll: Activity[] = []
       let failed = 0
-      for (const st of allStarts) {
-        const endForDate = end
-          ? `${st.slice(0, 10)}T${end.slice(11)}`
-          : undefined
+      for (const slot of plan) {
         const res = await fetch("/api/activities", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title,
             description: desc || undefined,
-            startTime:    new Date(st).toISOString(),
-            endTime:      endForDate ? new Date(endForDate).toISOString() : undefined,
+            startTime:    new Date(slot.start).toISOString(),
+            endTime:      slot.end ? new Date(slot.end).toISOString() : undefined,
             location:     location || undefined,
             activityType: activityType || undefined,
             committee:    committee || undefined,
@@ -363,7 +379,7 @@ export default function TeacherActivitiesPage() {
           setFormError(`已建立 ${createdAll.length} 個活動，${failed} 個失敗。`)
         }
         setTitle(""); setDesc(""); setStart(""); setEnd(""); setLocation(""); setActivityType(""); setCommittee("")
-        setExtraDates([])
+        setSessions([])
         resetRoster()
         if (failed === 0) setShowForm(false)
       } else {
@@ -439,7 +455,9 @@ export default function TeacherActivitiesPage() {
             </div>
           </div>
 
-          {/* Repeat over several dates — one activity per date. */}
+          {/* Repeat over several dates — one activity per date, each with its
+              own time. Defaulting every date to the main time keeps the common
+              case one click, without making it the only possibility. */}
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <label className="text-caption" style={{ color: "var(--color-ink-700)" }}>其他日期（選填）</label>
@@ -449,27 +467,58 @@ export default function TeacherActivitiesPage() {
                 title={start ? "選擇多個日期" : "請先填寫開始時間"}>
                 🗓 選擇多個日期
               </button>
-              {extraDates.length > 0 && (
-                <button type="button" onClick={() => setExtraDates([])}
-                  className="text-caption" style={{ color: "var(--color-ink-400)" }}>清除</button>
+              {sessions.length > 0 && (
+                <>
+                  <button type="button"
+                    onClick={() => setSessions((p) => p.map((x) => ({
+                      ...x, start: start.slice(11, 16), end: end ? end.slice(11, 16) : "",
+                    })))}
+                    className="text-caption" style={{ color: "var(--color-accent)" }}>
+                    全部套用主要時間
+                  </button>
+                  <button type="button" onClick={() => setSessions([])}
+                    className="text-caption" style={{ color: "var(--color-ink-400)" }}>清除</button>
+                </>
               )}
             </div>
-            {extraDates.length === 0 ? (
+            {sessions.length === 0 ? (
               <p className="text-[11px]" style={{ color: "var(--color-ink-400)" }}>
                 同一活動在多個日期舉行時，可一次選取；系統會為每個日期建立一個活動（出席按次記錄）。
+                每個日期可以各自設定時間。
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {extraDates.map((d) => (
-                  <span key={d} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-caption"
-                    style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}>
-                    {d}
-                    <button type="button" onClick={() => setExtraDates((p) => p.filter((x) => x !== d))}>×</button>
-                  </span>
+              <div className="space-y-1.5">
+                {/* The primary date is shown for context but edited above, so
+                    there is only ever one source of truth for it. */}
+                <div className="flex items-center gap-2 text-caption" style={{ color: "var(--color-ink-400)" }}>
+                  <span className="w-24 shrink-0">{start.slice(0, 10)}</span>
+                  <span>{start.slice(11, 16)}{end ? `–${end.slice(11, 16)}` : ""}</span>
+                  <span className="px-1.5 py-0.5 rounded-pill"
+                    style={{ background: "var(--color-surface-2)" }}>主要日期</span>
+                </div>
+                {sessions.map((sn, i) => (
+                  <div key={sn.date} className="flex items-center gap-2">
+                    <span className="text-caption w-24 shrink-0" style={{ color: "var(--color-ink-700)" }}>{sn.date}</span>
+                    <input type="time" value={sn.start}
+                      onChange={(e) => setSessions((p) => p.map((x, j) => j === i ? { ...x, start: e.target.value } : x))}
+                      className="text-caption px-2 py-1 rounded-input border"
+                      style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }} />
+                    <span className="text-caption" style={{ color: "var(--color-ink-300)" }}>–</span>
+                    <input type="time" value={sn.end}
+                      onChange={(e) => setSessions((p) => p.map((x, j) => j === i ? { ...x, end: e.target.value } : x))}
+                      className="text-caption px-2 py-1 rounded-input border"
+                      style={{ borderColor: "var(--color-border)", background: "var(--color-surface)", color: "var(--color-ink-900)" }} />
+                    {sn.start !== start.slice(11, 16) && (
+                      <span className="text-caption px-1.5 py-0.5 rounded-pill shrink-0"
+                        style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}>時間不同</span>
+                    )}
+                    <button type="button" onClick={() => setSessions((p) => p.filter((_, j) => j !== i))}
+                      className="text-caption ml-auto" style={{ color: "var(--color-discipline)" }}>×</button>
+                  </div>
                 ))}
-                <span className="text-caption self-center" style={{ color: "var(--color-ink-400)" }}>
-                  連同開始日期，共 {extraDates.length + 1} 個活動
-                </span>
+                <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
+                  連同開始日期，共 {sessions.length + 1} 個活動
+                </p>
               </div>
             )}
           </div>
@@ -566,7 +615,14 @@ export default function TeacherActivitiesPage() {
             // The primary date already has its own activity — drop it if the
             // teacher also ticked it in the picker, so it isn't created twice.
             const primary = start.slice(0, 10)
-            setExtraDates(Array.from(new Set(dates.filter((d) => d !== primary))).sort())
+            const defStart = start.slice(11, 16)
+            const defEnd   = end ? end.slice(11, 16) : ""
+            setSessions((prev) => {
+              const kept = new Map(prev.map((s) => [s.date, s]))
+              return Array.from(new Set(dates.filter((d) => d !== primary))).sort()
+                // Re-opening the picker must not wipe times already adjusted.
+                .map((d) => kept.get(d) ?? { date: d, start: defStart, end: defEnd })
+            })
           }}
         />
       )}
