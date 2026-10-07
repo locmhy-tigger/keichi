@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import type { RosterEntry } from "@/components/classroom/RosterPanel"
 import type { useLessonRecords } from "@/components/classroom/useLessonRecords"
 import { RECORD_COLOR } from "@/lib/lesson-records"
+import { CollectSheet } from "@/components/classroom/CollectSheet"
 
 // 功課: what was set, by whom, and who missed it. Homework recorded by a
 // 課代表 is marked as such, and a teacher can tick 已覆核 once it has been
@@ -38,8 +39,7 @@ export function HomeworkPanel({
   const [due,     setDue]     = useState("")
   const [busy,    setBusy]    = useState(false)
   const [msg,     setMsg]     = useState<{ ok: boolean; text: string } | null>(null)
-  const [missFor, setMissFor] = useState<string | null>(null)
-  const [picked,  setPicked]  = useState<Set<string>>(new Set())
+  const [collect, setCollect] = useState<string | null>(null)
 
   useEffect(() => { if (defaultSubject && !subject) setSubject(defaultSubject) }, [defaultSubject, subject])
 
@@ -80,19 +80,6 @@ export function HomeworkPanel({
     onChanged()
   }
 
-  // Students already marked as missing this homework *in this lesson* are
-  // greyed out. Misses from earlier lessons aren't loaded here — the server
-  // dedupes them and the result line reports 「X 人早已記錄」.
-  const missedNow = new Set(lesson.records.filter((r) => r.kind === "MISSING_HOMEWORK" && r.homeworkId === missFor).map((r) => r.studentId))
-
-  async function saveMisses() {
-    if (!missFor || picked.size === 0) { setMissFor(null); return }
-    const r = await lesson.record({ kind: "MISSING_HOMEWORK", studentIds: Array.from(picked), homeworkId: missFor })
-    setMsg({ ok: r.ok, text: r.message })
-    setMissFor(null); setPicked(new Set())
-    onChanged()
-  }
-
   const open = homework.filter((h) => !h.dueDate || ymd(h.dueDate) >= todayHk())
   const past = homework.filter((h) => h.dueDate && ymd(h.dueDate) < todayHk())
 
@@ -120,47 +107,22 @@ export function HomeworkPanel({
       </div>
 
       <HomeworkList title="進行中" items={open} roster={roster} onConfirm={(h) => patch(h.id, { confirmed: !h.confirmedAt })}
-        onRemove={remove} onMiss={(h) => { setMissFor(h.id); setPicked(new Set()) }} />
+        onRemove={remove} onMiss={(h) => setCollect(h.id)} />
       {past.length > 0 && (
         <details>
           <summary className="text-caption cursor-pointer" style={{ color: "var(--color-ink-500)" }}>已過限期（{past.length}）</summary>
           <div className="mt-2">
             <HomeworkList title="" items={past} roster={roster} onConfirm={(h) => patch(h.id, { confirmed: !h.confirmedAt })}
-              onRemove={remove} onMiss={(h) => { setMissFor(h.id); setPicked(new Set()) }} />
+              onRemove={remove} onMiss={(h) => setCollect(h.id)} />
           </div>
         </details>
       )}
 
-      {missFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) setMissFor(null) }}>
-          <div className="bg-white rounded-card p-5 w-full max-w-2xl max-h-[85vh] overflow-y-auto">
-            <h3 className="text-h3 mb-1">記錄欠交：{homework.find((h) => h.id === missFor)?.title}</h3>
-            <p className="text-caption mb-3" style={{ color: "var(--color-ink-400)" }}>點選欠交的學生（灰色＝已記錄）</p>
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}>
-              {roster.map((s) => {
-                const done = missedNow.has(s.id)
-                const on = picked.has(s.id)
-                return (
-                  <button key={s.id} disabled={done}
-                    onClick={() => setPicked((p) => { const n = new Set(p); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n })}
-                    className="rounded-input px-2 py-2 text-left text-body"
-                    style={{
-                      background: done ? "var(--color-surface-2)" : on ? RECORD_COLOR.MISSING_HOMEWORK : "var(--color-surface)",
-                      color: done ? "var(--color-ink-300)" : on ? "#fff" : "var(--color-ink-900)",
-                      border: "1px solid var(--color-border)",
-                    }}>
-                    <span className="block text-caption opacity-70">{s.tag}</span>{s.name ?? "—"}
-                  </button>
-                )
-              })}
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setMissFor(null)} className="px-4 py-2 rounded-input border text-body" style={{ border: "1px solid var(--color-border)" }}>取消</button>
-              <button onClick={saveMisses} disabled={!sessionId} className="px-4 py-2 rounded-input text-body font-medium text-white"
-                style={{ background: RECORD_COLOR.MISSING_HOMEWORK }}>記錄 {picked.size} 人欠交</button>
-            </div>
-          </div>
-        </div>
+      {/* The same sheet the 課代表 uses, so the teacher sees every miss for this
+          homework — from any lesson, recorded by anyone. */}
+      {collect && (
+        <CollectSheet classId={classId} homeworkId={collect} teacher sessionId={sessionId}
+          onClose={() => setCollect(null)} onChanged={() => { onChanged(); lesson.refresh() }} />
       )}
 
       <RepManager classId={classId} roster={roster} />
@@ -193,7 +155,7 @@ function HomeworkList({ title, items, onConfirm, onRemove, onMiss }: {
                 </p>
               </div>
               <div className="flex gap-1.5 items-center">
-                <button onClick={() => onMiss(h)} className="text-caption px-2.5 py-1 rounded-input border" style={{ border: "1px solid var(--color-border)", color: RECORD_COLOR.MISSING_HOMEWORK }}>記錄欠交</button>
+                <button onClick={() => onMiss(h)} className="text-caption px-2.5 py-1 rounded-input border" style={{ border: "1px solid var(--color-border)", color: RECORD_COLOR.MISSING_HOMEWORK }}>收功課</button>
                 <button onClick={() => onConfirm(h)} className="text-caption px-2.5 py-1 rounded-input border"
                   style={{ border: "1px solid var(--color-border)", color: h.confirmedAt ? "var(--color-curriculum)" : "var(--color-ink-500)" }}>
                   {h.confirmedAt ? "✓ 已覆核" : "覆核"}
