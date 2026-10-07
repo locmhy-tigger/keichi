@@ -67,3 +67,19 @@ export async function requireClassAccess(
   }
   return { cls, via: access.via }
 }
+
+/**
+ * Load a 課堂 session and check access to its class. Records belong to the
+ * class, so anyone who may open the class may record in its lessons — a
+ * co-teacher or the 班主任 covering a period, not only whoever opened it.
+ */
+export async function requireSessionAccess(sessionId: string, user: UserRef) {
+  const session = await prisma.classroomSession.findUnique({
+    where:  { id: sessionId },
+    select: { id: true, classId: true, teacherId: true, date: true, period: true, subject: true, endedAt: true },
+  })
+  if (!session) return NextResponse.json({ error: "找不到課堂" }, { status: 404 })
+  const gate = await requireClassAccess(session.classId, user)
+  if (gate instanceof NextResponse) return gate
+  return { session, cls: gate.cls, via: gate.via }
+}

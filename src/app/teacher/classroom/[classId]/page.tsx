@@ -10,7 +10,12 @@ import { RandomPicker, type PickItem } from "@/components/tools/RandomPicker"
 import { GroupMaker } from "@/components/tools/GroupMaker"
 import { Scoreboard } from "@/components/tools/Scoreboard"
 import { ProjectionFrame } from "@/components/tools/ProjectionFrame"
-import { applyGroups, type SeatingLayout } from "@/lib/seating"
+import { RollCall } from "@/components/classroom/RollCall"
+import { RecordPanel } from "@/components/classroom/RecordPanel"
+import { HomeworkPanel, type HomeworkItem } from "@/components/classroom/HomeworkPanel"
+import { ReviewPanel } from "@/components/classroom/ReviewPanel"
+import { useLessonRecords } from "@/components/classroom/useLessonRecords"
+import { applyGroups, groupMembers, type SeatingLayout } from "@/lib/seating"
 
 // 課堂 desktop for one class or teaching group.
 //
@@ -31,13 +36,18 @@ const VIA: Record<Data["via"], string> = {
   admin: "管理員", owner: "建立者", homeroom: "班主任", timetable: "任教老師",
 }
 
-const TABS = [
-  ["seating", "座位表"], ["roster", "名單"], ["picker", "抽籤"],
+// The lesson's work first, then the tools. Every tab stays mounted (hidden),
+// so switching never throws away a pending save.
+const MAIN_TABS = [
+  ["seating", "座位表"], ["attendance", "點名"], ["records", "紀錄"],
+  ["homework", "功課"], ["review", "回顧"], ["roster", "名單"],
+] as const
+const TOOL_TABS = [
   // Not just 「分組」: the seating board has a 分組 mode, and two controls with
   // the same name side by side is a guaranteed mis-tap.
-  ["groups", "隨機分組"], ["timer", "計時"], ["score", "計分牌"],
+  ["picker", "抽籤"], ["groups", "隨機分組"], ["timer", "計時"], ["score", "計分牌"],
 ] as const
-type Tab = typeof TABS[number][0]
+type Tab = typeof MAIN_TABS[number][0] | typeof TOOL_TABS[number][0]
 
 export default function ClassroomDesktopPage() {
   return <Suspense fallback={null}><Desktop /></Suspense>
@@ -56,6 +66,15 @@ function Desktop() {
   const [pushed, setPushed] = useState<SeatingLayout | null>(null)
   const [groupMsg, setGroupMsg] = useState<string | null>(null)
   const [boardKey, setBoardKey] = useState(0)
+  const [homework, setHomework] = useState<HomeworkItem[]>([])
+
+  const lesson = useLessonRecords(session?.id ?? null)
+
+  const loadHomework = useCallback(async () => {
+    const res = await fetch(`/api/classes/${classId}/homework`)
+    if (res.ok) setHomework((await res.json()).homework)
+  }, [classId])
+  useEffect(() => { loadHomework() }, [loadHomework])
 
   const load = useCallback(async (remountBoard = false) => {
     const res = await fetch(`/api/classes/${classId}/seating`)
@@ -116,6 +135,26 @@ function Desktop() {
   const teams = useMemo(
     () => (layout?.groups ?? []).map((g) => ({ id: g.id, name: g.name, color: g.color })), [layout])
 
+  // 計分牌 → pending 課堂表現 for every member of each seating group. Points per
+  // record are capped at 5, so a big tally is split across records.
+  async function convertScores(scores: { team: { id: string; name: string }; score: number }[]): Promise<string> {
+    if (!layout || !session) return "課堂未開始，未能轉換"
+    const members = groupMembers(layout)
+    const skipped: string[] = []
+    let people = 0
+    for (const { team, score } of scores) {
+      const ids = members.get(team.id) ?? []
+      if (ids.length === 0) { skipped.push(team.name); continue }
+      for (let left = score; left > 0; left -= 5) {
+        const r = await lesson.record({ kind: "PERFORMANCE", studentIds: ids, points: Math.min(5, left), tag: `搶答計分牌（${team.name}）` })
+        if (!r.ok) return `⚠ ${r.message}`
+      }
+      people += ids.length
+    }
+    return `✓ 已為 ${people} 位學生加入待發放積點，請到「紀錄」按「發放積點」。` +
+      (skipped.length ? `（${skipped.join("、")} 不是座位表分組，未能對應學生）` : "")
+  }
+
   function applyMadeGroups(groups: string[][]) {
     if (!layout) return
     const { layout: next, unseated } = applyGroups(layout, groups)
@@ -173,15 +212,20 @@ function Desktop() {
         </p>
       )}
 
-      <div className="flex gap-1 p-1 rounded-input mb-4 flex-wrap w-fit" style={{ background: "var(--color-surface-2)" }}>
-        {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className="px-3 py-1.5 text-caption font-medium rounded-input"
-            style={{
-              background: tab === id ? "var(--color-surface)" : "transparent",
-              color:      tab === id ? "var(--color-ink-900)" : "var(--color-ink-500)",
-              boxShadow:  tab === id ? "0 1px 3px rgb(0 0 0 / 0.06)" : "none",
-            }}>{label}</button>
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
+        {[MAIN_TABS, TOOL_TABS].map((group, gi) => (
+          <div key={gi} className="flex gap-1 p-1 rounded-input flex-wrap" style={{ background: "var(--color-surface-2)" }}>
+            {gi === 1 && <span className="text-caption px-1.5 self-center" style={{ color: "var(--color-ink-300)" }}>工具</span>}
+            {group.map(([id, label]) => (
+              <button key={id} onClick={() => setTab(id)}
+                className="px-3 py-1.5 text-caption font-medium rounded-input"
+                style={{
+                  background: tab === id ? "var(--color-surface)" : "transparent",
+                  color:      tab === id ? "var(--color-ink-900)" : "var(--color-ink-500)",
+                  boxShadow:  tab === id ? "0 1px 3px rgb(0 0 0 / 0.06)" : "none",
+                }}>{label}</button>
+            ))}
+          </div>
         ))}
       </div>
 
@@ -193,6 +237,24 @@ function Desktop() {
               exportHref={`/api/classes/${classId}/seating/export`} big={big} />
           )}
         </ProjectionFrame>
+      </div>
+
+      <div hidden={tab !== "attendance"}>
+        <RollCall roster={data.roster} lesson={lesson} />
+      </div>
+
+      <div hidden={tab !== "records"}>
+        <RecordPanel roster={data.roster} lesson={lesson} homework={homework} sessionId={session?.id ?? null} />
+      </div>
+
+      <div hidden={tab !== "homework"}>
+        <HomeworkPanel classId={classId} roster={data.roster} homework={homework} onChanged={loadHomework}
+          lesson={lesson} sessionId={session?.id ?? null} defaultSubject={session?.subject ?? null} />
+      </div>
+
+      <div hidden={tab !== "review"}>
+        {/* Mounted only when opened: it queries the whole term. */}
+        {tab === "review" && <ReviewPanel classId={classId} className={data.cls.name} roster={data.roster} />}
       </div>
 
       <div hidden={tab !== "roster"}>
@@ -224,7 +286,7 @@ function Desktop() {
 
       <div hidden={tab !== "score"}>
         <ProjectionFrame title="搶答計分牌">
-          {(big) => <Scoreboard teams={teams} storageKey={`kc-scoreboard-${classId}`} big={big} />}
+          {(big) => <Scoreboard teams={teams} storageKey={`kc-scoreboard-${classId}`} big={big} onConvert={convertScores} />}
         </ProjectionFrame>
       </div>
     </div>

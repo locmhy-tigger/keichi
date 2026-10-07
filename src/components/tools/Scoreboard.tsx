@@ -5,9 +5,10 @@ import { useEffect, useState } from "react"
 // 搶答計分牌: big tallies with ＋／－, per group or per team you name.
 //
 // Scores live in localStorage keyed by `storageKey`, so a refresh or an
-// accidental tab switch mid-lesson doesn't wipe the game. Turning tallies into
-// 積點 belongs with the Phase 2 performance records, which can be undone —
-// this board deliberately writes nothing to the database.
+// accidental tab switch mid-lesson doesn't wipe the game. The board itself
+// writes nothing to the database; 「轉成積點」 (when the caller offers it) hands
+// the tallies to the lesson's performance records as *pending* points, which
+// the teacher still has to 發放 — and can 撤回.
 
 export type Team = { id: string; name: string; color?: string }
 
@@ -15,14 +16,31 @@ export function Scoreboard({
   teams: seeded,
   storageKey,
   big = false,
+  onConvert,
 }: {
   /** Initial teams, e.g. the seating chart's groups. */
   teams: Team[]
   storageKey: string
   big?: boolean
+  /** Turn positive tallies into pending 課堂表現. Returns a message to show. */
+  onConvert?: (scores: { team: Team; score: number }[]) => Promise<string>
 }) {
   const [teams,  setTeams]  = useState<Team[]>(seeded)
   const [scores, setScores] = useState<Record<string, number>>({})
+  const [convertMsg, setConvertMsg] = useState<string | null>(null)
+  const [converting, setConverting] = useState(false)
+
+  async function convert() {
+    if (!onConvert) return
+    const positive = teams.map((t) => ({ team: t, score: scores[t.id] ?? 0 })).filter((x) => x.score > 0)
+    if (positive.length === 0) { setConvertMsg("未有正分可以轉換"); return }
+    if (!confirm(`把分數轉成待發放的課堂表現積點？\n\n${positive.map((x) => `${x.team.name}：每位組員 +${x.score}`).join("\n")}\n\n轉換後分數會清零；積點要到「紀錄」按「發放積點」才會發出。`)) return
+    setConverting(true)
+    const msg = await onConvert(positive)
+    setConverting(false)
+    setConvertMsg(msg)
+    setScores({})
+  }
 
   useEffect(() => {
     try {
@@ -64,10 +82,19 @@ export function Scoreboard({
           style={{ border: "1px solid var(--color-border)", color: "var(--color-ink-700)", opacity: seeded.length ? 1 : 0.5 }}>
           用座位表分組
         </button>
+        {onConvert && (
+          <button onClick={convert} disabled={converting}
+            className="px-3 py-1.5 text-caption rounded-input text-white"
+            style={{ background: "var(--color-curriculum)", opacity: converting ? 0.6 : 1 }}>
+            {converting ? "轉換中…" : "轉成積點"}
+          </button>
+        )}
         <button onClick={() => { if (confirm("確定清零所有分數？")) setScores({}) }}
           className="px-3 py-1.5 text-caption rounded-input border ml-auto"
           style={{ border: "1px solid var(--color-border)", color: "var(--color-discipline)" }}>分數清零</button>
       </div>
+
+      {convertMsg && <p className="text-caption" style={{ color: "var(--color-ink-500)" }}>{convertMsg}</p>}
 
       {teams.length === 0 ? (
         <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>
