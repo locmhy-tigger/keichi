@@ -261,6 +261,7 @@ model User {
   // 活動通告 (activity notices)
   noticesCreated  ActivityNotice[] @relation("NoticesCreated")
   noticesReviewed ActivityNotice[] @relation("NoticesReviewed")
+  classroomSessions ClassroomSession[] @relation("ClassroomSessionsLed")
 }
 
 // ─────────────────────────────────────────
@@ -430,6 +431,8 @@ model Class {
   missions        Mission[]
   points          PointTransaction[]
   announcements   Announcement[]
+  classroomSessions ClassroomSession[]
+  seatingPlans      SeatingPlan[]
 
   @@index([teacherId])
   @@index([homeroomTeacherId])
@@ -1407,4 +1410,52 @@ model AgentSubstitutionRequest {
   createdAt       DateTime      @default(now())
 
   @@index([date])
+}
+
+
+// ─── 課堂 (in-lesson classroom desktop) ─────────────────────────────────────
+
+// One lesson actually taught. AgentTimetable has no FK to Class, so this row is
+// where the fuzzy timetable → Class resolution gets frozen into a fact; records
+// taken during the lesson (Phase 2) hang off it. `seq` separates a class taught
+// twice in the same period on the same day (cover lessons, doubles).
+model ClassroomSession {
+  id          String    @id @default(cuid())
+  classId     String
+  teacherId   String
+  date        DateTime // hkDayStart(ymd)
+  period      Int // 0 = named slot (周會) or a manually-opened lesson
+  periodLabel String?
+  subject     String?
+  seq         Int       @default(1)
+  source      String    @default("timetable") // "timetable" | "manual"
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher User  @relation("ClassroomSessionsLed", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, date, period, seq])
+  @@index([teacherId, date])
+  @@index([classId, date])
+}
+
+// 座位表. The layout is one Json blob (see src/lib/seating.ts) rather than a row
+// per seat: the grid holds things that aren't students (講台, 走廊, gaps), it is
+// always read and written whole, and 分組 belongs to the arrangement. A student
+// who leaves is handled by reconcile() at read time, not a cascade that would
+// silently reshuffle the chart.
+model SeatingPlan {
+  id        String   @id @default(cuid())
+  classId   String
+  name      String   @default("預設座位表")
+  layout    Json
+  isDefault Boolean  @default(true)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
 }
