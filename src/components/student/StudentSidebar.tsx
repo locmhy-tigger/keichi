@@ -22,7 +22,7 @@ const NAV: NavItem[] = [
   { href: "/student/calendar",   label: "行事曆",   icon: GridIcon      },
   { href: "/student/missions",   label: "任務",     icon: MapIcon,      hidden: true },
   { href: "/student/flashcards", label: "閃卡",     icon: CardIcon      },
-  { href: "/student/points",     label: "積點",     icon: StarIcon,     hidden: true },
+  { href: "/student/points",     label: "積點",     icon: StarIcon      },
   { href: "/student/records",    label: "行為記錄", icon: RecordIcon    },
 ]
 

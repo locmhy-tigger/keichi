@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (d.kind === "PERFORMANCE" && !d.points) {
     return NextResponse.json({ error: "課堂表現需要分數（例如 +1 或 −1）" }, { status: 400 })
   }
-  if (d.kind === "MISSING_HOMEWORK" && !d.homeworkId) {
+  if ((d.kind === "MISSING_HOMEWORK" || d.kind === "HOMEWORK_ABSENT") && !d.homeworkId) {
     return NextResponse.json({ error: "請揀選哪一份功課" }, { status: 400 })
   }
 
@@ -94,9 +94,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       })
       skip = new Set(existing.map((e) => e.studentId))
     }
-    if (d.kind === "MISSING_HOMEWORK") {
+    if (d.kind === "MISSING_HOMEWORK" || d.kind === "HOMEWORK_ABSENT") {
+      // 欠交 and 缺席未交 are one question per homework (did they hand it in?),
+      // so setting one replaces the other.
+      const other = d.kind === "MISSING_HOMEWORK" ? "HOMEWORK_ABSENT" : "MISSING_HOMEWORK"
+      await prisma.lessonRecord.deleteMany({ where: { homeworkId: d.homeworkId, studentId: { in: ids }, kind: other } })
       const existing = await prisma.lessonRecord.findMany({
-        where: { homeworkId: d.homeworkId, studentId: { in: ids }, kind: "MISSING_HOMEWORK" }, select: { studentId: true },
+        where: { homeworkId: d.homeworkId, studentId: { in: ids }, kind: d.kind }, select: { studentId: true },
       })
       skip = new Set(existing.map((e) => e.studentId))
     }
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         date: lesson.date, period: lesson.period || null, subject: lesson.subject,
         tag: d.tag || null, note: d.note || null,
         points: d.kind === "PERFORMANCE" ? d.points! : 0,
-        homeworkId: d.kind === "MISSING_HOMEWORK" ? d.homeworkId : null,
+        homeworkId: d.kind === "MISSING_HOMEWORK" || d.kind === "HOMEWORK_ABSENT" ? d.homeworkId : null,
         authorId: session.user.id,
       })),
     })

@@ -14,7 +14,7 @@ export type HomeworkItem = {
   id: string; title: string; detail: string | null; subject: string | null
   assignedOn: string; dueDate: string | null; byRole: "TEACHER" | "REP"
   confirmedAt: string | null; recorder: { id: string; name: string | null }
-  _count: { misses: number }
+  missing: number; absent: number
 }
 type Rep = { id: string; subject: string; student: { id: string; name: string | null } }
 type Lesson = ReturnType<typeof useLessonRecords>
@@ -73,7 +73,8 @@ export function HomeworkPanel({
   }
 
   async function remove(h: HomeworkItem) {
-    const extra = h._count.misses ? `\n（已記錄的 ${h._count.misses} 個欠交會保留，但不再連結到這份功課）` : ""
+    const n = h.missing + h.absent
+    const extra = n ? `\n（已記錄的 ${n} 個欠交／缺席未交會保留，但不再連結到這份功課）` : ""
     if (!confirm(`刪除功課「${h.title}」？${extra}`)) return
     const res = await fetch(`/api/classes/${classId}/homework/${h.id}`, { method: "DELETE" })
     if (!res.ok) { const d = await res.json().catch(() => ({})); setMsg({ ok: false, text: d?.error ?? "刪除失敗" }) }
@@ -151,7 +152,8 @@ function HomeworkList({ title, items, onConfirm, onRemove, onMiss }: {
                 {h.detail && <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-500)" }}>{h.detail}</p>}
                 <p className="text-caption mt-0.5" style={{ color: "var(--color-ink-400)" }}>
                   {ymd(h.assignedOn)} 派發{h.dueDate ? ` · ${ymd(h.dueDate)} 限期` : ""} · {h.byRole === "REP" ? `課代表 ${h.recorder.name ?? ""}` : h.recorder.name ?? ""}
-                  {h._count.misses > 0 && <span style={{ color: RECORD_COLOR.MISSING_HOMEWORK }}> · {h._count.misses} 人欠交</span>}
+                  {h.missing > 0 && <span style={{ color: RECORD_COLOR.MISSING_HOMEWORK }}> · {h.missing} 人欠交</span>}
+                  {h.absent > 0 && <span style={{ color: RECORD_COLOR.HOMEWORK_ABSENT }}> · {h.absent} 人缺席未交</span>}
                 </p>
               </div>
               <div className="flex gap-1.5 items-center">

@@ -146,7 +146,7 @@ export default function StudentPortfolioPage() {
                     {r.kind === "PERFORMANCE" ? `　${r.points > 0 ? "+" : ""}${r.points}` : ""}
                     {r.resolved && <span className="ml-2 text-gray-400 font-normal">已跟進</span>}
                   </div>
-                  <div className="text-xs text-gray-500">{new Date(r.date).toLocaleDateString()} · {r.class?.name} {r.subject ?? ""}</div>
+                  <div className="text-xs text-gray-500">{new Date(r.date).toLocaleDateString("zh-HK", { timeZone: "Asia/Hong_Kong" })} · {r.class?.name} {r.subject ?? ""}</div>
                 </div>
                 <div className="text-sm">{[r.tag, r.homework?.title, r.note].filter(Boolean).join("　") || "—"}</div>
               </div>

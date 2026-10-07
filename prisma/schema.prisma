@@ -1477,6 +1477,10 @@ enum LessonRecordKind {
   ABSENT // 缺席
   LATE // 遲到
   PERFORMANCE // 課堂表現
+  // 缺席未交: absent on the day the homework was collected, so not counted as
+  // 欠交 — but still owes it. Like MISSING_HOMEWORK it points at a Homework, and
+  // a student holds at most one of the two for any given homework.
+  HOMEWORK_ABSENT
 }
 
 enum HomeworkAuthor {

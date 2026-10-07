@@ -8,17 +8,22 @@ import { loadRoster } from "@/lib/classroom-roster"
 import { notifyMany } from "@/lib/notify"
 import { hkDayStart, hkYmd } from "@/lib/hk-date"
 import { dbErrorMessage } from "@/lib/db-error"
+import { HOMEWORK_KINDS } from "@/lib/lesson-records"
 import { z } from "zod"
 
-// 收功課: who has NOT handed in this homework.
+// 收功課: each student's outcome for this homework — 有交, 欠交 or 缺席.
 //
 // The teacher sets the homework in class; later the 課代表 collects it and
-// ticks who is missing, against that same homework — nothing re-typed. Both
-// the rep and the teacher work from this one list, so they always see the
-// same thing, whoever recorded each miss.
+// marks each student against that same homework — nothing re-typed. Both the
+// rep and the teacher work from this one list, so they always see the same
+// thing, whoever recorded each outcome.
 //
-// A rep sees only this: the roster and who missed THIS homework. Nothing else
-// about classmates (absences, performance) is exposed.
+// Only exceptions are stored: 有交 is the absence of a row. 欠交 is a
+// MISSING_HOMEWORK record, 缺席 a HOMEWORK_ABSENT one (absent that day — still
+// owes it, but isn't counted as 欠交). A student holds at most one of the two.
+//
+// A rep sees only the roster and this homework's outcomes. Nothing else about
+// classmates (absences from lessons, performance) is exposed.
 
 type Params = { params: { classId: string; hwId: string } }
 type User = { id: string; role: Parameters<typeof isTeacherOrAdmin>[0] }
@@ -43,18 +48,19 @@ async function authorise(params: Params["params"], user: User) {
   return { hw, teacher: false }
 }
 
-async function missList(hwId: string, me: string) {
+async function outcomes(hwId: string, me: string) {
   const rows = await prisma.lessonRecord.findMany({
-    where:  { homeworkId: hwId, kind: "MISSING_HOMEWORK" },
-    select: { id: true, studentId: true, authorId: true, resolved: true, author: { select: { name: true, role: true } } },
+    where:  { homeworkId: hwId, kind: { in: [...HOMEWORK_KINDS] } },
+    select: { id: true, studentId: true, kind: true, authorId: true, resolved: true, author: { select: { name: true, role: true } } },
   })
   return rows.map((r) => ({
-    id: r.id, studentId: r.studentId, resolved: r.resolved,
-    recordedBy: r.author.name, byRep: r.author.role === "STUDENT", mine: r.authorId === me,
+    id: r.id, studentId: r.studentId,
+    status: r.kind === "HOMEWORK_ABSENT" ? ("ABSENT" as const) : ("MISSING" as const),
+    resolved: r.resolved, recordedBy: r.author.name, byRep: r.author.role === "STUDENT", mine: r.authorId === me,
   }))
 }
 
-// GET — the roster and who has missed this homework.
+// GET — the roster and each student's outcome.
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -65,7 +71,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({
       homework: { id: ok.hw.id, title: ok.hw.title, subject: ok.hw.subject },
       roster:   roster.map((r) => ({ id: r.id, tag: r.tag, name: r.name ?? r.nameEn })),
-      misses:   await missList(ok.hw.id, session.user.id),
+      outcomes: await outcomes(ok.hw.id, session.user.id),
     })
   } catch (err) {
     const msg = dbErrorMessage(err)
@@ -74,97 +80,100 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 const schema = z.object({
-  studentIds: z.array(z.string().min(1)).min(1).max(60),
-  /** Teachers only: tie the misses to the lesson they were noted in. */
-  sessionId:  z.string().optional(),
+  studentId: z.string().min(1),
+  status:    z.enum(["SUBMITTED", "MISSING", "ABSENT"]),
+  /** Teachers only: tie the record to the lesson it was noted in. */
+  sessionId: z.string().optional(),
 })
 
-// POST — record students as 欠交 for this homework. Already-recorded students
-// are skipped, whoever recorded them.
-export async function POST(req: NextRequest, { params }: Params) {
+// PUT — set one student's outcome. Idempotent: setting what's already there
+// changes nothing. A rep may only change outcomes they recorded themselves,
+// and not once a teacher has marked them 已跟進.
+export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const ok = await authorise(params, session.user)
   if (ok instanceof NextResponse) return ok
 
   const parsed = schema.safeParse(await req.json().catch(() => ({})))
-  if (!parsed.success) return NextResponse.json({ error: "請揀選學生" }, { status: 400 })
+  if (!parsed.success) return NextResponse.json({ error: "資料不完整" }, { status: 400 })
+  const { studentId, status } = parsed.data
+  const me = session.user.id
 
   try {
-    const enrolled = await prisma.classEnrollment.findMany({
-      where: { classId: params.classId, studentId: { in: parsed.data.studentIds } }, select: { studentId: true },
-    })
-    const already = new Set((await prisma.lessonRecord.findMany({
-      where: { homeworkId: ok.hw.id, kind: "MISSING_HOMEWORK" }, select: { studentId: true },
-    })).map((r) => r.studentId))
-    const ids = enrolled.map((e) => e.studentId).filter((id) => !already.has(id))
+    const enrolled = await prisma.classEnrollment.findFirst({ where: { classId: params.classId, studentId }, select: { id: true } })
+    if (!enrolled) return NextResponse.json({ error: "學生不在此班名單" }, { status: 400 })
 
-    // A teacher marking misses in class ties them to that lesson; a rep
-    // collecting at recess records them on the day, outside any lesson.
+    const existing = await prisma.lessonRecord.findFirst({
+      where:  { homeworkId: ok.hw.id, studentId, kind: { in: [...HOMEWORK_KINDS] } },
+      select: { id: true, kind: true, authorId: true, resolved: true },
+    })
+    const target = status === "MISSING" ? "MISSING_HOMEWORK" : status === "ABSENT" ? "HOMEWORK_ABSENT" : null
+    if ((existing?.kind ?? null) === target) {
+      return NextResponse.json({ outcomes: await outcomes(ok.hw.id, me) })
+    }
+    if (existing && !ok.teacher && (existing.authorId !== me || existing.resolved)) {
+      return NextResponse.json({
+        error: existing.resolved ? "老師已跟進，不可以更改" : "由其他人記錄，只有老師可以更改",
+      }, { status: 403 })
+    }
+
+    // A teacher marking it in class ties it to that lesson; a rep collecting
+    // at recess records it on the day, outside any lesson.
     const lesson = ok.teacher && parsed.data.sessionId
       ? await prisma.classroomSession.findFirst({
-          where: { id: parsed.data.sessionId, classId: params.classId },
-          select: { id: true, date: true, period: true },
+          where: { id: parsed.data.sessionId, classId: params.classId }, select: { id: true, date: true, period: true },
         })
       : null
 
-    await prisma.lessonRecord.createMany({
-      data: ids.map((studentId) => ({
-        classId: params.classId, studentId, kind: "MISSING_HOMEWORK" as const,
-        sessionId: lesson?.id ?? null,
-        date: lesson?.date ?? hkDayStart(hkYmd()),
-        period: lesson?.period || null,
-        subject: ok.hw.subject, homeworkId: ok.hw.id,
-        authorId: session.user.id,
-      })),
+    await prisma.$transaction(async (tx) => {
+      if (existing) await tx.lessonRecord.delete({ where: { id: existing.id } })
+      if (target) {
+        await tx.lessonRecord.create({
+          data: {
+            classId: params.classId, studentId, kind: target, homeworkId: ok.hw.id,
+            sessionId: lesson?.id ?? null, date: lesson?.date ?? hkDayStart(hkYmd()),
+            period: lesson?.period || null, subject: ok.hw.subject, authorId: me,
+          },
+        })
+      }
     })
 
-    // A rep's record reaches the teacher who set the homework — or, for
-    // homework a rep recorded, the class's teachers — rather than sitting
-    // unseen until someone opens 回顧.
-    if (!ok.teacher && ids.length) {
-      const to = ok.hw.byRole === "TEACHER"
-        ? [ok.hw.recordedBy]
-        : Array.from(new Set([ok.hw.class.teacherId, ok.hw.class.homeroomTeacherId].filter((x): x is string => !!x)))
-      await notifyMany(to, {
-        type: "GENERAL",
-        title: `課代表記錄了欠交：${ok.hw.class.name} ${ok.hw.title}（${ids.length} 人）`,
-        link: `/teacher/classroom/${params.classId}`,
-      })
-    }
-
-    return NextResponse.json({
-      created: ids.length,
-      alreadyRecorded: enrolled.length - ids.length,
-      notInClass: parsed.data.studentIds.length - enrolled.length,
-      misses: await missList(ok.hw.id, session.user.id),
-    }, { status: 201 })
+    if (!ok.teacher && target === "MISSING_HOMEWORK") await tellTeacher(ok.hw, params.classId)
+    return NextResponse.json({ outcomes: await outcomes(ok.hw.id, me) })
   } catch (err) {
     const msg = dbErrorMessage(err)
-    console.error("[homework misses POST]", err)
-    return NextResponse.json({ error: msg ?? "未能記錄" }, { status: msg ? 503 : 500 })
+    console.error("[homework outcome PUT]", err)
+    return NextResponse.json({ error: msg ?? "未能更新" }, { status: msg ? 503 : 500 })
   }
 }
 
-// DELETE ?studentId= — they did hand it in after all. A rep may only undo what
-// they recorded themselves, and not once a teacher has followed it up.
-export async function DELETE(req: NextRequest, { params }: Params) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const ok = await authorise(params, session.user)
-  if (ok instanceof NextResponse) return ok
+/**
+ * Let the teacher know a rep is recording 欠交 — once per homework per day,
+ * kept up to date, rather than one notification per tap.
+ */
+async function tellTeacher(
+  hw: { id: string; title: string; byRole: string; recordedBy: string; class: { name: string; teacherId: string; homeroomTeacherId: string | null } },
+  classId: string,
+) {
+  try {
+    const to = hw.byRole === "TEACHER"
+      ? [hw.recordedBy]
+      : Array.from(new Set([hw.class.teacherId, hw.class.homeroomTeacherId].filter((x): x is string => !!x)))
+    const missing = await prisma.lessonRecord.count({ where: { homeworkId: hw.id, kind: "MISSING_HOMEWORK" } })
+    const title = `課代表收功課：${hw.class.name} ${hw.title}`
+    const body  = `目前 ${missing} 人欠交`
+    const link  = `/teacher/classroom/${classId}`
+    const since = hkDayStart(hkYmd())
 
-  const studentId = new URL(req.url).searchParams.get("studentId")
-  if (!studentId) return NextResponse.json({ error: "缺少學生" }, { status: 400 })
-
-  const rec = await prisma.lessonRecord.findFirst({
-    where:  { homeworkId: ok.hw.id, kind: "MISSING_HOMEWORK", studentId },
-    select: { id: true, authorId: true, resolved: true },
-  })
-  if (!rec) return NextResponse.json({ misses: await missList(ok.hw.id, session.user.id) })
-  if (!ok.teacher && (rec.authorId !== session.user.id || rec.resolved)) {
-    return NextResponse.json({ error: "只可以取消自己記錄、而老師未跟進的欠交" }, { status: 403 })
+    const fresh: string[] = []
+    for (const userId of to) {
+      const prev = await prisma.notification.findFirst({ where: { userId, title, createdAt: { gte: since } }, select: { id: true } })
+      if (prev) await prisma.notification.update({ where: { id: prev.id }, data: { body, read: false } })
+      else fresh.push(userId)
+    }
+    if (fresh.length) await notifyMany(fresh, { type: "GENERAL", title, body, link })
+  } catch (err) {
+    console.error("[homework outcome] notify failed", err)
   }
-  await prisma.lessonRecord.delete({ where: { id: rec.id } })
-  return NextResponse.json({ misses: await missList(ok.hw.id, session.user.id) })
 }

@@ -16,8 +16,21 @@ const HOMEWORK_SELECT = {
   assignedOn: true, dueDate: true, byRole: true, confirmedAt: true, createdAt: true,
   recordedBy: true,
   recorder: { select: { id: true, name: true } },
-  _count:   { select: { misses: true } },
 } as const
+
+/**
+ * 欠交 and 缺席未交 counted separately — a student absent on the day isn't a
+ * 欠交, and lumping them together would overstate who needs chasing.
+ */
+async function withCounts<T extends { id: string }>(items: T[]) {
+  const groups = await prisma.lessonRecord.groupBy({
+    by: ["homeworkId", "kind"],
+    where: { homeworkId: { in: items.map((h) => h.id) }, kind: { in: ["MISSING_HOMEWORK", "HOMEWORK_ABSENT"] } },
+    _count: { _all: true },
+  })
+  const n = (id: string, kind: string) => groups.find((g) => g.homeworkId === id && g.kind === kind)?._count._all ?? 0
+  return items.map((h) => ({ ...h, missing: n(h.id, "MISSING_HOMEWORK"), absent: n(h.id, "HOMEWORK_ABSENT") }))
+}
 
 // GET — this class's homework, newest first. Teachers with access only; the
 // student view (Phase 3) has its own route scoped to the student's classes.
@@ -33,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       where: { classId: gate.cls.id }, select: HOMEWORK_SELECT,
       orderBy: [{ assignedOn: "desc" }, { createdAt: "desc" }], take: 100,
     })
-    return NextResponse.json({ homework })
+    return NextResponse.json({ homework: await withCounts(homework) })
   } catch (err) {
     const msg = dbErrorMessage(err)
     return NextResponse.json({ error: msg ?? "未能載入功課" }, { status: msg ? 503 : 500 })
@@ -93,6 +106,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
       select: HOMEWORK_SELECT,
     })
+    const [withN] = await withCounts([hw])
 
     // A rep's entry is visible to the class's teachers rather than silent.
     if (byRole === "REP") {
@@ -105,7 +119,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         })
       }
     }
-    return NextResponse.json(hw, { status: 201 })
+    return NextResponse.json(withN, { status: 201 })
   } catch (err) {
     const msg = dbErrorMessage(err)
     console.error("[homework POST]", err)

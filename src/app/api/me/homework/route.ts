@@ -42,14 +42,14 @@ export async function GET() {
         take: 200,
       }),
       prisma.lessonRecord.findMany({
-        where:  { studentId: me, kind: "MISSING_HOMEWORK", homeworkId: { not: null } },
-        select: { homeworkId: true, resolved: true },
+        where:  { studentId: me, kind: { in: ["MISSING_HOMEWORK", "HOMEWORK_ABSENT"] }, homeworkId: { not: null } },
+        select: { homeworkId: true, resolved: true, kind: true },
       }),
     ])
 
     const repBy = new Map<string, string[]>()
     for (const r of reps) repBy.set(r.classId, [...(repBy.get(r.classId) ?? []), r.subject])
-    const missed = new Map(myMisses.map((m) => [m.homeworkId!, m.resolved]))
+    const missed = new Map(myMisses.map((m) => [m.homeworkId!, m]))
 
     const classes = enrollments.map(({ class: c }) => {
       const subjects = repBy.get(c.id) ?? null
@@ -62,7 +62,10 @@ export async function GET() {
           byRep: h.byRole === "REP", recorderName: h.recorder.name,
           confirmed: !!h.confirmedAt,
           mine: h.recordedBy === me,
-          iMissed: missed.has(h.id) ? { followedUp: missed.get(h.id)! } : null,
+          // This student's own outcome only: 欠交, or 缺席 (absent that day, still owes it).
+          iMissed: missed.has(h.id)
+            ? { absent: missed.get(h.id)!.kind === "HOMEWORK_ABSENT", followedUp: missed.get(h.id)!.resolved }
+            : null,
           canCollect: subjectsAllow(subjects, h.subject),
         })),
       }

@@ -196,7 +196,7 @@ function Desktop() {
         {session ? (
           <>
             <span>{lessonText || "手動開啟的課堂"}{session.seq > 1 ? `（今日第 ${session.seq} 次）` : ""}</span>
-            <span>開始於 {new Date(session.startedAt).toLocaleTimeString("zh-HK", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span>開始於 {new Date(session.startedAt).toLocaleTimeString("zh-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}</span>
             {session.endedAt
               ? <span style={{ color: "var(--color-ink-400)" }}>已完結</span>
               : <button onClick={endSession} className="underline">完結課堂</button>}

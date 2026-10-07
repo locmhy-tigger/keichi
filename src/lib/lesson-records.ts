@@ -1,7 +1,7 @@
 // 課堂紀錄 labels and quick-pick tags. Client-safe (no Prisma import), mirroring
 // src/lib/behavior-types.ts so the two record kinds look and read alike.
 
-export const RECORD_KINDS = ["ABSENT", "LATE", "MISSING_BOOK", "MISSING_HOMEWORK", "PERFORMANCE"] as const
+export const RECORD_KINDS = ["ABSENT", "LATE", "MISSING_BOOK", "MISSING_HOMEWORK", "HOMEWORK_ABSENT", "PERFORMANCE"] as const
 export type LessonRecordKindValue = (typeof RECORD_KINDS)[number]
 
 export const RECORD_LABEL: Record<LessonRecordKindValue, string> = {
@@ -9,6 +9,7 @@ export const RECORD_LABEL: Record<LessonRecordKindValue, string> = {
   LATE:             "遲到",
   MISSING_BOOK:     "欠帶書本",
   MISSING_HOMEWORK: "欠交功課",
+  HOMEWORK_ABSENT:  "缺席未交",
   PERFORMANCE:      "課堂表現",
 }
 
@@ -17,11 +18,21 @@ export const RECORD_COLOR: Record<LessonRecordKindValue, string> = {
   LATE:             "#c2410c",
   MISSING_BOOK:     "#a16207",
   MISSING_HOMEWORK: "#7c3aed",
+  HOMEWORK_ABSENT:  "#64748b",
   PERFORMANCE:      "#15803d",
 }
 
+/** Two-character badges. Explicit, because slicing the labels would show 「缺席」 for both 缺席 and 缺席未交. */
+export const RECORD_SHORT: Record<LessonRecordKindValue, string> = {
+  ABSENT: "缺席", LATE: "遲到", MISSING_BOOK: "欠書", MISSING_HOMEWORK: "欠交", HOMEWORK_ABSENT: "未交", PERFORMANCE: "表現",
+}
+
 /** The follow-up kinds — what the 回顧 table counts per student. */
-export const FOLLOW_UP_KINDS: LessonRecordKindValue[] = ["MISSING_BOOK", "MISSING_HOMEWORK", "ABSENT", "LATE"]
+export const FOLLOW_UP_KINDS: LessonRecordKindValue[] = ["MISSING_BOOK", "MISSING_HOMEWORK", "HOMEWORK_ABSENT", "ABSENT", "LATE"]
+
+/** The two per-homework outcomes a student can have; 有交 is the absence of both. */
+export const HOMEWORK_KINDS = ["MISSING_HOMEWORK", "HOMEWORK_ABSENT"] as const
+export type HomeworkKind = (typeof HOMEWORK_KINDS)[number]
 
 // One tap in a lesson; a teacher can still type their own.
 export const PERFORMANCE_TAGS: { tag: string; points: number }[] = [

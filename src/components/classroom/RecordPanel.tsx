@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import type { RosterEntry } from "@/components/classroom/RosterPanel"
 import type { LessonRecordRow, useLessonRecords } from "@/components/classroom/useLessonRecords"
-import { BOOK_TAGS, PERFORMANCE_TAGS, RECORD_COLOR, RECORD_LABEL } from "@/lib/lesson-records"
+import { BOOK_TAGS, PERFORMANCE_TAGS, RECORD_COLOR, RECORD_LABEL, RECORD_SHORT } from "@/lib/lesson-records"
 
 // 紀錄: choose what to record once, then tap students. No form per student —
 // this is used standing up, mid-lesson, often one-handed.
@@ -177,7 +177,7 @@ export function RecordPanel({
                   )}
                   {flags.map((f) => (
                     <span key={f.id} className="text-[10px] px-1.5 rounded-pill text-white" style={{ background: RECORD_COLOR[f.kind] }}>
-                      {RECORD_LABEL[f.kind].slice(0, 2)}
+                      {RECORD_SHORT[f.kind]}
                     </span>
                   ))}
                 </span>

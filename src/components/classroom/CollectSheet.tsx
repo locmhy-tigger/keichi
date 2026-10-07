@@ -2,32 +2,40 @@
 
 import { useCallback, useEffect, useState } from "react"
 
-// 收功課 — tap a student to mark 欠交, tap again to undo. One list of who has
-// missed this homework, shared by the 課代表 collecting it and the teacher, so
-// both always see the same thing whoever recorded each miss.
+// 收功課 — tap a student to cycle 有交 → 欠交 → 缺席 → 有交, the same rhythm as
+// 點名. One list per homework, shared by the 課代表 collecting it and the
+// teacher, so both always see the same thing whoever recorded each outcome.
+//
+// 缺席 means absent that day: they still owe it, but aren't counted as 欠交.
 
-type Miss = { id: string; studentId: string; resolved: boolean; recordedBy: string | null; byRep: boolean; mine: boolean }
+type Status = "SUBMITTED" | "MISSING" | "ABSENT"
+type Outcome = { id: string; studentId: string; status: "MISSING" | "ABSENT"; resolved: boolean; recordedBy: string | null; byRep: boolean; mine: boolean }
 type Student = { id: string; tag: string; name: string | null }
 
-const RED = "#7c3aed"
+const LOOK: Record<Status, { label: string; bg: string; fg: string; border: string }> = {
+  SUBMITTED: { label: "有交", bg: "var(--color-surface)", fg: "var(--color-ink-900)", border: "var(--color-border)" },
+  MISSING:   { label: "欠交", bg: "#7c3aed", fg: "#fff", border: "#7c3aed" },
+  ABSENT:    { label: "缺席", bg: "#e2e8f0", fg: "#334155", border: "#94a3b8" },
+}
+const NEXT: Record<Status, Status> = { SUBMITTED: "MISSING", MISSING: "ABSENT", ABSENT: "SUBMITTED" }
 
 export function CollectSheet({
   classId, homeworkId, teacher, sessionId, onClose, onChanged,
 }: {
   classId: string
   homeworkId: string
-  /** Teachers may undo anyone's record; a rep only their own, before follow-up. */
+  /** Teachers may change anyone's outcome; a rep only their own, before follow-up. */
   teacher: boolean
   sessionId?: string | null
   onClose: () => void
   onChanged?: () => void
 }) {
-  const [title,   setTitle]   = useState("")
-  const [roster,  setRoster]  = useState<Student[]>([])
-  const [misses,  setMisses]  = useState<Miss[]>([])
-  const [busy,    setBusy]    = useState<string | null>(null)
-  const [error,   setError]   = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [title,    setTitle]    = useState("")
+  const [roster,   setRoster]   = useState<Student[]>([])
+  const [outcomes, setOutcomes] = useState<Outcome[]>([])
+  const [busy,     setBusy]     = useState<string | null>(null)
+  const [error,    setError]    = useState<string | null>(null)
+  const [loading,  setLoading]  = useState(true)
 
   const base = `/api/classes/${classId}/homework/${homeworkId}/misses`
 
@@ -36,33 +44,39 @@ export function CollectSheet({
     const d = await res.json().catch(() => ({}))
     setLoading(false)
     if (!res.ok) { setError(d?.error ?? `載入失敗 (${res.status})`); return }
-    setTitle([d.homework.subject, d.homework.title].filter(Boolean).join("：")); setRoster(d.roster); setMisses(d.misses)
+    setTitle([d.homework.subject, d.homework.title].filter(Boolean).join("：")); setRoster(d.roster); setOutcomes(d.outcomes)
   }, [base])
 
   useEffect(() => { load() }, [load])
 
-  async function toggle(s: Student) {
+  const byStudent = new Map(outcomes.map((o) => [o.studentId, o]))
+  const statusOf = (id: string): Status => byStudent.get(id)?.status ?? "SUBMITTED"
+  const lockedReason = (id: string) => {
+    const o = byStudent.get(id)
+    if (!o || teacher) return null
+    if (o.resolved) return "老師已跟進"
+    if (!o.mine) return `${o.recordedBy ?? "其他人"}記錄`
+    return null
+  }
+
+  async function tap(s: Student) {
     if (busy) return
-    const m = misses.find((x) => x.studentId === s.id)
-    if (m && !teacher && (!m.mine || m.resolved)) {
-      setError(m.resolved ? "老師已跟進，不可以取消" : `由${m.recordedBy ?? "其他人"}記錄，只有老師可以取消`)
-      return
-    }
+    const locked = lockedReason(s.id)
+    if (locked) { setError(`${s.name ?? ""}：${locked}，只有老師可以更改`); return }
     setBusy(s.id); setError(null)
-    const res = m
-      ? await fetch(`${base}?studentId=${s.id}`, { method: "DELETE" })
-      : await fetch(base, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentIds: [s.id], sessionId: sessionId ?? undefined }),
-        })
+    const res = await fetch(base, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId: s.id, status: NEXT[statusOf(s.id)], sessionId: sessionId ?? undefined }),
+    })
     const d = await res.json().catch(() => ({}))
     setBusy(null)
     if (!res.ok) { setError(d?.error ?? `操作失敗 (${res.status})`); return }
-    setMisses(d.misses)
+    setOutcomes(d.outcomes)
     onChanged?.()
   }
 
-  const missed = new Map(misses.map((m) => [m.studentId, m]))
+  const missing = outcomes.filter((o) => o.status === "MISSING").length
+  const absent  = outcomes.filter((o) => o.status === "ABSENT").length
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
@@ -71,15 +85,16 @@ export function CollectSheet({
         <div className="flex items-start gap-2">
           <div className="flex-1">
             <h3 className="text-h3">收功課：{title || "…"}</h3>
-            <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>點未交的同學（再點一次取消）</p>
+            <p className="text-caption" style={{ color: "var(--color-ink-400)" }}>點同學切換：有交 → 欠交 → 缺席 → 有交</p>
           </div>
           <button onClick={onClose} className="px-3 py-1.5 rounded-input border text-caption" style={{ border: "1px solid var(--color-border)" }}>完成</button>
         </div>
 
         {!loading && (
-          <p className="text-body">
-            已交 <b>{roster.length - misses.length}</b>／{roster.length}
-            <span className="ml-4" style={{ color: RED }}>欠交 <b>{misses.length}</b></span>
+          <p className="text-body flex gap-4 flex-wrap">
+            <span>有交 <b>{roster.length - missing - absent}</b>／{roster.length}</span>
+            <span style={{ color: LOOK.MISSING.bg }}>欠交 <b>{missing}</b></span>
+            <span style={{ color: LOOK.ABSENT.fg }}>缺席 <b>{absent}</b></span>
           </p>
         )}
         {error && <p className="text-caption" style={{ color: "var(--color-discipline)" }}>⚠ {error}</p>}
@@ -87,21 +102,21 @@ export function CollectSheet({
 
         <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))" }}>
           {roster.map((s) => {
-            const m = missed.get(s.id)
-            const locked = !!m && !teacher && (!m.mine || m.resolved)
+            const st = statusOf(s.id)
+            const look = LOOK[st]
+            const locked = lockedReason(s.id)
+            const o = byStudent.get(s.id)
             return (
-              <button key={s.id} onClick={() => toggle(s)} disabled={busy === s.id}
+              <button key={s.id} onClick={() => tap(s)} disabled={busy === s.id}
                 className="rounded-input px-2 py-2 text-left"
                 style={{
-                  background: m ? RED : "var(--color-surface)",
-                  color: m ? "#fff" : "var(--color-ink-900)",
-                  border: `1px solid ${m ? RED : "var(--color-border)"}`,
+                  background: look.bg, color: look.fg, border: `1px solid ${look.border}`,
                   opacity: busy === s.id ? 0.6 : 1, touchAction: "manipulation",
                 }}>
                 <span className="block text-caption tabular-nums opacity-70">{s.tag || "—"}</span>
                 <span className="block text-body font-medium truncate">{s.name ?? "—"}</span>
-                <span className="block text-[10px]" style={{ opacity: 0.85 }}>
-                  {m ? (m.resolved ? "欠交 · 已跟進" : locked ? `欠交 · ${m.recordedBy ?? ""}記錄` : "欠交") : "已交"}
+                <span className="block text-[10px] font-semibold" style={{ opacity: 0.9 }}>
+                  {look.label}{o?.resolved ? " · 已跟進" : locked ? ` · ${locked}` : ""}
                 </span>
               </button>
             )

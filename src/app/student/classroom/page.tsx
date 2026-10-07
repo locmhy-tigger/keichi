@@ -14,7 +14,7 @@ type Hw = {
   id: string; subject: string | null; title: string; detail: string | null
   assignedOn: string; dueDate: string | null; byRep: boolean; recorderName: string | null
   confirmed: boolean; mine: boolean
-  iMissed: { followedUp: boolean } | null
+  iMissed: { absent: boolean; followedUp: boolean } | null
   canCollect: boolean
 }
 type Cls = { id: string; name: string; repSubjects: string[] | null; homework: Hw[] }
@@ -56,6 +56,7 @@ export default function StudentClassroomPage() {
   if (error) return <div className="p-6"><div className="card p-6 text-body" style={{ color: "var(--color-discipline)" }}>⚠ {error}</div></div>
   if (!classes) return <div className="p-6 text-center text-body" style={{ color: "var(--color-ink-300)" }}>載入中…</div>
 
+  // Both still owe it: 欠交, and absent-on-the-day 缺席未交.
   const missedCount = classes.reduce((n, c) => n + c.homework.filter((h) => h.iMissed && !h.iMissed.followedUp).length, 0)
 
   return (
@@ -67,7 +68,7 @@ export default function StudentClassroomPage() {
 
       {missedCount > 0 && (
         <div className="card p-3 text-body" style={{ borderLeft: "4px solid #7c3aed" }}>
-          你有 <b>{missedCount}</b> 份功課被記錄為欠交，請盡快補交。
+          你有 <b>{missedCount}</b> 份功課未交（欠交或缺席當日），請盡快補交。
         </div>
       )}
 
@@ -109,7 +110,9 @@ export default function StudentClassroomPage() {
                         {due && <span style={{ color: due.tone, fontWeight: 600 }}>{due.text}</span>}
                         {h.byRep && <span>課代表 {h.recorderName} 記錄{h.confirmed ? " · 老師已覆核" : ""}</span>}
                         {h.iMissed && (
-                          <span style={{ color: "#7c3aed", fontWeight: 600 }}>你欠交咗{h.iMissed.followedUp ? "（已跟進）" : ""}</span>
+                          <span style={{ color: h.iMissed.absent ? "#64748b" : "#7c3aed", fontWeight: 600 }}>
+                            {h.iMissed.absent ? "你當日缺席，請補交" : "你欠交咗"}{h.iMissed.followedUp ? "（已跟進）" : ""}
+                          </span>
                         )}
                       </p>
                     </div>
